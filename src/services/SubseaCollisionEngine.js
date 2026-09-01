@@ -1,8 +1,10 @@
+import useVehicleStore from '../store/vehicleStore';
+
 /**
  * Subsea 3D Physical Collision Engine for Official SAUVC 2026 Arena
  */
 
-const POOL_OBSTACLES = [
+const DEFAULT_POOL_OBSTACLES = [
   // A. Orange Flare (Approached closely, solid obstacle)
   {
     id: 'flare_orange',
@@ -44,39 +46,12 @@ const POOL_OBSTACLES = [
     maxY: 1.55,
   },
 
-  // C. Target Drums (X = 10.5m)
-  {
-    id: 'drum_blue',
-    type: 'cylinder',
-    x: 10.5,
-    z: 4.5,
-    radius: 0.42,
-    minY: 0.0,
-    maxY: 0.48,
-  },
+  // C. Target Drums
   {
     id: 'drum_red_1',
     type: 'cylinder',
     x: 10.5,
     z: 1.5,
-    radius: 0.42,
-    minY: 0.0,
-    maxY: 0.48,
-  },
-  {
-    id: 'drum_red_2',
-    type: 'cylinder',
-    x: 10.5,
-    z: -1.5,
-    radius: 0.42,
-    minY: 0.0,
-    maxY: 0.48,
-  },
-  {
-    id: 'drum_red_3',
-    type: 'cylinder',
-    x: 10.5,
-    z: -4.5,
     radius: 0.42,
     minY: 0.0,
     maxY: 0.48,
@@ -88,6 +63,68 @@ class SubseaCollisionEngine {
     this.subRadius = 0.24;
     this.subHeight = 0.26;
     this.lastCollision = null;
+  }
+
+  getDynamicObstacles() {
+    const store = useVehicleStore.getState ? useVehicleStore.getState() : null;
+    const obs = store?.obstacles;
+    if (!obs) return DEFAULT_POOL_OBSTACLES;
+
+    const orangeX = obs.orange_flare?.x ?? -6.0;
+    const orangeZ = obs.orange_flare?.z ?? 2.0;
+    const gateX = obs.gate?.x ?? 4.0;
+    const gateZ = obs.gate?.z ?? 0.0;
+    const drumX = obs.drum_red_tgt?.x ?? 10.5;
+    const drumZ = obs.drum_red_tgt?.z ?? 1.5;
+
+    return [
+      {
+        id: 'flare_orange',
+        type: 'cylinder',
+        x: orangeX,
+        z: orangeZ,
+        radius: 0.24,
+        minY: 0.0,
+        maxY: 1.65,
+      },
+      {
+        id: 'gate_left_post',
+        type: 'cylinder',
+        x: gateX,
+        z: gateZ - 0.9,
+        radius: 0.12,
+        minY: 0.0,
+        maxY: 1.55,
+      },
+      {
+        id: 'gate_right_post',
+        type: 'cylinder',
+        x: gateX,
+        z: gateZ + 0.9,
+        radius: 0.12,
+        minY: 0.0,
+        maxY: 1.55,
+      },
+      {
+        id: 'gate_top_crossbar',
+        type: 'box',
+        minX: gateX - 0.10,
+        maxX: gateX + 0.10,
+        minZ: gateZ - 0.9,
+        maxZ: gateZ + 0.9,
+        minY: 1.48,
+        maxY: 1.55,
+      },
+      {
+        id: 'drum_red_1',
+        type: 'cylinder',
+        x: drumX,
+        z: drumZ,
+        radius: 0.42,
+        minY: 0.0,
+        maxY: 0.48,
+      },
+    ];
   }
 
   resolveCollision(posX, posZ, depth, velX = 0, velZ = 0) {
@@ -138,8 +175,9 @@ class SubseaCollisionEngine {
 
     const subY = 2.0 - correctedDepth;
 
-    // 3. OBSTACLES RESOLUTION
-    for (const obs of POOL_OBSTACLES) {
+    // 3. DYNAMIC OBSTACLES RESOLUTION
+    const activeObstacles = this.getDynamicObstacles();
+    for (const obs of activeObstacles) {
       if (subY + this.subHeight * 0.5 < obs.minY || subY - this.subHeight * 0.5 > obs.maxY) {
         continue;
       }

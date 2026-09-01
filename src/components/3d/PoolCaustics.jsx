@@ -63,7 +63,7 @@ export default function PoolCaustics() {
       <meshBasicMaterial
         map={texture}
         transparent
-        opacity={0.5}
+        opacity={0.16}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
       />

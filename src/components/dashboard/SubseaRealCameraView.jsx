@@ -1,5 +1,5 @@
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Suspense, useRef, useEffect, useCallback } from 'react';
+import { Suspense, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import PoolEnvironment from '../3d/PoolEnvironment';
 import UnderwaterParticles from '../3d/UnderwaterParticles';
@@ -71,14 +71,32 @@ export default function SubseaRealCameraView() {
     const camPos = camera.position;
     const projVec = new THREE.Vector3();
 
+    // Read live dynamic obstacles from vehicleStore on every frame
+    const store = useVehicleStore.getState();
+    const obstacles = store.obstacles || {};
+    const flaresFallen = store.flaresFallen || {};
+
+    const targets = Object.values(obstacles)
+      .filter((obs) => !!obs && typeof obs === 'object' && typeof obs.id === 'string')
+      .map((obs) => ({
+        id: obs.id,
+        name: obs.name,
+        classColor: obs.color || '#00f0ff',
+        pos: [obs.x, obs.y || 0.75, obs.z],
+        width: obs.width || 0.35,
+        height: obs.height || 1.5,
+        baseConf: obs.detected ? 98.5 : 94.0,
+        fallen: obs.id.includes('flare_') ? flaresFallen[obs.id.replace('flare_', '')] : false,
+      }));
+
     // Mathematically project all SAUVC mission targets through the actual onboard 3D camera lens
-    MISSION_TARGETS.forEach((target) => {
+    targets.forEach((target) => {
       const dx = target.pos[0] - camPos.x;
       const dy = target.pos[1] - camPos.y;
       const dz = target.pos[2] - camPos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      if (dist > 0.4 && dist < 16.0) {
+      if (dist > 0.4 && dist < 18.0) {
         projVec.set(target.pos[0], target.pos[1], target.pos[2]);
         projVec.project(camera);
 
@@ -94,7 +112,7 @@ export default function SubseaRealCameraView() {
           const top = screenY - boxH / 2;
 
           // YOLO Bounding Box Rectangle
-          ctx.strokeStyle = target.classColor;
+          ctx.strokeStyle = target.fallen ? '#64748b' : target.classColor;
           ctx.lineWidth = 2;
           ctx.strokeRect(left, top, boxW, boxH);
 
@@ -117,11 +135,12 @@ export default function SubseaRealCameraView() {
 
           // Label Tag with Distance & Confidence
           const conf = Math.max(78, (target.baseConf - dist * 1.2)).toFixed(1);
-          const labelText = `${target.name} ${conf}% ${dist.toFixed(1)}m`;
+          const statusTag = target.fallen ? ' [FALLEN]' : '';
+          const labelText = `${target.name} ${conf}% ${dist.toFixed(1)}m${statusTag}`;
 
           ctx.font = 'bold 9px monospace';
           const textWidth = ctx.measureText(labelText).width;
-          ctx.fillStyle = target.classColor;
+          ctx.fillStyle = target.fallen ? '#64748b' : target.classColor;
           ctx.fillRect(left, Math.max(10, top - 15), textWidth + 8, 14);
 
           ctx.fillStyle = '#000000';

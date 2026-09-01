@@ -105,8 +105,167 @@ export default function ControlPanel() {
   const setControlInput = useVehicleStore((s) => s.setControlInput);
   const activeTarget = useVehicleStore((s) => s.activeTarget);
   const depth = useVehicleStore((s) => s.depth);
+  const obstacles = useVehicleStore((s) => s.obstacles) || {};
+  const setObstaclePos = useVehicleStore((s) => s.setObstaclePos);
+  const resetObstacles = useVehicleStore((s) => s.resetObstacles);
+  const applyPresetLayout = useVehicleStore((s) => s.applyPresetLayout);
+  const flaresFallen = useVehicleStore((s) => s.flaresFallen || { red: false, blue: false, yellow: false, orange: false });
+  const payloadState = useVehicleStore((s) => s.payloadState);
+  const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
+  const connectionStatus = useVehicleStore((s) => s.connectionStatus);
 
-  const [activeTab, setActiveTab] = useState('pilot'); // 'pilot' | 'pid' | 'sysid'
+  const [activeTab, setActiveTab] = useState('pilot'); // 'pilot' | 'pid' | 'sysid' | 'sync'
+  const [selectedLayoutPreset, setSelectedLayoutPreset] = useState('standard');
+  const [gamepadConnected, setGamepadConnected] = useState(false);
+  const [gamepadName, setGamepadName] = useState('');
+  const gamepadPrevButtons = useRef({});
+
+  // =========================================================================
+  // GAMEPAD / CONTROLLER SUPPORT (PS4 / Xbox / Generic HID)
+  // Left Stick  → Surge (Y) + Sway (X)
+  // Right Stick → Yaw (X) + Heave (Y)
+  // L1/LB       → Disarm
+  // R1/RB       → Arm
+  // Triangle/Y  → Cycle flight mode
+  // Circle/B    → Toggle Subsea Gripper (Open/Close)
+  // =========================================================================
+  useEffect(() => {
+    const handleGamepadConnected = (e) => {
+      setGamepadConnected(true);
+      setGamepadName(e.gamepad.id.split('(')[0].trim());
+      console.log(`[Gamepad] Connected: ${e.gamepad.id}`);
+    };
+    const handleGamepadDisconnected = () => {
+      setGamepadConnected(false);
+      setGamepadName('');
+      console.log('[Gamepad] Disconnected');
+    };
+
+    window.addEventListener('gamepadconnected', handleGamepadConnected);
+    window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+
+    // 60Hz gamepad polling loop
+    let animFrame;
+    const DEADZONE = 0.12;
+    const applyDeadzone = (val) => Math.abs(val) < DEADZONE ? 0 : (val - Math.sign(val) * DEADZONE) / (1 - DEADZONE);
+    const flightModes = ['MANUAL', 'STABILIZE', 'ALT_HOLD'];
+
+    const pollGamepad = () => {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
+
+      if (gp) {
+        if (!gamepadConnected) {
+          setGamepadConnected(true);
+          setGamepadName(gp.id.split('(')[0].trim());
+        }
+
+        const store = useVehicleStore.getState();
+        const currentArmed = store.armed;
+        const currentMode = store.flightMode;
+
+        // Skip autonomous modes
+        if (currentMode !== 'QUALIFIKASI' && currentMode !== 'FINAL') {
+          // Left stick: axes[0] = X (sway), axes[1] = Y (surge, inverted)
+          const surge = applyDeadzone(-gp.axes[1]);
+          const sway = applyDeadzone(gp.axes[0]);
+
+          // Right stick: axes[2] = X (yaw), axes[3] = Y (heave, inverted)
+          const yaw = applyDeadzone(gp.axes[2] || gp.axes[3] || 0);
+          const heave = applyDeadzone(gp.axes[3] !== undefined ? -gp.axes[3] : 0);
+
+          // Only update if any stick is active
+          if (currentArmed && (Math.abs(surge) > 0 || Math.abs(sway) > 0 || Math.abs(yaw) > 0 || Math.abs(heave) > 0)) {
+            store.setControlInput({ surge, sway, yaw, heave });
+            topicPublisher.publishVelocity(surge, yaw);
+          }
+        }
+
+        // Button handling (with edge detection to prevent repeat triggers)
+        const prevBtns = gamepadPrevButtons.current;
+
+        // L1/LB (button 4) → Disarm
+        if (gp.buttons[4]?.pressed && !prevBtns[4]) {
+          store.setArmed(false);
+        }
+        // R1/RB (button 5) → Arm
+        if (gp.buttons[5]?.pressed && !prevBtns[5]) {
+          store.setArmed(true);
+        }
+        // Triangle/Y (button 3) → Cycle flight mode
+        if (gp.buttons[3]?.pressed && !prevBtns[3]) {
+          const currentIdx = flightModes.indexOf(currentMode);
+          const nextIdx = (currentIdx + 1) % flightModes.length;
+          store.setFlightMode(flightModes[nextIdx]);
+        }
+        // Circle/B (button 1) → Toggle Subsea Robotic Gripper (Open/Close)
+        if (gp.buttons[1]?.pressed && !prevBtns[1]) {
+          store.toggleGripper();
+        }
+
+        // =====================================================================
+        // CAMERA CONTROLS ON GAMEPAD / STICK
+        // 1. Cycle Camera Mode: Select/Back (Button 8), Square/X (Button 2), L3 (Button 10)
+        // 2. Snap / Re-center Focus on Sub: R3 (Button 11) or D-Pad Down tap (Button 13)
+        // 3. Free Directional Camera Orbit: D-Pad Up / Down / Left / Right (Buttons 12-15)
+        // =====================================================================
+        if (
+          (gp.buttons[8]?.pressed && !prevBtns[8]) ||
+          (gp.buttons[2]?.pressed && !prevBtns[2]) ||
+          (gp.buttons[10]?.pressed && !prevBtns[10])
+        ) {
+          store.cycleCameraViewMode(1);
+        }
+
+        // R3 (Right Stick Click) or D-Pad Down Tap -> Instant Focus & Snap to Submarine
+        if (
+          (gp.buttons[11]?.pressed && !prevBtns[11]) ||
+          (gp.buttons[13]?.pressed && !prevBtns[13])
+        ) {
+          store.triggerCameraReset();
+        }
+
+        // Directional Free Camera Orbiting via D-Pad (Up, Down, Left, Right)
+        let deltaAzimuth = 0;
+        let deltaElevation = 0;
+
+        // D-Pad Left (Button 14) -> Orbit Left around sub
+        if (gp.buttons[14]?.pressed) {
+          deltaAzimuth -= 1.0;
+        }
+        // D-Pad Right (Button 15) -> Orbit Right around sub
+        if (gp.buttons[15]?.pressed) {
+          deltaAzimuth += 1.0;
+        }
+        // D-Pad Up (Button 12) -> Pitch Camera Up (Elevate view)
+        if (gp.buttons[12]?.pressed) {
+          deltaElevation -= 1.0;
+        }
+        // D-Pad Down (Button 13) -> Pitch Camera Down
+        if (gp.buttons[13]?.pressed) {
+          deltaElevation += 0.8;
+        }
+
+        store.setGamepadCameraOrbit(deltaAzimuth, deltaElevation);
+
+        // Record button state for edge detection
+        gamepadPrevButtons.current = {};
+        for (let i = 0; i < gp.buttons.length; i++) {
+          gamepadPrevButtons.current[i] = gp.buttons[i]?.pressed || false;
+        }
+      }
+
+      animFrame = requestAnimationFrame(pollGamepad);
+    };
+
+    animFrame = requestAnimationFrame(pollGamepad);
+
+    return () => {
+      cancelAnimationFrame(animFrame);
+      window.removeEventListener('gamepadconnected', handleGamepadConnected);
+      window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected);
+    };
+  }, []);
 
   // System Identification Model Selection
   const [selectedSysIdModel, setSelectedSysIdModel] = useState('ARMAX');
@@ -253,28 +412,71 @@ export default function ControlPanel() {
         </button>
       </div>
 
-      {/* 3 Tabs: Pilot, PID Tuner, System ID */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+      {/* Gamepad Connection Indicator */}
+      {gamepadConnected && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            padding: '4px 10px',
+            marginBottom: '6px',
+            background: 'rgba(0, 255, 136, 0.08)',
+            border: '1px solid rgba(0, 255, 136, 0.25)',
+            borderRadius: '6px',
+            fontSize: '0.60rem',
+            color: 'var(--accent-green)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.8rem' }}>🎮</span>
+            <span style={{ fontWeight: '700' }}>{gamepadName || 'Controller'}</span>
+            <span style={{ color: 'var(--text-secondary)', marginLeft: 'auto', fontSize: '0.55rem' }}>
+              LB/RB: Disarm/Arm · △: Mode
+            </span>
+          </div>
+          <div style={{ color: 'var(--text-tertiary)', fontSize: '0.55rem' }}>
+            L-Stick: Gerak · R-Stick: Yaw/Selam · D-Pad: 🔄 Orbit Kamera · D-Pad ↓/R3: 🎯 Fokus Kapal · ▢/Select: 🎥 Ganti Kamera
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '3px', marginBottom: '8px' }}>
         <button
           className={`chart-tab ${activeTab === 'pilot' ? 'active' : ''}`}
           onClick={() => setActiveTab('pilot')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.65rem' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
         >
           🕹️ Pilot
         </button>
         <button
           className={`chart-tab ${activeTab === 'pid' ? 'active' : ''}`}
           onClick={() => setActiveTab('pid')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.65rem' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
         >
-          ⚙️ PID Tuner
+          ⚙️ PID
         </button>
         <button
           className={`chart-tab ${activeTab === 'sysid' ? 'active' : ''}`}
           onClick={() => setActiveTab('sysid')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.65rem' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
         >
-          📊 System ID
+          📊 SysID
+        </button>
+        <button
+          className={`chart-tab ${activeTab === 'sync' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sync')}
+          style={{
+            flex: 1.25,
+            textAlign: 'center',
+            fontSize: '0.62rem',
+            padding: '4px 2px',
+            background: activeTab === 'sync' ? 'rgba(0, 255, 136, 0.2)' : undefined,
+            borderColor: activeTab === 'sync' ? 'var(--accent-green)' : undefined,
+            color: activeTab === 'sync' ? 'var(--accent-green)' : undefined,
+          }}
+        >
+          🌐 Twin Sync
         </button>
       </div>
 
@@ -364,6 +566,85 @@ export default function ControlPanel() {
               onChange={(e) => setLightsIntensity(Number(e.target.value))}
               style={{ width: '100%', accentColor: 'var(--accent-cyan)' }}
             />
+          </div>
+
+          {/* Subsea Robotic Gripper Control Widget */}
+          <div
+            style={{
+              padding: '6px 8px',
+              background: 'rgba(0, 240, 255, 0.05)',
+              border: '1px solid rgba(0, 240, 255, 0.25)',
+              borderRadius: '6px',
+              marginBottom: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                🗜️ Capit Robotik (Gripper)
+              </span>
+              <span
+                style={{
+                  fontSize: '0.60rem',
+                  fontWeight: '700',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background:
+                    gripperState === 'OPEN'
+                      ? 'rgba(234, 179, 8, 0.2)'
+                      : payloadState?.grasped
+                      ? 'rgba(239, 68, 68, 0.2)'
+                      : 'rgba(0, 255, 136, 0.2)',
+                  color:
+                    gripperState === 'OPEN'
+                      ? '#facc15'
+                      : payloadState?.grasped
+                      ? '#ef4444'
+                      : 'var(--accent-green)',
+                }}
+              >
+                {payloadState?.grasped ? '🔴 MENCAPIT BOLA' : gripperState === 'OPEN' ? 'TERBUKA' : 'TERTUTUP'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+              <button
+                id="btn-toggle-gripper"
+                onClick={() => store.toggleGripper()}
+                style={{
+                  padding: '5px 4px',
+                  fontSize: '0.62rem',
+                  fontWeight: '700',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(0, 240, 255, 0.4)',
+                  background: gripperState === 'OPEN' ? 'rgba(0, 240, 255, 0.25)' : 'rgba(15, 23, 42, 0.8)',
+                  color: '#38bdf8',
+                }}
+              >
+                {gripperState === 'OPEN' ? '🔒 Tutup Gripper' : '🔓 Buka Gripper'} (◯/B)
+              </button>
+              <button
+                id="btn-test-grasp"
+                onClick={() => {
+                  if (payloadState?.grasped) {
+                    store.dropBallIntoDrum();
+                  } else {
+                    store.graspBallWithGripper();
+                  }
+                }}
+                style={{
+                  padding: '5px 4px',
+                  fontSize: '0.62rem',
+                  fontWeight: '700',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: payloadState?.grasped ? 'rgba(239, 68, 68, 0.3)' : 'rgba(15, 23, 42, 0.8)',
+                  color: '#f87171',
+                }}
+              >
+                {payloadState?.grasped ? '🎯 Lepas ke Drum' : '🗜️ Capit Bola'}
+              </button>
+            </div>
           </div>
 
           {/* Controls or Active Mission Status */}
@@ -629,6 +910,182 @@ export default function ControlPanel() {
                 C(q)/D(q) = (1 + 0.18q⁻¹) / (1 - 0.65q⁻¹)
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 4. TWIN SYNC & DYNAMIC ARENA CONFIGURATION */}
+      {activeTab === 'sync' && (
+        <div style={{ fontSize: '0.62rem' }}>
+          {/* Link Status */}
+          <div
+            style={{
+              padding: '6px 8px',
+              borderRadius: '6px',
+              background: connectionStatus === 'connected' ? 'rgba(0,255,136,0.12)' : 'rgba(0,240,255,0.08)',
+              border: `1px solid ${connectionStatus === 'connected' ? 'rgba(0,255,136,0.3)' : 'rgba(0,240,255,0.2)'}`,
+              marginBottom: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 'bold', color: connectionStatus === 'connected' ? 'var(--accent-green)' : 'var(--accent-cyan)' }}>
+                {connectionStatus === 'connected' ? '🟢 REAL-WORLD JETSON (LIVE ROS2)' : '🔵 SITL SIMULATION TWIN'}
+              </div>
+              <div style={{ fontSize: '0.55rem', color: 'var(--text-tertiary)' }}>
+                Sync Topics: /odom, /yolo_target_coord, /mission_state
+              </div>
+            </div>
+            <span style={{ fontSize: '0.75rem' }}>{connectionStatus === 'connected' ? '⚡ SYNCED' : '🧪 SITL'}</span>
+          </div>
+
+          {/* Real vs Twin Milestone Achievements */}
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ fontWeight: 'bold', color: '#bae6fd', marginBottom: '4px' }}>
+              🎯 Live Mission Milestone Synchronization
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#ea580c' }}>🟠 Orange Flare:</span>{' '}
+                <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>Safe Stand-off</span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#0284c7' }}>🔵 Blue Flare:</span>{' '}
+                <span style={{ color: flaresFallen.blue ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                  {flaresFallen.blue ? '💥 Fallen' : '⚪ Upright'}
+                </span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#ef4444' }}>🔴 Red Flare:</span>{' '}
+                <span style={{ color: flaresFallen.red ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                  {flaresFallen.red ? '💥 Fallen' : '⚪ Upright'}
+                </span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#eab308' }}>🟡 Yellow Flare:</span>{' '}
+                <span style={{ color: flaresFallen.yellow ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                  {flaresFallen.yellow ? '💥 Fallen' : '⚪ Upright'}
+                </span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#f59e0b' }}>🚪 Gate Transit:</span>{' '}
+                <span style={{ color: obstacles.gate?.passed ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                  {obstacles.gate?.passed ? '✓ Passed' : '⚪ Standby'}
+                </span>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.4)', padding: '4px 6px', borderRadius: '4px' }}>
+                <span style={{ color: '#ef4444' }}>🪣 Red Drum:</span>{' '}
+                <span style={{ color: payloadState.dropped ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '600' }}>
+                  {payloadState.dropped ? '🎯 Dropped' : '⚪ Loaded'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Arena Layout Preset Selector */}
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ fontWeight: 'bold', color: '#bae6fd', marginBottom: '4px' }}>
+              🔀 Dynamic Obstacle Layout Presets
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '4px' }}>
+              <button
+                className={`control-btn ${selectedLayoutPreset === 'standard' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedLayoutPreset('standard');
+                  applyPresetLayout('standard');
+                }}
+                style={{ padding: '5px 2px', fontSize: '0.58rem' }}
+              >
+                📍 Standard SAUVC
+              </button>
+              <button
+                className={`control-btn ${selectedLayoutPreset === 'offset' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedLayoutPreset('offset');
+                  applyPresetLayout('offset_layout');
+                }}
+                style={{ padding: '5px 2px', fontSize: '0.58rem' }}
+              >
+                🔀 Shifted Layout
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                resetObstacles();
+                useVehicleStore.getState().resetPayload();
+                useVehicleStore.getState().resetFlares();
+              }}
+              style={{
+                width: '100%',
+                padding: '4px',
+                fontSize: '0.58rem',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '4px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              ↺ Reset All Obstacle Coordinates & Milestones
+            </button>
+          </div>
+
+          {/* Dynamic Coordinate Sliders */}
+          <div style={{ maxHeight: '140px', overflowY: 'auto', paddingRight: '4px' }}>
+            {[
+              { key: 'orange_flare', label: '🟠 Orange Flare', color: '#ea580c' },
+              { key: 'blue_flare', label: '🔵 Blue Flare', color: '#0284c7' },
+              { key: 'red_flare', label: '🔴 Red Flare', color: '#ef4444' },
+              { key: 'yellow_flare', label: '🟡 Yellow Flare', color: '#eab308' },
+              { key: 'gate', label: '🚪 Gate Center', color: '#f59e0b' },
+              { key: 'drum_red_tgt', label: '🪣 Target Red Drum', color: '#ef4444' },
+            ].map(({ key, label, color }) => {
+              const obs = obstacles[key] || { x: 0, z: 0 };
+              return (
+                <div
+                  key={key}
+                  style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    padding: '4px 6px',
+                    borderRadius: '4px',
+                    marginBottom: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color, fontWeight: 'bold', fontSize: '0.58rem' }}>
+                    <span>{label}</span>
+                    <span>X: {obs.x?.toFixed(1)}m | Z: {obs.z?.toFixed(1)}m</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)' }}>X:</span>
+                      <input
+                        type="range"
+                        min="-10.0"
+                        max="12.0"
+                        step="0.1"
+                        value={obs.x ?? 0}
+                        onChange={(e) => setObstaclePos(key, e.target.value, obs.z ?? 0)}
+                        style={{ width: '100%', accentColor: color }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)' }}>Z:</span>
+                      <input
+                        type="range"
+                        min="-6.5"
+                        max="6.5"
+                        step="0.1"
+                        value={obs.z ?? 0}
+                        onChange={(e) => setObstaclePos(key, obs.x ?? 0, e.target.value)}
+                        style={{ width: '100%', accentColor: color }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

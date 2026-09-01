@@ -8,6 +8,8 @@ const useVehicleStore = create((set, get) => ({
 
   // Camera View Mode for 3D Viewport
   cameraViewMode: 'orbit', // 'orbit' | 'fpv' | 'chase'
+  cameraResetTrigger: 0,
+  triggerCameraReset: () => set((s) => ({ cameraResetTrigger: s.cameraResetTrigger + 1 })),
   cameraActive: true,
   cameraFrame: null,
 
@@ -44,16 +46,174 @@ const useVehicleStore = create((set, get) => ({
   battery: { level: 92, voltage: 16.2, current: 4.2, temperature: 28.5 },
   lightsIntensity: 80, // % 0-100
 
-  // Active Target & Competition Payload
+  // Active Target & Competition Payload + Robotic Gripper
   activeTarget: 'Manual Pilot Control',
-  payloadState: { dropped: false, x: 10.5, y: 1.1, z: 1.5 },
-  dropPayload: (x = 10.5, z = 1.5) => set({ payloadState: { dropped: true, x, y: 1.1, z } }),
-  resetPayload: () => set({ payloadState: { dropped: false, x: 10.5, y: 1.1, z: 1.5 } }),
+  gripperState: 'HOLDING', // 'OPEN' | 'CLOSED' | 'GRASPING' | 'HOLDING' (Holds ball from start)
+  setGripperState: (gripperState) => set({ gripperState }),
+  toggleGripper: () => set((s) => ({
+    gripperState: s.gripperState === 'OPEN' ? 'CLOSED' : 'OPEN',
+    payloadState: s.payloadState.grasped && s.gripperState !== 'OPEN'
+      ? { ...s.payloadState, grasped: false, dropped: true, onFloor: true, x: s.position.x + 0.2, z: s.position.z }
+      : s.payloadState,
+  })),
+
+  payloadState: {
+    loaded: true,
+    dropped: false,
+    onFloor: false,
+    grasped: true, // Ball is held by the gripper right from the start!
+    inDrum: false,
+    retrievalActive: false,
+    x: 10.5,
+    y: 0.22,
+    z: 1.5,
+  },
+  dropPayloadOnFloor: (x = 10.6, z = 1.2) => set({
+    gripperState: 'OPEN',
+    payloadState: {
+      loaded: false,
+      dropped: true,
+      onFloor: true,
+      grasped: false,
+      inDrum: false,
+      retrievalActive: true,
+      x,
+      y: 0.08,
+      z,
+    },
+    obstacles: {
+      ...get().obstacles,
+      ball_red_floor: { id: 'ball_red', name: 'BALL_RED', x, z, y: 0.15, width: 0.2, height: 0.2, color: '#ef4444', detected: true },
+    },
+  }),
+  graspBallWithGripper: () => set((s) => ({
+    gripperState: 'HOLDING',
+    payloadState: {
+      ...s.payloadState,
+      onFloor: false,
+      grasped: true,
+    },
+    obstacles: {
+      ...s.obstacles,
+      ball_red_floor: undefined,
+    },
+  })),
+  dropBallIntoDrum: (x = 10.5, z = 1.5) => set((s) => ({
+    gripperState: 'OPEN',
+    payloadState: {
+      ...s.payloadState,
+      grasped: false,
+      inDrum: true,
+      retrievalActive: false,
+      x,
+      y: 0.20,
+      z,
+    },
+    obstacles: {
+      ...s.obstacles,
+      drum_red_tgt: s.obstacles.drum_red_tgt ? { ...s.obstacles.drum_red_tgt, dropped: true } : s.obstacles.drum_red_tgt,
+    },
+  })),
+  dropPayload: (x = 10.5, z = 1.5) => set((s) => ({
+    gripperState: 'OPEN',
+    payloadState: { ...s.payloadState, loaded: false, dropped: true, inDrum: true, grasped: false, x, y: 0.20, z },
+    obstacles: {
+      ...s.obstacles,
+      drum_red_tgt: s.obstacles.drum_red_tgt ? { ...s.obstacles.drum_red_tgt, dropped: true } : s.obstacles.drum_red_tgt,
+    },
+  })),
+  resetPayload: () => set((s) => ({
+    gripperState: 'HOLDING',
+    payloadState: {
+      loaded: true,
+      dropped: false,
+      onFloor: false,
+      grasped: true, // Clamped from the start
+      inDrum: false,
+      retrievalActive: false,
+      x: 10.5,
+      y: 0.22,
+      z: 1.5,
+    },
+    obstacles: {
+      ...s.obstacles,
+      ball_red_floor: undefined,
+      drum_red_tgt: s.obstacles.drum_red_tgt ? { ...s.obstacles.drum_red_tgt, dropped: false } : s.obstacles.drum_red_tgt,
+    },
+  })),
 
   // Flares Status (Red, Blue, Yellow can be knocked down; Orange is inspected)
   flaresFallen: { red: false, blue: false, yellow: false, orange: false },
-  knockdownFlare: (color) => set((s) => ({ flaresFallen: { ...s.flaresFallen, [color]: true } })),
-  resetFlares: () => set({ flaresFallen: { red: false, blue: false, yellow: false, orange: false } }),
+  knockdownFlare: (color) => set((s) => ({
+    flaresFallen: { ...s.flaresFallen, [color]: true },
+    obstacles: {
+      ...s.obstacles,
+      [`${color}_flare`]: s.obstacles[`${color}_flare`]
+        ? { ...s.obstacles[`${color}_flare`], fallen: true }
+        : undefined,
+    },
+  })),
+  resetFlares: () => set((s) => ({
+    flaresFallen: { red: false, blue: false, yellow: false, orange: false },
+  })),
+
+  // Dynamic Obstacle Map (World 3D Positions & Real-Time Sync)
+  // Coordinates are updated live from ROS 2 (/yolo_target_coord, /obstacle_positions) or Arena Configurator
+  obstacles: {
+    orange_flare: { id: 'flare_orange', name: 'FLARE_ORG', x: -6.0, z: 2.0, y: 0.75, width: 0.35, height: 1.5, color: '#ea580c', detected: false },
+    blue_flare:   { id: 'flare_blue',   name: 'FLARE_BLU', x: -2.0, z: 2.2, y: 0.75, width: 0.35, height: 1.5, color: '#0284c7', detected: false, fallen: false },
+    red_flare:    { id: 'flare_red',    name: 'FLARE_RED', x: 0.5,  z: 4.0, y: 0.75, width: 0.35, height: 1.5, color: '#dc2626', detected: false, fallen: false },
+    yellow_flare: { id: 'flare_yellow', name: 'FLARE_YEL', x: -0.5, z: -4.5, y: 0.75, width: 0.35, height: 1.5, color: '#eab308', detected: false, fallen: false },
+    gate:         { id: 'gate',         name: 'SAUVC_GATE',x: 4.0,  z: 0.0, y: 0.85, width: 1.9,  height: 1.6, color: '#f59e0b', detected: false, passed: false },
+    drum_red_tgt: { id: 'drum_red_1',   name: 'DRUM_RED_TGT', x: 10.5, z: 1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, dropped: false },
+    drum_blue:    { id: 'drum_blue',    name: 'DRUM_BLU',  x: 10.5, z: 4.5, y: 0.25, width: 0.7, height: 0.5, color: '#0284c7', detected: false },
+  },
+
+  setObstaclePos: (key, x, z) => set((s) => ({
+    obstacles: {
+      ...s.obstacles,
+      [key]: s.obstacles[key] ? { ...s.obstacles[key], x: parseFloat(x), z: parseFloat(z) } : s.obstacles[key],
+    },
+  })),
+
+  setObstacleDetected: (key, detected) => set((s) => ({
+    obstacles: {
+      ...s.obstacles,
+      [key]: s.obstacles[key] ? { ...s.obstacles[key], detected } : s.obstacles[key],
+    },
+  })),
+
+  resetObstacles: () => set({
+    obstacles: {
+      orange_flare: { id: 'flare_orange', name: 'FLARE_ORG', x: -6.0, z: 2.0, y: 0.75, width: 0.35, height: 1.5, color: '#ea580c', detected: false },
+      blue_flare:   { id: 'flare_blue',   name: 'FLARE_BLU', x: -2.0, z: 2.2, y: 0.75, width: 0.35, height: 1.5, color: '#0284c7', detected: false, fallen: false },
+      red_flare:    { id: 'flare_red',    name: 'FLARE_RED', x: 0.5,  z: 4.0, y: 0.75, width: 0.35, height: 1.5, color: '#dc2626', detected: false, fallen: false },
+      yellow_flare: { id: 'flare_yellow', name: 'FLARE_YEL', x: -0.5, z: -4.5, y: 0.75, width: 0.35, height: 1.5, color: '#eab308', detected: false, fallen: false },
+      gate:         { id: 'gate',         name: 'SAUVC_GATE',x: 4.0,  z: 0.0, y: 0.85, width: 1.9,  height: 1.6, color: '#f59e0b', detected: false, passed: false },
+      drum_red_tgt: { id: 'drum_red_1',   name: 'DRUM_RED_TGT', x: 10.5, z: 1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, dropped: false },
+      drum_blue:    { id: 'drum_blue',    name: 'DRUM_BLU',  x: 10.5, z: 4.5, y: 0.25, width: 0.7, height: 0.5, color: '#0284c7', detected: false },
+    },
+    flaresFallen: { red: false, blue: false, yellow: false, orange: false },
+  }),
+
+  applyPresetLayout: (presetName) => {
+    if (presetName === 'offset_layout') {
+      // Challenging shifted layout
+      set({
+        obstacles: {
+          orange_flare: { id: 'flare_orange', name: 'FLARE_ORG', x: -6.5, z: 2.5, y: 0.75, width: 0.35, height: 1.5, color: '#ea580c', detected: false },
+          blue_flare:   { id: 'flare_blue',   name: 'FLARE_BLU', x: -2.5, z: 1.5, y: 0.75, width: 0.35, height: 1.5, color: '#0284c7', detected: false, fallen: false },
+          red_flare:    { id: 'flare_red',    name: 'FLARE_RED', x: 1.0,  z: 3.5, y: 0.75, width: 0.35, height: 1.5, color: '#dc2626', detected: false, fallen: false },
+          yellow_flare: { id: 'flare_yellow', name: 'FLARE_YEL', x: -1.0, z: -4.0, y: 0.75, width: 0.35, height: 1.5, color: '#eab308', detected: false, fallen: false },
+          gate:         { id: 'gate',         name: 'SAUVC_GATE',x: 4.5,  z: 0.5, y: 0.85, width: 1.9,  height: 1.6, color: '#f59e0b', detected: false, passed: false },
+          drum_red_tgt: { id: 'drum_red_1',   name: 'DRUM_RED_TGT', x: 10.0, z: 2.0, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, dropped: false },
+          drum_blue:    { id: 'drum_blue',    name: 'DRUM_BLU',  x: 10.0, z: 5.0, y: 0.25, width: 0.7, height: 0.5, color: '#0284c7', detected: false },
+        },
+      });
+    } else {
+      get().resetObstacles();
+    }
+  },
 
   // Telemetry History
   positionHistory: [],
@@ -72,6 +232,20 @@ const useVehicleStore = create((set, get) => ({
     uptime: 0,
     dvlStatus: 'LOCKED',
     errors: [],
+  },
+
+  cameraViewMode: 'orbit', // 'fpv' | 'chase' | 'orbit'
+  cameraResetTrigger: 0,
+  triggerCameraReset: () => set((s) => ({ cameraResetTrigger: s.cameraResetTrigger + 1 })),
+  gamepadCameraOrbit: { deltaAzimuth: 0, deltaElevation: 0 },
+  setGamepadCameraOrbit: (deltaAzimuth, deltaElevation) => set({ gamepadCameraOrbit: { deltaAzimuth, deltaElevation } }),
+
+  cycleCameraViewMode: (direction = 1) => {
+    const modes = ['fpv', 'chase', 'orbit'];
+    const current = get().cameraViewMode;
+    const currentIdx = modes.indexOf(current);
+    const nextIdx = (currentIdx + direction + modes.length) % modes.length;
+    set({ cameraViewMode: modes[nextIdx] });
   },
 
   // Actions

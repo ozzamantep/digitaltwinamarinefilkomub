@@ -126,6 +126,11 @@ export default function BlueROV2Model({ onFrame }) {
   const speed = useVehicleStore((s) => s.speed);
   const thrusters = useVehicleStore((s) => s.thrusters);
   const armed = useVehicleStore((s) => s.armed);
+  const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
+  const payloadState = useVehicleStore((s) => s.payloadState);
+
+  const leftJawRef = useRef();
+  const rightJawRef = useRef();
 
   // Carbon fiber weave texture simulation material
   const carbonMaterial = useMemo(() => {
@@ -238,6 +243,26 @@ export default function BlueROV2Model({ onFrame }) {
         }
       }
     });
+
+    // Subsea Gripper Jaws Animation (Smooth damped articulation)
+    if (leftJawRef.current && rightJawRef.current) {
+      let targetAngle = 0.0;
+      if (gripperState === 'OPEN') targetAngle = 0.45;
+      else if (gripperState === 'HOLDING' || payloadState?.grasped) targetAngle = 0.14;
+
+      leftJawRef.current.rotation.y = THREE.MathUtils.damp(
+        leftJawRef.current.rotation.y,
+        -targetAngle,
+        12.0,
+        delta
+      );
+      rightJawRef.current.rotation.y = THREE.MathUtils.damp(
+        rightJawRef.current.rotation.y,
+        targetAngle,
+        12.0,
+        delta
+      );
+    }
   });
 
   const lightPower = lightsIntensity / 100;
@@ -568,6 +593,86 @@ export default function BlueROV2Model({ onFrame }) {
       <pointLight position={[0, 0.02, 0]} color="#38bdf8" intensity={0.8} distance={3.5} />
       <pointLight position={[0.22, 0, 0]} color="#facc15" intensity={0.4} distance={1.5} />
       <pointLight position={[-0.22, 0, 0]} color="#facc15" intensity={0.4} distance={1.5} />
+
+      {/* ================================================================= */}
+      {/* 7. ARTICULATED SUBSEA ROBOTIC GRIPPER & MANIPULATOR ARM          */}
+      {/* ================================================================= */}
+      <group position={[0.22, -0.095, 0]}>
+        {/* Heavy-Duty Mounting Bracket attached to Lower Chassis */}
+        <mesh position={[-0.04, 0.015, 0]}>
+          <boxGeometry args={[0.06, 0.02, 0.045]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.4} metalness={0.7} />
+        </mesh>
+
+        {/* Waterproof Rotary Servo Housing & Gold Ring */}
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.022, 0.022, 0.055, 18]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
+        </mesh>
+        <mesh position={[0.028, 0, 0]}>
+          <boxGeometry args={[0.01, 0.028, 0.035]} />
+          <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={0.6} />
+        </mesh>
+
+        {/* Articulated Wrist Joint */}
+        <group position={[0.035, -0.005, 0]}>
+          {/* Central Claw Base */}
+          <mesh>
+            <boxGeometry args={[0.025, 0.018, 0.04]} />
+            <meshStandardMaterial color="#0f172a" roughness={0.4} metalness={0.7} />
+          </mesh>
+
+          {/* Left Articulated Claw Jaw */}
+          <group ref={leftJawRef} position={[0.012, 0, 0.018]}>
+            <mesh position={[0.035, 0, 0.008]} rotation={[0, -0.2, 0]}>
+              <boxGeometry args={[0.07, 0.014, 0.008]} />
+              <meshStandardMaterial color="#facc15" roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Curved Pincer Tip */}
+            <mesh position={[0.075, 0, -0.005]} rotation={[0, 0.6, 0]}>
+              <boxGeometry args={[0.03, 0.012, 0.008]} />
+              <meshStandardMaterial color="#0284c7" roughness={0.2} metalness={0.8} />
+            </mesh>
+            {/* Textured Inner Grip Pad */}
+            <mesh position={[0.045, 0, -0.002]}>
+              <boxGeometry args={[0.045, 0.01, 0.004]} />
+              <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={0.5} />
+            </mesh>
+          </group>
+
+          {/* Right Articulated Claw Jaw */}
+          <group ref={rightJawRef} position={[0.012, 0, -0.018]}>
+            <mesh position={[0.035, 0, -0.008]} rotation={[0, 0.2, 0]}>
+              <boxGeometry args={[0.07, 0.014, 0.008]} />
+              <meshStandardMaterial color="#facc15" roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Curved Pincer Tip */}
+            <mesh position={[0.075, 0, 0.005]} rotation={[0, -0.6, 0]}>
+              <boxGeometry args={[0.03, 0.012, 0.008]} />
+              <meshStandardMaterial color="#0284c7" roughness={0.2} metalness={0.8} />
+            </mesh>
+            {/* Textured Inner Grip Pad */}
+            <mesh position={[0.045, 0, 0.002]}>
+              <boxGeometry args={[0.045, 0.01, 0.004]} />
+              <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={0.5} />
+            </mesh>
+          </group>
+
+          {/* Clamped Red Ball (Visible when payloadState.grasped is true) */}
+          {payloadState?.grasped && (
+            <mesh position={[0.065, 0, 0]}>
+              <sphereGeometry args={[0.032, 24, 24]} />
+              <meshStandardMaterial
+                color="#ef4444"
+                emissive="#b91c1c"
+                emissiveIntensity={0.35}
+                roughness={0.25}
+                metalness={0.1}
+              />
+            </mesh>
+          )}
+        </group>
+      </group>
     </group>
   );
 }

@@ -8,6 +8,15 @@ import useVehicleStore from '../../store/vehicleStore';
 export default function PoolEnvironment() {
   const waterRef = useRef();
   const flaresFallen = useVehicleStore((s) => s.flaresFallen || { red: false, blue: false, yellow: false, orange: false });
+  const obstacles = useVehicleStore((s) => s.obstacles) || {
+    orange_flare: { x: -6.0, z: 2.0 },
+    blue_flare: { x: -2.0, z: 2.2 },
+    red_flare: { x: 0.5, z: 4.0 },
+    yellow_flare: { x: -0.5, z: -4.5 },
+    gate: { x: 4.0, z: 0.0 },
+    drum_red_tgt: { x: 10.5, z: 1.5 },
+    drum_blue: { x: 10.5, z: 4.5 },
+  };
 
   // Refs for smooth toppling / falling animation
   const blueFlareGroupRef = useRef();
@@ -28,7 +37,7 @@ export default function PoolEnvironment() {
   // Animate water surface ripples & physical flare toppling
   useFrame((state, delta) => {
     if (waterRef.current) {
-      waterRef.current.material.opacity = 0.42 + Math.sin(state.clock.elapsedTime * 1.8) * 0.04;
+      waterRef.current.material.opacity = 0.18 + Math.sin(state.clock.elapsedTime * 1.5) * 0.02;
     }
 
     // Blue Flare Topple Animation (Rotates 90 deg down to pool floor)
@@ -125,11 +134,6 @@ export default function PoolEnvironment() {
           <ringGeometry args={[0.65, 0.7, 32]} />
           <meshBasicMaterial color="#00ff88" />
         </mesh>
-        {/* Floating surface start gate square */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, poolDepth - 0.02, 0]}>
-          <ringGeometry args={[0.65, 0.7, 4]} />
-          <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} />
-        </mesh>
       </group>
 
       {/* 3. POOL WALLS */}
@@ -172,21 +176,44 @@ export default function PoolEnvironment() {
         <meshStandardMaterial color="#f8fafc" roughness={0.5} />
       </mesh>
 
-      {/* 4. WATER SURFACE (Y = 2.0m) */}
+      {/* Swimming Pool Racing Black Guidelines on Floor */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
+        <planeGeometry args={[23, 0.25]} />
+        <meshBasicMaterial color="#0f172a" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, -4.0]} receiveShadow>
+        <planeGeometry args={[23, 0.25]} />
+        <meshBasicMaterial color="#0f172a" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 4.0]} receiveShadow>
+        <planeGeometry args={[23, 0.25]} />
+        <meshBasicMaterial color="#0f172a" />
+      </mesh>
+
+      {/* Cross-lines on Start & Finish */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-10.0, 0.006, 0]} receiveShadow>
+        <planeGeometry args={[0.25, 1.5]} />
+        <meshBasicMaterial color="#0f172a" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[10.0, 0.006, 0]} receiveShadow>
+        <planeGeometry args={[0.25, 1.5]} />
+        <meshBasicMaterial color="#0f172a" />
+      </mesh>
+
+      {/* 4. Crystal-Clear Transparent Water Surface (Zero Ghosting / Zero Double-Image Refraction) */}
       <mesh
         ref={waterRef}
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, poolDepth, 0]}
+        position={[0, 1.95, 0]}
       >
-        <planeGeometry args={[poolLength, poolWidth, 32, 32]} />
-        <meshPhysicalMaterial
-          color="#06b6d4"
+        <planeGeometry args={[25, 16]} />
+        <meshStandardMaterial
+          color="#0284c7"
           transparent
-          opacity={0.45}
+          opacity={0.18}
           roughness={0.08}
-          metalness={0.15}
-          transmission={0.65}
-          ior={1.333}
+          metalness={0.1}
+          depthWrite={false}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -195,9 +222,8 @@ export default function PoolEnvironment() {
       {/* 5. OFFICIAL SAUVC 2026 COMPETITION MISSION OBJECTS        */}
       {/* ========================================================= */}
 
-      {/* === ZONE 1: ORANGE FLARE (X = -6.0m, Z = 2.0m) === */}
-      {/* Approached closely but NOT struck down */}
-      <group position={[-6.0, 0, 2.0]}>
+      {/* === ZONE 1: ORANGE FLARE === */}
+      <group position={[obstacles.orange_flare?.x ?? -6.0, 0, obstacles.orange_flare?.z ?? 2.0]}>
         <mesh position={[0, 0.75, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.07, 1.5, 16]} />
           <meshStandardMaterial color="#ea580c" emissive="#c2410c" emissiveIntensity={0.35} roughness={0.25} />
@@ -210,8 +236,8 @@ export default function PoolEnvironment() {
 
       {/* === ZONE 2: FLARES (Blue, Red, Yellow) THAT FALL WHEN STRUCK === */}
 
-      {/* Blue Flare (X = -2.0m, Z = 2.2m) */}
-      <group position={[-2.0, 0, 2.2]}>
+      {/* Blue Flare */}
+      <group position={[obstacles.blue_flare?.x ?? -2.0, 0, obstacles.blue_flare?.z ?? 2.2]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
           <meshStandardMaterial color="#1e293b" />
@@ -224,8 +250,8 @@ export default function PoolEnvironment() {
         </group>
       </group>
 
-      {/* Red Flare (X = 0.5m, Z = 4.0m) */}
-      <group position={[0.5, 0, 4.0]}>
+      {/* Red Flare */}
+      <group position={[obstacles.red_flare?.x ?? 0.5, 0, obstacles.red_flare?.z ?? 4.0]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
           <meshStandardMaterial color="#1e293b" />
@@ -238,8 +264,8 @@ export default function PoolEnvironment() {
         </group>
       </group>
 
-      {/* Yellow Flare (X = -0.5m, Z = -4.5m) */}
-      <group position={[-0.5, 0, -4.5]}>
+      {/* Yellow Flare */}
+      <group position={[obstacles.yellow_flare?.x ?? -0.5, 0, obstacles.yellow_flare?.z ?? -4.5]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
           <meshStandardMaterial color="#1e293b" />
@@ -252,8 +278,8 @@ export default function PoolEnvironment() {
         </group>
       </group>
 
-      {/* === GATE (X = 4.0m, Z = 0.0m) with Red & Green Markers === */}
-      <group position={[4.0, 0, 0.0]}>
+      {/* === GATE with Red & Green Markers === */}
+      <group position={[obstacles.gate?.x ?? 4.0, 0, obstacles.gate?.z ?? 0.0]}>
         {/* Left Post */}
         <mesh position={[0, 0.75, -0.9]} castShadow>
           <cylinderGeometry args={[0.045, 0.045, 1.5, 16]} />
@@ -291,8 +317,8 @@ export default function PoolEnvironment() {
       </group>
 
       {/* === TARGET ZONE: 4 DRUMS (1 Blue Drum + 3 Red Drums along X = 10.5m) === */}
-      {/* 1. Blue Drum (Z = 4.5m) */}
-      <group position={[10.5, 0.18, 4.5]}>
+      {/* 1. Blue Drum */}
+      <group position={[obstacles.drum_blue?.x ?? 10.5, 0.18, obstacles.drum_blue?.z ?? 4.5]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.35, 0.3, 0.45, 24, 1, true]} />
           <meshStandardMaterial color="#0284c7" side={THREE.DoubleSide} roughness={0.4} />
@@ -303,8 +329,8 @@ export default function PoolEnvironment() {
         </mesh>
       </group>
 
-      {/* 2. Red Drum Target Bucket 1 (Z = 1.5m) - Primary Target Drop Zone */}
-      <group position={[10.5, 0.18, 1.5]}>
+      {/* 2. Red Drum Target Bucket 1 - Primary Target Drop Zone */}
+      <group position={[obstacles.drum_red_tgt?.x ?? 10.5, 0.18, obstacles.drum_red_tgt?.z ?? 1.5]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.35, 0.3, 0.45, 24, 1, true]} />
           <meshStandardMaterial color="#ef4444" side={THREE.DoubleSide} roughness={0.4} />

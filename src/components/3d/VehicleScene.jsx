@@ -31,6 +31,7 @@ export default function VehicleScene() {
   const activeTarget = useVehicleStore((s) => s.activeTarget);
   const cameraViewMode = useVehicleStore((s) => s.cameraViewMode);
   const setCameraViewMode = useVehicleStore((s) => s.setCameraViewMode);
+  const triggerCameraReset = useVehicleStore((s) => s.triggerCameraReset);
   const headingRad = useVehicleStore((s) => s.headingRad);
   const headingDeg = Math.round(((((headingRad || 0) * 180) / Math.PI) % 360 + 360) % 360);
 
@@ -98,9 +99,9 @@ export default function VehicleScene() {
         <OrbitControls
           ref={controlsRef}
           makeDefault
-          minPolarAngle={0.1}
+          minPolarAngle={0.05}
           maxPolarAngle={Math.PI / 2.05}
-          minDistance={1.8}
+          minDistance={0.5}
           maxDistance={35}
           enableDamping
           dampingFactor={0.07}
@@ -224,7 +225,11 @@ export default function VehicleScene() {
           </button>
           <button
             id="btn-cam-chase"
-            onClick={() => setCameraViewMode('chase')}
+            onClick={() => {
+              setCameraViewMode('chase');
+              triggerCameraReset();
+            }}
+            title="Kamera mengikuti pergerakan kapal & dapat di-orbit bebas 360° dengan mouse drag"
             style={{
               background: cameraViewMode === 'chase' ? 'var(--accent-cyan)' : 'transparent',
               color: cameraViewMode === 'chase' ? '#000' : 'var(--text-secondary)',
@@ -240,7 +245,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🚁 Chase (Belakang)
+            🚁 Chase (Orbit Kapal)
           </button>
           <button
             id="btn-cam-orbit"
@@ -262,6 +267,30 @@ export default function VehicleScene() {
           >
             🌐 Orbit (Bebas)
           </button>
+
+          {(cameraViewMode === 'chase' || cameraViewMode === 'orbit') && (
+            <button
+              id="btn-cam-focus"
+              onClick={() => triggerCameraReset()}
+              title="Kunci & fokuskan kamera tepat ke tengah kapal (Shortcut Gamepad: R3 atau D-Pad Bawah)"
+              style={{
+                background: 'rgba(0, 255, 136, 0.15)',
+                color: 'var(--accent-green)',
+                border: '1px solid rgba(0, 255, 136, 0.35)',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              🎯 Fokus Kapal
+            </button>
+          )}
         </div>
 
         <div className="viewport-fps">{fps} FPS</div>

@@ -3,78 +3,170 @@ import * as THREE from 'three';
 import { useRef } from 'react';
 import useVehicleStore from '../../store/vehicleStore';
 
+/**
+ * Dynamic Camera Controller
+ * Supports:
+ * 1. 🌐 Orbit (Free camera view in the pool arena)
+ * 2. 🚁 Chase (Tracks the AUV in 3D while allowing full 360° mouse drag orbit & zoom around the vehicle)
+ * 3. 🎥 FPV (First-Person View from front dome with compass & HUD)
+ */
 export default function CameraController({ controlsRef }) {
   const { camera } = useThree();
   const position = useVehicleStore((s) => s.position);
   const headingRad = useVehicleStore((s) => s.headingRad);
   const cameraViewMode = useVehicleStore((s) => s.cameraViewMode);
+  const cameraResetTrigger = useVehicleStore((s) => s.cameraResetTrigger);
 
-  const currentCamPos = useRef(new THREE.Vector3(-11, 6.5, 9.5));
-  const currentLookAt = useRef(new THREE.Vector3(-3, 1.1, 0));
+  const prevMode = useRef(cameraViewMode);
+  const prevTrigger = useRef(cameraResetTrigger);
+  const lastSubPos = useRef(new THREE.Vector3(-11, 1.2, 2));
+  const initializedChase = useRef(false);
 
-  useFrame((_, delta) => {
-    if (cameraViewMode === 'orbit') {
-      if (controlsRef.current) {
-        controlsRef.current.enabled = true;
-      }
-      return;
-    }
+  // FPV Smooth Lerp tracking vectors
+  const currentFpvPos = useRef(new THREE.Vector3(-11, 1.2, 2));
+  const currentFpvLook = useRef(new THREE.Vector3(-10, 1.2, 2));
 
-    if (controlsRef.current) {
-      controlsRef.current.enabled = false;
-    }
-
-    const pos = position || { x: -10, y: 1.1, z: 0 };
-    const hRad = headingRad || 0;
+  // Initialize or re-center Chase Camera directly behind the moving vehicle
+  const resetChaseCamera = (pos, hRad) => {
+    if (!controlsRef.current) return;
     const cosH = Math.cos(hRad);
     const sinH = Math.sin(hRad);
 
-    const store = useVehicleStore.getState();
-    const euler = store.euler || { pitch: 0, roll: 0, yaw: 0 };
-    const pitchRad = ((euler.pitch || 0) * Math.PI) / 180;
+    const targetPos = new THREE.Vector3(
+      pos.x - cosH * 1.8,
+      pos.y + 0.65,
+      pos.z - sinH * 1.8
+    );
+    const targetLook = new THREE.Vector3(pos.x, pos.y + 0.05, pos.z);
 
-    let targetPos = new THREE.Vector3();
-    let targetLook = new THREE.Vector3();
+    camera.position.copy(targetPos);
+    controlsRef.current.target.copy(targetLook);
+    controlsRef.current.update();
+    lastSubPos.current.set(pos.x, pos.y, pos.z);
+    initializedChase.current = true;
+  };
 
+  useFrame((_, delta) => {
+    const pos = position || { x: -11, y: 1.2, z: 2 };
+    const hRad = headingRad || 0;
+    const controls = controlsRef.current;
+
+    const modeChanged = prevMode.current !== cameraViewMode;
+    const triggerChanged = prevTrigger.current !== cameraResetTrigger;
+    prevMode.current = cameraViewMode;
+    prevTrigger.current = cameraResetTrigger;
+
+    // =========================================================================
+    // 1. FREE ORBIT MODE (Arena View)
+    // =========================================================================
+    if (cameraViewMode === 'orbit') {
+      if (controls) {
+        controls.enabled = true;
+        controls.minDistance = 1.2;
+        controls.maxDistance = 35;
+
+        // Instant Focus on Vehicle when Reset/Focus triggered (D-Pad Down / R3)
+        if (triggerChanged) {
+          controls.target.set(pos.x, pos.y, pos.z);
+          camera.position.set(pos.x - 3.5, pos.y + 2.5, pos.z + 3.5);
+          controls.update();
+        }
+
+        // Apply Gamepad Continuous Orbit Rotation
+        const gpOrbit = useVehicleStore.getState().gamepadCameraOrbit || { deltaAzimuth: 0, deltaElevation: 0 };
+        if (gpOrbit.deltaAzimuth !== 0 || gpOrbit.deltaElevation !== 0) {
+          controls.rotateLeft(gpOrbit.deltaAzimuth * delta * 2.2);
+          controls.rotateUp(gpOrbit.deltaElevation * delta * 2.2);
+          controls.update();
+        }
+      }
+      initializedChase.current = false;
+      return;
+    }
+
+    // =========================================================================
+    // 2. FPV FIRST-PERSON VIEW MODE (Front Camera Dome)
+    // =========================================================================
     if (cameraViewMode === 'fpv') {
-      // FPV: Camera mounted directly at front camera dome (+X forward)
-      targetPos.set(
+      if (controls) {
+        controls.enabled = false;
+      }
+      initializedChase.current = false;
+
+      const cosH = Math.cos(hRad);
+      const sinH = Math.sin(hRad);
+      const store = useVehicleStore.getState();
+      const euler = store.euler || { pitch: 0, roll: 0, yaw: 0 };
+      const pitchRad = ((euler.pitch || 0) * Math.PI) / 180;
+
+      const targetPos = new THREE.Vector3(
         pos.x + cosH * 0.22,
         pos.y + 0.05,
         pos.z + sinH * 0.22
       );
 
-      // Pitch down (negative pitch) tilts look-at vector DOWN towards the floor
       const forwardDist = 8.0 * Math.cos(pitchRad);
-      const verticalOffset = 8.0 * Math.sin(pitchRad); // Correct downward look-at
+      const verticalOffset = 8.0 * Math.sin(pitchRad);
 
-      targetLook.set(
+      const targetLook = new THREE.Vector3(
         targetPos.x + cosH * forwardDist,
         targetPos.y + verticalOffset,
         targetPos.z + sinH * forwardDist
       );
-    } else if (cameraViewMode === 'chase') {
-      // Chase: Camera follows behind and slightly above the submarine
-      targetPos.set(
-        pos.x - cosH * 1.6,
-        pos.y + 0.55,
-        pos.z - sinH * 1.6
-      );
 
-      targetLook.set(
-        pos.x + cosH * 1.2,
-        pos.y + 0.02,
-        pos.z + sinH * 1.2
-      );
+      const lerpFactor = Math.min(1, 14.0 * delta);
+      currentFpvPos.current.lerp(targetPos, lerpFactor);
+      currentFpvLook.current.lerp(targetLook, lerpFactor);
+
+      camera.position.copy(currentFpvPos.current);
+      camera.lookAt(currentFpvLook.current);
+      return;
     }
 
-    // Smooth camera damping lerp
-    const lerpFactor = Math.min(1, 8.0 * delta);
-    currentCamPos.current.lerp(targetPos, lerpFactor);
-    currentLookAt.current.lerp(targetLook, lerpFactor);
+    // =========================================================================
+    // 3. CHASE ORBIT MODE (Follows AUV + full 360° Gamepad / Mouse Orbit & Zoom)
+    // =========================================================================
+    if (cameraViewMode === 'chase') {
+      if (!controls) return;
 
-    camera.position.copy(currentCamPos.current);
-    camera.lookAt(currentLookAt.current);
+      controls.enabled = true;
+      controls.minDistance = 0.5;
+      controls.maxDistance = 20;
+
+      // On entering chase mode or on clicking Reset Focus (D-Pad Down / R3)
+      if (modeChanged || triggerChanged || !initializedChase.current) {
+        resetChaseCamera(pos, hRad);
+        return;
+      }
+
+      // Apply Gamepad Continuous Orbit Rotation around moving AUV
+      const gpOrbit = useVehicleStore.getState().gamepadCameraOrbit || { deltaAzimuth: 0, deltaElevation: 0 };
+      if (gpOrbit.deltaAzimuth !== 0 || gpOrbit.deltaElevation !== 0) {
+        controls.rotateLeft(gpOrbit.deltaAzimuth * delta * 2.2);
+        controls.rotateUp(gpOrbit.deltaElevation * delta * 2.2);
+        controls.update();
+      }
+
+      // Delta translation: seamlessly moves camera and OrbitControls target
+      // with the submarine, while preserving the user's manual orbit angle & zoom distance!
+      const deltaX = pos.x - lastSubPos.current.x;
+      const deltaY = pos.y - lastSubPos.current.y;
+      const deltaZ = pos.z - lastSubPos.current.z;
+
+      if (deltaX !== 0 || deltaY !== 0 || deltaZ !== 0) {
+        camera.position.x += deltaX;
+        camera.position.y += deltaY;
+        camera.position.z += deltaZ;
+
+        controls.target.x += deltaX;
+        controls.target.y += deltaY;
+        controls.target.z += deltaZ;
+
+        controls.update();
+      }
+
+      lastSubPos.current.set(pos.x, pos.y, pos.z);
+    }
   });
 
   return null;

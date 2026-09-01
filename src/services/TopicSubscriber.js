@@ -123,7 +123,64 @@ class TopicSubscriber {
       }
     );
 
-    console.log('[TopicSubscriber] Subscribed to BlueROV2 ROS2 subsea topics & /thruster_outputs');
+    // 8. Dynamic YOLO Obstacle Detection & Real-World Twin Sync
+    this.subscribe(
+      ros,
+      '/yolo_target_coord',
+      'std_msgs/msg/String',
+      (msg) => {
+        try {
+          const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+          const store = useVehicleStore.getState();
+
+          if (data.target && data.x !== undefined && data.z !== undefined) {
+            const keyMap = {
+              'flare_orange': 'orange_flare',
+              'flare_blue': 'blue_flare',
+              'flare_red': 'red_flare',
+              'flare_yellow': 'yellow_flare',
+              'gate': 'gate',
+              'drum_red': 'drum_red_tgt',
+              'drum_blue': 'drum_blue',
+            };
+            const storeKey = keyMap[data.target] || data.target;
+            store.setObstaclePos(storeKey, data.x, data.z);
+            store.setObstacleDetected(storeKey, true);
+          }
+        } catch (e) {
+          // Non-JSON string or raw data
+        }
+      }
+    );
+
+    // 9. Real-World Mission State Sync (Flares Knockdown, Gate Passed, Payload Dropped)
+    this.subscribe(
+      ros,
+      '/mission_state',
+      'std_msgs/msg/String',
+      (msg) => {
+        try {
+          const data = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+          const store = useVehicleStore.getState();
+
+          if (data.event === 'flare_hit' && data.color) {
+            store.knockdownFlare(data.color.toLowerCase());
+            console.log(`[TopicSubscriber] 🎯 Real Robot hit ${data.color} flare! Digital Twin updated.`);
+          }
+          if (data.event === 'payload_dropped') {
+            store.dropPayload(data.x || 10.5, data.z || 1.5);
+            console.log('[TopicSubscriber] 🔴 Real Robot dropped ball payload! Digital Twin updated.');
+          }
+          if (data.activeTarget) {
+            useVehicleStore.setState({ activeTarget: data.activeTarget });
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }
+    );
+
+    console.log('[TopicSubscriber] Subscribed to BlueROV2 ROS2 subsea topics, /thruster_outputs, /yolo_target_coord & /mission_state');
   }
 
   subscribe(ros, topicName, messageType, callback) {
