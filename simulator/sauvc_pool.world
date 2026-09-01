@@ -1,0 +1,441 @@
+<?xml version="1.0" ?>
+<!-- ================================================================= -->
+<!-- SAUVC Competition Subsea Pool World with Custom 6-Thruster AUV   -->
+<!-- ================================================================= -->
+<sdf version="1.6">
+  <world name="sauvc_subsea_pool">
+    <!-- Sun Light Source -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- Underwater Lighting & Ambience -->
+    <scene>
+      <ambient>0.25 0.5 0.7 1.0</ambient>
+      <background>0.06 0.18 0.32 1.0</background>
+      <shadows>true</shadows>
+      <grid>true</grid>
+    </scene>
+
+    <physics type="ode">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+    </physics>
+
+    <!-- 1. Competition Pool Ground Floor -->
+    <model name="pool_floor">
+      <static>true</static>
+      <link name="floor_link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>30 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>30 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.12 0.38 0.58 1</ambient>
+            <diffuse>0.15 0.48 0.68 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 2. Water Volume Visual (Z = 2.0m surface) -->
+    <model name="water_surface">
+      <static>true</static>
+      <pose>0 0 2.0 0 0 0</pose>
+      <link name="surface_link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>28 18 0.02</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.75 0.95 0.35</ambient>
+            <diffuse>0.2 0.75 0.95 0.35</diffuse>
+            <specular>0.9 0.9 0.9 0.8</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 3. SAUVC Qualification Gate (At X = 4.0m, Z = 0.9m) -->
+    <model name="sauvc_gate">
+      <static>true</static>
+      <pose>4.0 0 0.9 0 0 0</pose>
+
+      <!-- Left Post (Red Marker Z = -0.9m) -->
+      <link name="left_post">
+        <pose>0 -0.9 0 0 0 0</pose>
+        <collision name="col_left">
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>1.8</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis_left">
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>1.8</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.9 0.15 0.15 1</ambient>
+            <diffuse>0.9 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Right Post (Green Marker Z = +0.9m) -->
+      <link name="right_post">
+        <pose>0 0.9 0 0 0 0</pose>
+        <collision name="col_right">
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>1.8</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis_right">
+          <geometry>
+            <cylinder>
+              <radius>0.04</radius>
+              <length>1.8</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.85 0.25 1</ambient>
+            <diffuse>0.1 0.85 0.25 1</diffuse>
+          </material>
+        </visual>
+      </link>
+
+      <!-- Top Crossbar -->
+      <link name="top_crossbar">
+        <pose>0 0 0.6 1.5708 0 0</pose>
+        <collision name="col_cross">
+          <geometry>
+            <cylinder>
+              <radius>0.035</radius>
+              <length>1.88</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="vis_cross">
+          <geometry>
+            <cylinder>
+              <radius>0.035</radius>
+              <length>1.88</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 4. Flare Targets on Pool Floor -->
+    <model name="flare_yellow">
+      <static>true</static>
+      <pose>7.5 1.5 0.5 0 0 0</pose>
+      <link name="link">
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.05</radius>
+              <length>1.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.95 0.85 0.1 1</ambient>
+            <diffuse>0.95 0.85 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="flare_red">
+      <static>true</static>
+      <pose>9.0 -1.8 0.5 0 0 0</pose>
+      <link name="link">
+        <visual name="vis">
+          <geometry>
+            <cylinder>
+              <radius>0.05</radius>
+              <length>1.0</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.9 0.2 0.2 1</ambient>
+            <diffuse>0.9 0.2 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- =============================================================== -->
+    <!-- 5. CUSTOM 6-THRUSTER SUBSEA AUV ROBOT EMBEDDED IN WORLD         -->
+    <!-- =============================================================== -->
+    <model name="custom_auv_robot">
+      <pose>-6.0 0 1.25 0 0 0</pose>
+      <static>false</static>
+
+      <link name="base_link">
+        <inertial>
+          <mass>11.5</mass>
+          <inertia>
+            <ixx>0.12</ixx>
+            <iyy>0.22</iyy>
+            <izz>0.24</izz>
+          </inertia>
+        </inertial>
+
+        <!-- Main White Cylindrical Core Body -->
+        <visual name="core_cylinder">
+          <pose>0 0 0 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.075</radius>
+              <length>0.28</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.95 0.95 0.98 1</ambient>
+            <diffuse>0.95 0.95 0.98 1</diffuse>
+          </material>
+        </visual>
+        <collision name="core_col">
+          <pose>0 0 0 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.075</radius>
+              <length>0.28</length>
+            </cylinder>
+          </geometry>
+        </collision>
+
+        <!-- Clear Acrylic Electronics Top Box -->
+        <visual name="electronics_box">
+          <pose>0 0 0.065 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.22 0.19 0.062</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.9 1.0 0.6</ambient>
+            <diffuse>0.7 0.9 1.0 0.6</diffuse>
+          </material>
+        </visual>
+
+        <!-- Dual Stacked Carbon Fiber Tubes (Port Side: +Y) -->
+        <visual name="port_tube_upper">
+          <pose>0 0.118 0.026 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.024</radius>
+              <length>0.30</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.12 1</ambient>
+            <diffuse>0.1 0.1 0.12 1</diffuse>
+          </material>
+        </visual>
+        <visual name="port_tube_lower">
+          <pose>0 0.118 -0.026 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.024</radius>
+              <length>0.30</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.12 1</ambient>
+            <diffuse>0.1 0.1 0.12 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Dual Stacked Carbon Fiber Tubes (Starboard Side: -Y) -->
+        <visual name="stbd_tube_upper">
+          <pose>0 -0.118 0.026 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.024</radius>
+              <length>0.30</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.12 1</ambient>
+            <diffuse>0.1 0.1 0.12 1</diffuse>
+          </material>
+        </visual>
+        <visual name="stbd_tube_lower">
+          <pose>0 -0.118 -0.026 0 1.5708 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.024</radius>
+              <length>0.30</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.12 1</ambient>
+            <diffuse>0.1 0.1 0.12 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Front Aerodynamic Yellow Visor (+X = 0.20) -->
+        <visual name="front_yellow_visor">
+          <pose>0.21 0 0.054 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.095 0.124 0.008</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.05 1</ambient>
+            <diffuse>0.95 0.82 0.05 1</diffuse>
+          </material>
+        </visual>
+        <visual name="front_yellow_lip">
+          <pose>0.21 0 -0.054 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.095 0.124 0.008</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.05 1</ambient>
+            <diffuse>0.95 0.82 0.05 1</diffuse>
+          </material>
+        </visual>
+        <visual name="front_duct_tube">
+          <pose>0.18 0 0 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.108</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Rear Aerodynamic Yellow Visor (-X = -0.20) -->
+        <visual name="rear_yellow_visor">
+          <pose>-0.21 0 0.054 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.095 0.124 0.008</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.05 1</ambient>
+            <diffuse>0.95 0.82 0.05 1</diffuse>
+          </material>
+        </visual>
+        <visual name="rear_yellow_lip">
+          <pose>-0.21 0 -0.054 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.095 0.124 0.008</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.82 0.05 1</ambient>
+            <diffuse>0.95 0.82 0.05 1</diffuse>
+          </material>
+        </visual>
+        <visual name="rear_duct_tube">
+          <pose>-0.18 0 0 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.108</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- 4x Horizontal 45° Corner Thrusters -->
+        <visual name="thruster_fl">
+          <pose>0.14 0.11 0 0 1.5708 0.7854</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+        <visual name="thruster_fr">
+          <pose>0.14 -0.11 0 0 1.5708 -0.7854</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+        <visual name="thruster_rl">
+          <pose>-0.14 0.11 0 0 1.5708 2.3562</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+        <visual name="thruster_rr">
+          <pose>-0.14 -0.11 0 0 1.5708 -2.3562</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.038</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.08 0.08 0.1 1</ambient>
+            <diffuse>0.08 0.08 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

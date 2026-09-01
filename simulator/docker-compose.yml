@@ -1,0 +1,27 @@
+services:
+  underwater-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: auv-digitaltwin-sim:latest
+    container_name: auv_gazebo_sim
+    network_mode: "host"
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./workspace:/ros2_ws/src
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "9090:9090"
+    command: ["bash", "-c", "python3 /ros2_ws/auv_subsea_publisher.py & ros2 launch rosbridge_server rosbridge_websocket_launch.xml"]
+    restart: unless-stopped
