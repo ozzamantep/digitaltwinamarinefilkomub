@@ -26,6 +26,11 @@ export default function CameraController({ controlsRef }) {
   const currentFpvPos = useRef(new THREE.Vector3(-11, 1.2, 2));
   const currentFpvLook = useRef(new THREE.Vector3(-10, 1.2, 2));
 
+  // TPP Third-Person Perspective (Strict Rear Follow - NO ORBIT)
+  const currentTppPos = useRef(new THREE.Vector3(-13, 1.8, 2));
+  const currentTppLook = useRef(new THREE.Vector3(-7, 1.2, 2));
+  const initializedTpp = useRef(false);
+
   // Initialize or re-center Chase Camera directly behind the moving vehicle
   const resetChaseCamera = (pos, hRad) => {
     if (!controlsRef.current) return;
@@ -124,7 +129,59 @@ export default function CameraController({ controlsRef }) {
     }
 
     // =========================================================================
-    // 3. CHASE ORBIT MODE (Follows AUV + full 360° Gamepad / Mouse Orbit & Zoom)
+    // 3. TPP THIRD-PERSON PERSPECTIVE (Locked Rear View - Strictly NO ORBIT)
+    // =========================================================================
+    if (cameraViewMode === 'tpp') {
+      if (controls) {
+        controls.enabled = false; // Disable orbit mouse/touch drag completely
+      }
+      initializedChase.current = false;
+
+      const cosH = Math.cos(hRad);
+      const sinH = Math.sin(hRad);
+      const store = useVehicleStore.getState();
+      const euler = store.euler || { pitch: 0, roll: 0, yaw: 0 };
+      const pitchRad = ((euler.pitch || 0) * Math.PI) / 180;
+
+      // 1.95m directly behind the stern along current heading, 0.58m elevated
+      const chaseDistance = 1.95;
+      const chaseHeight = 0.58;
+
+      const targetCamPos = new THREE.Vector3(
+        pos.x - cosH * chaseDistance,
+        pos.y + chaseHeight - Math.sin(pitchRad) * 0.4,
+        pos.z - sinH * chaseDistance
+      );
+
+      // Look target: 3.5m ahead of the ship in the forward heading direction
+      const lookDistance = 3.5;
+      const targetLook = new THREE.Vector3(
+        pos.x + cosH * lookDistance,
+        pos.y + 0.12 + Math.sin(pitchRad) * 0.8,
+        pos.z + sinH * lookDistance
+      );
+
+      // Snap on first activation to prevent camera gliding from across the pool
+      if (modeChanged || triggerChanged || !initializedTpp.current) {
+        currentTppPos.current.copy(targetCamPos);
+        currentTppLook.current.copy(targetLook);
+        initializedTpp.current = true;
+      } else {
+        const lerpFactor = Math.min(1, 10.0 * delta);
+        currentTppPos.current.lerp(targetCamPos, lerpFactor);
+        currentTppLook.current.lerp(targetLook, lerpFactor);
+      }
+
+      camera.position.copy(currentTppPos.current);
+      camera.lookAt(currentTppLook.current);
+      return;
+    }
+
+    // Reset TPP initialized state when outside TPP mode
+    initializedTpp.current = false;
+
+    // =========================================================================
+    // 4. CHASE ORBIT MODE (Follows AUV + full 360° Gamepad / Mouse Orbit & Zoom)
     // =========================================================================
     if (cameraViewMode === 'chase') {
       if (!controls) return;

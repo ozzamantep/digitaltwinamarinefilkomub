@@ -29,6 +29,8 @@ class MockRosConnection {
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
+    this.lastFlareHitTime = 0;
+    this.avoidInspectStartTime = null;
   }
 
   start() {
@@ -48,6 +50,8 @@ class MockRosConnection {
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
+    this.lastFlareHitTime = 0;
+    this.avoidInspectStartTime = null;
     auvMotionController.reset();
     sysIdEngine.reset();
 
@@ -313,161 +317,133 @@ class MockRosConnection {
 
       const rawWaypoints = [];
 
-      // 1. TARGET 1: ORANGE FLARE ZONE
-      if (flareStrategies.orange_flare === 'TABRAK') {
-        rawWaypoints.push({
-          id: 'orange_flare',
-          title: '💥 Ram Orange Flare',
-          x: orangeX,
-          z: orangeZ,
-          targetDepth: 0.85,
-          speed: 1.20,
-          threshold: 0.85,
-          hitFlare: 'orange',
-        });
-      } else {
-        const evadeSide = orangeZ >= 0 ? -1.5 : 1.5;
-        rawWaypoints.push({
-          id: 'orange_bypass',
-          title: '🛡️ Bypass Orange Flare',
-          x: orangeX + 0.6,
-          z: orangeZ + evadeSide,
-          targetDepth: 0.85,
-          speed: 1.15,
-          threshold: 0.90,
-        });
-      }
+      // Helper function to build waypoint based on flare strategy (TABRAK vs MENGHINDAR)
+      // MENGHINDAR: "disamperin doang tapi ga di tabrak ampe jatuh"
+      const addFlareWaypoint = (key, color, label, flX, flZ, ramOffsetX, ramOffsetZ, approachOffsetX, approachOffsetZ) => {
+        const strategy = flareStrategies[key] || 'TABRAK';
+        const isTabrak = strategy === 'TABRAK';
 
-      // 2. TARGET 2: BLUE FLARE ZONE
-      if (flareStrategies.blue_flare === 'TABRAK') {
-        rawWaypoints.push({
-          id: 'blue_flare',
-          title: '💥 Ram Blue Flare',
-          x: blueX,
-          z: blueZ,
-          targetDepth: 0.85,
-          speed: 1.20,
-          threshold: 0.85,
-          hitFlare: 'blue',
-        });
-      } else {
-        const evadeSide = blueZ >= 0 ? -1.5 : 1.5;
-        rawWaypoints.push({
-          id: 'blue_bypass',
-          title: '🛡️ Bypass Blue Flare',
-          x: blueX + 0.6,
-          z: blueZ + evadeSide,
-          targetDepth: 0.85,
-          speed: 1.15,
-          threshold: 0.90,
-        });
-      }
+        if (isTabrak) {
+          rawWaypoints.push({
+            id: key,
+            title: `💥 Ram ${label}`,
+            strategy: 'TABRAK',
+            x: flX + ramOffsetX,
+            z: flZ + ramOffsetZ,
+            targetDepth: 0.85,
+            speed: 1.40,
+            threshold: 0.45,
+            hitFlare: color,
+            flareX: flX,
+            flareZ: flZ,
+          });
+        } else {
+          // MENGHINDAR: Samperin doang sampai jarak dekat (~0.95m), inspeksi visual kamera, TIDAK DITABRAK!
+          rawWaypoints.push({
+            id: key,
+            title: `🛡️ Samperin & Hindari ${label} (Inspeksi Visual)`,
+            strategy: 'MENGHINDAR',
+            x: flX + approachOffsetX,
+            z: flZ + approachOffsetZ,
+            targetDepth: 0.85,
+            speed: 1.05,
+            threshold: 0.40,
+            hitFlare: null, // STRICTLY NULL - DO NOT KNOCK DOWN!
+            isAvoidInspect: true,
+            inspectColor: color,
+            flareX: flX,
+            flareZ: flZ,
+          });
+        }
+      };
 
-      // 3. TARGET 3: RED FLARE ZONE
-      if (flareStrategies.red_flare === 'TABRAK') {
-        rawWaypoints.push({
-          id: 'red_flare',
-          title: '💥 Ram Red Flare',
-          x: redX,
-          z: redZ,
-          targetDepth: 0.85,
-          speed: 1.20,
-          threshold: 0.85,
-          hitFlare: 'red',
-        });
-      } else {
-        const evadeSide = redZ >= 0 ? -1.5 : 1.5;
-        rawWaypoints.push({
-          id: 'red_bypass',
-          title: '🛡️ Bypass Red Flare',
-          x: redX + 0.6,
-          z: redZ + evadeSide,
-          targetDepth: 0.85,
-          speed: 1.15,
-          threshold: 0.90,
-        });
-      }
+      // 1. TARGET 1: FLARE OREN
+      addFlareWaypoint('orange_flare', 'orange', 'Orange Flare', orangeX, orangeZ, 0.65, 0.0, -0.95, 0.0);
 
-      // 4. TARGET 4: YELLOW FLARE ZONE
-      if (flareStrategies.yellow_flare === 'TABRAK') {
-        rawWaypoints.push({
-          id: 'yellow_flare',
-          title: '💥 Ram Yellow Flare',
-          x: yellowX,
-          z: yellowZ,
-          targetDepth: 0.85,
-          speed: 1.20,
-          threshold: 0.85,
-          hitFlare: 'yellow',
-        });
-      } else {
-        const evadeSide = yellowZ >= 0 ? -1.5 : 1.5;
-        rawWaypoints.push({
-          id: 'yellow_bypass',
-          title: '🛡️ Bypass Yellow Flare',
-          x: yellowX + 0.6,
-          z: yellowZ + evadeSide,
-          targetDepth: 0.85,
-          speed: 1.15,
-          threshold: 0.90,
-        });
-      }
+      // 2. TARGET 2: FLARE BIRU
+      addFlareWaypoint('blue_flare', 'blue', 'Blue Flare', blueX, blueZ, 0.85, 0.0, -0.95, 0.0);
 
-      // 5. TARGET 5: GATE APPROACH & RUNWAY ALIGNMENT
+      // 3. TARGET 3: FLARE MERAH
+      addFlareWaypoint('red_flare', 'red', 'Red Flare', redX, redZ, 0.65, 0.70, -0.85, -0.45);
+
+      // 4. TARGET 4: FLARE KUNING
+      addFlareWaypoint('yellow_flare', 'yellow', 'Yellow Flare', yellowX, yellowZ, 0.60, 0.0, 0.0, 0.95);
+
+      // =======================================================================
+      // 5. TARGET 5: ABISTU LEWAT GATE
+      // =======================================================================
+      // 5A. Centerline entry from Yellow Flare (Pulls vehicle to Z = 0 safely before gate)
       rawWaypoints.push({
-        id: 'gate_align',
-        title: '🎯 Align with Gate Runway',
-        x: gateX - 1.6,
+        id: 'gate_pre_runway',
+        title: '🎯 Enter Gate Centerline Runway',
+        x: 1.2,
         z: gateZ,
         targetDepth: 0.85,
-        speed: 1.05,
+        speed: 1.30,
         threshold: 0.85,
         gateAlign: true,
       });
 
-      // 6. TARGET 6: FAST STRAIGHT GATE TRANSIT
+      // 5B. Gate Approach Runway Alignment
       rawWaypoints.push({
-        id: 'gate_pass',
-        title: '🚪 Straight Gate Transit',
-        x: gateX + 2.5,
+        id: 'gate_align',
+        title: '🎯 Align with Gate Runway',
+        x: gateX - 1.5,
         z: gateZ,
         targetDepth: 0.85,
         speed: 1.25,
-        threshold: 1.0,
+        threshold: 0.70,
+        gateAlign: true,
+      });
+
+      // 5C. Straight Gate Transit (Plows straight through to gateX + 2.8m)
+      rawWaypoints.push({
+        id: 'gate_pass',
+        title: '🚪 Straight Gate Transit',
+        x: gateX + 2.8,
+        z: gateZ,
+        targetDepth: 0.85,
+        speed: 1.45,
+        threshold: 0.85,
         gateTransit: true,
         gateTargetZ: gateZ,
       });
 
-      // 7. TARGET 7: APPROACH TARGET DRUM
+      // =======================================================================
+      // 6. TARGET 6: JATUHKAN BOLA KE DALAM EMBER
+      // =======================================================================
+      // 6A. Approach Target Drum
       rawWaypoints.push({
         id: 'drum_search',
         title: '🎯 Approach Target Drum',
         x: drumX - 0.4,
         z: drumZ,
         targetDepth: 0.95,
-        speed: 0.90,
+        speed: 1.10,
         threshold: 0.70,
       });
 
-      // 8. TARGET 8: DIRECT PAYLOAD DROP
+      // 6B. Direct Payload Drop into Drum
       rawWaypoints.push({
         id: 'drum_drop',
         title: '🔴 Release Ball into Drum',
         x: drumX,
         z: drumZ,
         targetDepth: 0.88,
-        speed: 0.10,
-        threshold: 0.50,
+        speed: 0.20,
+        threshold: 0.45,
       });
 
-      // 9. TARGET 9: MISSION COMPLETE & SURFACE
+      // =======================================================================
+      // 7. TARGET 7: MISSION COMPLETE & SURFACE
+      // =======================================================================
       rawWaypoints.push({
         id: 'mission_complete',
         title: '🏆 MISSION COMPLETE! Surfacing',
         x: drumX + 1.2,
-        z: 0.0,
+        z: drumZ,
         targetDepth: 0.15,
-        speed: 0.35,
+        speed: 0.45,
         threshold: 0.80,
       });
 
@@ -482,9 +458,24 @@ class MockRosConnection {
       let cmdSurge = currentWp.speed;
       let cmdYaw = 0;
 
-      // 1. Direct Flare Knockdown (Strict Proximity Only)
-      if (currentWp.hitFlare && distToWp < 0.65) {
-        store.knockdownFlare(currentWp.hitFlare);
+      // 1. Direct Physical Flare Contact & Knockdown (Requires actual physical hull impact)
+      // STRICT RULE: Only knock down if the strategy for this flare is explicitly 'TABRAK'!
+      if (currentWp.hitFlare && !flaresFallen[currentWp.hitFlare]) {
+        const flKey = `${currentWp.hitFlare}_flare`;
+        const isTabrak = (flareStrategies[flKey] || 'TABRAK') === 'TABRAK';
+
+        if (isTabrak) {
+          const flX = currentWp.flareX ?? currentWp.x;
+          const flZ = currentWp.flareZ ?? currentWp.z;
+          const contactDist = Math.sqrt((flX - this.simX) ** 2 + (flZ - this.simZ) ** 2);
+
+          // Physical collision when hull bumper actually touches the flare post (<= 0.52m)
+          if (contactDist <= 0.52) {
+            store.knockdownFlare(currentWp.hitFlare);
+            this.lastFlareHitTime = t;
+            console.log(`[MockROS] 💥 BULLSEYE DIRECT HIT! Rammed ${currentWp.hitFlare} flare squarely!`);
+          }
+        }
       }
 
       // 2. Drum Approach Pitch Tilt & Instant Ball Drop
@@ -502,8 +493,8 @@ class MockRosConnection {
             store.dropBallIntoDrum(drumX, drumZ);
           }
 
-          // Quick 0.6s release, then immediately surface!
-          if (t - this.drumWaitTime > 0.6) {
+          // Hold hover for 2.2s while ball drops with wave distortion, then surface!
+          if (t - this.drumWaitTime > 2.2) {
             this.missionStage++;
           }
         }
@@ -511,8 +502,35 @@ class MockRosConnection {
 
       // 3. Fast Deterministic Waypoint Advancement
       let canAdvance = distToWp < currentWp.threshold;
-      if (currentWp.hitFlare && flaresFallen[currentWp.hitFlare]) {
-        canAdvance = true;
+      if (currentWp.hitFlare) {
+        const flX = currentWp.flareX ?? currentWp.x;
+        const flZ = currentWp.flareZ ?? currentWp.z;
+        const distToFlare = Math.sqrt((this.simX - flX) ** 2 + (this.simZ - flZ) ** 2);
+        const hasHitDwell = this.lastFlareHitTime && (t - this.lastFlareHitTime > 0.60);
+        canAdvance = (flaresFallen[currentWp.hitFlare] && (distToFlare < 0.85 || hasHitDwell)) || distToWp < currentWp.threshold;
+      } else if (currentWp.isAvoidInspect) {
+        // MENGHINDAR: Samperin doang sampai jarak dekat (~0.95m - 1.15m), inspeksi visual 1.2 detik, lalu lanjut tanpa jatuh!
+        const flX = currentWp.flareX ?? currentWp.x;
+        const flZ = currentWp.flareZ ?? currentWp.z;
+        const distToFlare = Math.sqrt((this.simX - flX) ** 2 + (this.simZ - flZ) ** 2);
+        const isCloseEnough = distToWp < currentWp.threshold || distToFlare <= 1.15;
+
+        if (isCloseEnough) {
+          if (!this.avoidInspectStartTime) {
+            this.avoidInspectStartTime = t;
+            console.log(`[MockROS] 🛡️ Disamperin! Inspeksi visual aman untuk ${currentWp.inspectColor} flare...`);
+          }
+          const inspectElapsed = t - this.avoidInspectStartTime;
+          if (inspectElapsed >= 1.2) {
+            canAdvance = true;
+            this.avoidInspectStartTime = null;
+            console.log(`[MockROS] 🛡️ Inspeksi selesai untuk ${currentWp.inspectColor} flare. Melanjutkan tanpa menabrak!`);
+          } else {
+            canAdvance = false;
+          }
+        } else {
+          canAdvance = false;
+        }
       }
 
       if (
@@ -528,14 +546,63 @@ class MockRosConnection {
       const cmdHeave = Math.max(-0.65, Math.min(0.65, depthErr * 2.0));
 
       // 5. Yaw Heading Steering (Fast Pure Pursuit with Local Obstacle Guard)
-      if (currentWp.gateTransit) {
+      if (currentWp.gateTransit || currentWp.gateAlign) {
         const tgtZ = currentWp.gateTargetZ ?? gateZ;
-        const desiredGateYaw = Math.atan2((tgtZ - this.simZ) * 2.5, 2.0);
+        const desiredGateYaw = Math.atan2((tgtZ - this.simZ) * 2.8, 2.0);
         let trackErr = desiredGateYaw - this.simHeading;
         while (trackErr > Math.PI) trackErr -= Math.PI * 2;
         while (trackErr < -Math.PI) trackErr += Math.PI * 2;
         cmdYaw = Math.max(-0.85, Math.min(0.85, trackErr * 3.5));
         cmdSurge = currentWp.speed;
+      } else if (currentWp.hitFlare) {
+        // PINPOINT INTERCEPT GUIDANCE DIRECTLY INTO TARGET FLARE POLE (TABRAK)
+        const flX = currentWp.flareX ?? currentWp.x;
+        const flZ = currentWp.flareZ ?? currentWp.z;
+
+        // Prior to knockdown, aim straight at the pole center; once knocked down, punch through
+        const toAimX = (!flaresFallen[currentWp.hitFlare]) ? (flX - this.simX) : (currentWp.x - this.simX);
+        const toAimZ = (!flaresFallen[currentWp.hitFlare]) ? (flZ - this.simZ) : (currentWp.z - this.simZ);
+        
+        const targetHeading = Math.atan2(toAimZ, toAimX);
+        let headingErr = targetHeading - this.simHeading;
+        while (headingErr > Math.PI) headingErr -= Math.PI * 2;
+        while (headingErr < -Math.PI) headingErr += Math.PI * 2;
+
+        cmdYaw = Math.max(-1.15, Math.min(1.15, headingErr * 3.8));
+
+        // Precision speed regulation
+        const absErr = Math.abs(headingErr);
+        if (absErr > 0.45) {
+          cmdSurge = 0.20; // Pivot in-place towards target
+        } else if (absErr > 0.20) {
+          cmdSurge = currentWp.speed * 0.55;
+        } else {
+          cmdSurge = currentWp.speed; // Pointed straight at target: FULL SPEED RAMMING!
+        }
+      } else if (currentWp.isAvoidInspect) {
+        // SAMPERIN DOANG (MENGHINDAR): Moncong kamera hadap lurus ke tiang, dekati sampai jarak inspeksi aman, lalu hover!
+        const flX = currentWp.flareX ?? currentWp.x;
+        const flZ = currentWp.flareZ ?? currentWp.z;
+        const toAimX = flX - this.simX;
+        const toAimZ = flZ - this.simZ;
+        const distToFlare = Math.sqrt(toAimX * toAimX + toAimZ * toAimZ);
+
+        const targetHeading = Math.atan2(toAimZ, toAimX);
+        let headingErr = targetHeading - this.simHeading;
+        while (headingErr > Math.PI) headingErr -= Math.PI * 2;
+        while (headingErr < -Math.PI) headingErr += Math.PI * 2;
+
+        cmdYaw = Math.max(-1.15, Math.min(1.15, headingErr * 3.8));
+
+        if (this.avoidInspectStartTime) {
+          // Sedang hover inspeksi: tahan posisi, jangan maju lagi agar tidak menabrak tiang!
+          cmdSurge = 0.05;
+        } else if (distToFlare < 1.4) {
+          // Mendekati jarak inspeksi: perlambat laju secara halus
+          cmdSurge = 0.25;
+        } else {
+          cmdSurge = currentWp.speed;
+        }
       } else {
         let toWpX = currentWp.x - this.simX;
         let toWpZ = currentWp.z - this.simZ;
@@ -558,19 +625,21 @@ class MockRosConnection {
         for (const fl of allFlares) {
           const isFallen = flaresFallen[fl.color];
           const isCurrentRamTarget = currentWp.hitFlare === fl.color;
+          const isCurrentInspectTarget = currentWp.isAvoidInspect && currentWp.inspectColor === fl.color;
           const isMarkedMenghindar = flareStrategies[fl.key] === 'MENGHINDAR';
 
-          if (!isFallen && !isCurrentRamTarget && isMarkedMenghindar) {
+          // If flare is standing and we are NOT currently ramming or inspecting it, avoid it safely!
+          if (!isFallen && !isCurrentRamTarget && !isCurrentInspectTarget) {
             const dx = this.simX - fl.x;
             const dz = this.simZ - fl.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
-            const AVOID_RADIUS = 1.2;
+            const AVOID_RADIUS = isMarkedMenghindar ? 1.5 : 1.2;
 
             if (dist < AVOID_RADIUS && dist > 0.001) {
-              const force = ((AVOID_RADIUS - dist) / AVOID_RADIUS) * 2.0;
+              const force = ((AVOID_RADIUS - dist) / AVOID_RADIUS) * 2.8;
               const sideSign = fl.z >= 0 ? -1 : 1;
               repX += (dx / dist) * force;
-              repZ += ((dz / dist) + ((-dz / dist) * sideSign * 0.8)) * force;
+              repZ += ((dz / dist) + ((-dz / dist) * sideSign * 1.2)) * force;
             }
           }
         }
@@ -589,8 +658,8 @@ class MockRosConnection {
         cmdSurge = currentWp.speed * alignmentFactor;
       }
 
-      // Active Gate Post Guard in FINAL mode
-      if (this.simX >= gateX - 2.0 && this.simX <= gateX + 1.2) {
+      // Active Gate Post Guard in FINAL mode (only when not actively aligned or in transit)
+      if (!currentWp.gateTransit && !currentWp.gateAlign && this.simX >= gateX - 2.0 && this.simX <= gateX + 1.2) {
         const lateralOffset = this.simZ - gateZ;
         if (lateralOffset < -0.25) {
           cmdYaw += Math.min(0.45, (-0.25 - lateralOffset) * 2.5);

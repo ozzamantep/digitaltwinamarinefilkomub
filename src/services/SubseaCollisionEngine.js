@@ -219,8 +219,13 @@ class SubseaCollisionEngine {
 
           isCollided = true;
           hitObstacle = obstacleItem.id;
-          recoilX = nx * 0.25;
-          recoilZ = nz * 0.25;
+          if (obstacleItem.id.startsWith('gate_')) {
+            recoilX = 0; // Don't block forward gate passage
+            recoilZ = nz * 0.35; // Nudge laterally away from post
+          } else {
+            recoilX = nx * 0.25;
+            recoilZ = nz * 0.25;
+          }
         }
       } else if (obstacleItem.type === 'box') {
         const inX = correctedX + this.subRadius > obstacleItem.minX && correctedX - this.subRadius < obstacleItem.maxX;

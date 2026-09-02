@@ -204,11 +204,12 @@ export default function VehicleScene() {
           }}
         >
           <button
-            id="btn-cam-fpv"
-            onClick={() => setCameraViewMode('fpv')}
+            id="btn-cam-tpp"
+            onClick={() => setCameraViewMode('tpp')}
+            title="Kamera TPP (Third-Person Perspective): Terkunci presisi tepat di belakang kapal dan selalu menghadap ke depan tanpa rotasi orbit bebas"
             style={{
-              background: cameraViewMode === 'fpv' ? 'var(--accent-cyan)' : 'transparent',
-              color: cameraViewMode === 'fpv' ? '#000' : 'var(--text-secondary)',
+              background: cameraViewMode === 'tpp' ? 'var(--accent-cyan)' : 'transparent',
+              color: cameraViewMode === 'tpp' ? '#000' : 'var(--text-secondary)',
               border: 'none',
               borderRadius: '4px',
               padding: '4px 10px',
@@ -221,7 +222,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🎥 FPV (Depan Kapal)
+            🎯 TPP (Belakang)
           </button>
           <button
             id="btn-cam-chase"
@@ -245,7 +246,27 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🚁 Chase (Orbit Kapal)
+            🚁 Chase (Orbit)
+          </button>
+          <button
+            id="btn-cam-fpv"
+            onClick={() => setCameraViewMode('fpv')}
+            style={{
+              background: cameraViewMode === 'fpv' ? 'var(--accent-cyan)' : 'transparent',
+              color: cameraViewMode === 'fpv' ? '#000' : 'var(--text-secondary)',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            🎥 FPV (Depan)
           </button>
           <button
             id="btn-cam-orbit"

@@ -102,7 +102,9 @@ const useVehicleStore = create((set, get) => ({
     gripperState: 'OPEN',
     payloadState: {
       ...s.payloadState,
+      loaded: false,
       grasped: false,
+      dropped: true,
       inDrum: true,
       retrievalActive: false,
       x,
@@ -251,14 +253,14 @@ const useVehicleStore = create((set, get) => ({
     errors: [],
   },
 
-  cameraViewMode: 'orbit', // 'fpv' | 'chase' | 'orbit'
+  cameraViewMode: 'tpp', // 'tpp' | 'chase' | 'fpv' | 'orbit'
   cameraResetTrigger: 0,
   triggerCameraReset: () => set((s) => ({ cameraResetTrigger: s.cameraResetTrigger + 1 })),
   gamepadCameraOrbit: { deltaAzimuth: 0, deltaElevation: 0 },
   setGamepadCameraOrbit: (deltaAzimuth, deltaElevation) => set({ gamepadCameraOrbit: { deltaAzimuth, deltaElevation } }),
 
   cycleCameraViewMode: (direction = 1) => {
-    const modes = ['fpv', 'chase', 'orbit'];
+    const modes = ['tpp', 'chase', 'fpv', 'orbit'];
     const current = get().cameraViewMode;
     const currentIdx = modes.indexOf(current);
     const nextIdx = (currentIdx + direction + modes.length) % modes.length;
