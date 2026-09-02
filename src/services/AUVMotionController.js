@@ -196,21 +196,39 @@ class AUVMotionController {
     }
 
     // 3. Compute thruster allocation commands (percentage: -100 to +100)
-    //    Using the 6-thruster vectored configuration
+    //    Using improved 6-thruster vectored allocation with stability priority
     const tSurge = (targetSurge / 1.3) * 65;
     const tSway = (targetSway / 1.1) * 65;
     const tYaw = (targetYawRate / 1.5) * 45;
     const tHeave = (targetHeave / 0.6) * 60;
     const tPitch = this.dynamicPitch * 4.0;
 
-    const cmd1 = Math.max(-100, Math.min(100, tSurge + tYaw - tSway));
-    const cmd2 = Math.max(-100, Math.min(100, tSurge - tYaw + tSway));
-    const cmd3 = Math.max(-100, Math.min(100, tSurge + tYaw + tSway));
-    const cmd4 = Math.max(-100, Math.min(100, tSurge - tYaw - tSway));
+    // 3. Compute thruster allocation commands (percentage: -100 to +100)
+    //    6-thruster vectored allocation with proportional yaw/sway steering
+    let cmd1 = tSurge + tYaw - tSway;
+    let cmd2 = tSurge - tYaw + tSway;
+    let cmd3 = tSurge + tYaw + tSway;
+    let cmd4 = tSurge - tYaw - tSway;
+    
+    // Desaturation logic: if commands saturate unevenly, re-normalize to maintain forward priority
+    const maxCmd = Math.max(Math.abs(cmd1), Math.abs(cmd2), Math.abs(cmd3), Math.abs(cmd4));
+    if (maxCmd > 100) {
+      const scale = 100 / maxCmd;
+      cmd1 *= scale;
+      cmd2 *= scale;
+      cmd3 *= scale;
+      cmd4 *= scale;
+    }
+    
+    const thrusterCmd1 = Math.max(-100, Math.min(100, cmd1));
+    const thrusterCmd2 = Math.max(-100, Math.min(100, cmd2));
+    const thrusterCmd3 = Math.max(-100, Math.min(100, cmd3));
+    const thrusterCmd4 = Math.max(-100, Math.min(100, cmd4));
+    
     const cmd5 = Math.max(-100, Math.min(100, tHeave + tPitch));
     const cmd6 = Math.max(-100, Math.min(100, tHeave - tPitch));
 
-    const thrusterCommands = [cmd1, cmd2, cmd3, cmd4, cmd5, cmd6];
+    const thrusterCommands = [thrusterCmd1, thrusterCmd2, thrusterCmd3, thrusterCmd4, cmd5, cmd6];
 
     // 4. Pass through Thruster Dynamics Model (ramp-up, deadband, sag, coupling)
     const thrusterResult = thrusterDynamics.update(thrusterCommands, batteryVoltage, dt);

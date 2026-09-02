@@ -110,6 +110,13 @@ export default function ControlPanel() {
   const resetObstacles = useVehicleStore((s) => s.resetObstacles);
   const applyPresetLayout = useVehicleStore((s) => s.applyPresetLayout);
   const flaresFallen = useVehicleStore((s) => s.flaresFallen || { red: false, blue: false, yellow: false, orange: false });
+  const flareStrategies = useVehicleStore((s) => s.flareStrategies || {
+    orange_flare: 'MENGHINDAR',
+    blue_flare: 'TABRAK',
+    red_flare: 'TABRAK',
+    yellow_flare: 'TABRAK',
+  });
+  const setFlareStrategy = useVehicleStore((s) => s.setFlareStrategy);
   const payloadState = useVehicleStore((s) => s.payloadState);
   const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
   const connectionStatus = useVehicleStore((s) => s.connectionStatus);
@@ -1032,32 +1039,97 @@ export default function ControlPanel() {
             </button>
           </div>
 
-          {/* Dynamic Coordinate Sliders */}
-          <div style={{ maxHeight: '140px', overflowY: 'auto', paddingRight: '4px' }}>
+          {/* Dynamic Coordinate Sliders & Flare Action Mode (TABRAK vs MENGHINDAR) */}
+          <div style={{ maxHeight: '175px', overflowY: 'auto', paddingRight: '4px' }}>
             {[
-              { key: 'orange_flare', label: '🟠 Orange Flare', color: '#ea580c' },
-              { key: 'blue_flare', label: '🔵 Blue Flare', color: '#0284c7' },
-              { key: 'red_flare', label: '🔴 Red Flare', color: '#ef4444' },
-              { key: 'yellow_flare', label: '🟡 Yellow Flare', color: '#eab308' },
-              { key: 'gate', label: '🚪 Gate Center', color: '#f59e0b' },
-              { key: 'drum_red_tgt', label: '🪣 Target Red Drum', color: '#ef4444' },
-            ].map(({ key, label, color }) => {
+              { key: 'orange_flare', label: '🟠 Orange Flare', color: '#ea580c', isFlare: true },
+              { key: 'blue_flare', label: '🔵 Blue Flare', color: '#0284c7', isFlare: true },
+              { key: 'red_flare', label: '🔴 Red Flare', color: '#ef4444', isFlare: true },
+              { key: 'yellow_flare', label: '🟡 Yellow Flare', color: '#eab308', isFlare: true },
+              { key: 'gate', label: '🚪 Gate Center', color: '#f59e0b', isFlare: false },
+              { key: 'drum_red_tgt', label: '🪣 Target Red Drum', color: '#ef4444', isFlare: false },
+            ].map(({ key, label, color, isFlare }) => {
               const obs = obstacles[key] || { x: 0, z: 0 };
+              const currentStrategy = flareStrategies[key] || (key === 'orange_flare' ? 'MENGHINDAR' : 'TABRAK');
+
               return (
                 <div
                   key={key}
                   style={{
                     background: 'rgba(0,0,0,0.3)',
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    marginBottom: '4px',
+                    padding: '5px 7px',
+                    borderRadius: '5px',
+                    marginBottom: '5px',
+                    border: '1px solid rgba(255,255,255,0.06)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color, fontWeight: 'bold', fontSize: '0.58rem' }}>
-                    <span>{label}</span>
-                    <span>X: {obs.x?.toFixed(1)}m | Z: {obs.z?.toFixed(1)}m</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                    <span style={{ color, fontWeight: 'bold', fontSize: '0.58rem' }}>{label}</span>
+                    <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+                      X: {obs.x?.toFixed(1)}m | Z: {obs.z?.toFixed(1)}m
+                    </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '2px' }}>
+
+                  {/* TABRAK / MENGHINDAR Strategy Selector Buttons for Flares */}
+                  {isFlare && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '5px' }}>
+                      <button
+                        onClick={() => setFlareStrategy(key, 'TABRAK')}
+                        title={`Pilih mode TABRAK untuk ${label} (AUV akan menabrak hingga roboh)`}
+                        style={{
+                          padding: '3px 4px',
+                          fontSize: '0.54rem',
+                          fontWeight: 'bold',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '3px',
+                          transition: 'all 0.2s ease',
+                          border: currentStrategy === 'TABRAK'
+                            ? '1px solid #ef4444'
+                            : '1px solid rgba(255,255,255,0.12)',
+                          background: currentStrategy === 'TABRAK'
+                            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(185, 28, 28, 0.7))'
+                            : 'rgba(255,255,255,0.03)',
+                          color: currentStrategy === 'TABRAK' ? '#fecaca' : 'var(--text-tertiary)',
+                          boxShadow: currentStrategy === 'TABRAK' ? '0 0 10px rgba(239, 68, 68, 0.45)' : 'none',
+                        }}
+                      >
+                        💥 TABRAK
+                      </button>
+                      <button
+                        onClick={() => setFlareStrategy(key, 'MENGHINDAR')}
+                        title={`Pilih mode MENGHINDAR untuk ${label} (AUV akan inspeksi / melewati aman tanpa kontak)`}
+                        style={{
+                          padding: '3px 4px',
+                          fontSize: '0.54rem',
+                          fontWeight: 'bold',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '3px',
+                          transition: 'all 0.2s ease',
+                          border: currentStrategy === 'MENGHINDAR'
+                            ? '1px solid #00f0ff'
+                            : '1px solid rgba(255,255,255,0.12)',
+                          background: currentStrategy === 'MENGHINDAR'
+                            ? 'linear-gradient(135deg, rgba(0, 240, 255, 0.35), rgba(2, 132, 199, 0.6))'
+                            : 'rgba(255,255,255,0.03)',
+                          color: currentStrategy === 'MENGHINDAR' ? '#a5f3fc' : 'var(--text-tertiary)',
+                          boxShadow: currentStrategy === 'MENGHINDAR' ? '0 0 10px rgba(0, 240, 255, 0.45)' : 'none',
+                        }}
+                      >
+                        🛡️ MENGHINDAR
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Coordinate Sliders */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)' }}>X:</span>
                       <input

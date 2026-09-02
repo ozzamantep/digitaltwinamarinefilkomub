@@ -18,10 +18,16 @@ export default function PoolEnvironment() {
     drum_blue: { x: 10.5, z: 4.5 },
   };
 
-  // Refs for smooth toppling / falling animation
+  const orangeFlareGroupRef = useRef();
   const blueFlareGroupRef = useRef();
   const redFlareGroupRef = useRef();
   const yellowFlareGroupRef = useRef();
+  const flareStrategies = useVehicleStore((s) => s.flareStrategies || {
+    orange_flare: 'MENGHINDAR',
+    blue_flare: 'TABRAK',
+    red_flare: 'TABRAK',
+    yellow_flare: 'TABRAK',
+  });
 
   // Load pool floor tile texture
   const poolTexture = useLoader(TextureLoader, '/assets/pool/pool_bottom_tiles_highres.png');
@@ -38,6 +44,17 @@ export default function PoolEnvironment() {
   useFrame((state, delta) => {
     if (waterRef.current) {
       waterRef.current.material.opacity = 0.18 + Math.sin(state.clock.elapsedTime * 1.5) * 0.02;
+    }
+
+    // Orange Flare Topple Animation (Rotates 90 deg down if struck in TABRAK mode)
+    if (orangeFlareGroupRef.current) {
+      const targetRot = flaresFallen.orange ? Math.PI / 2.05 : 0;
+      orangeFlareGroupRef.current.rotation.z = THREE.MathUtils.damp(
+        orangeFlareGroupRef.current.rotation.z,
+        targetRot,
+        6.0,
+        delta
+      );
     }
 
     // Blue Flare Topple Animation (Rotates 90 deg down to pool floor)
@@ -200,7 +217,7 @@ export default function PoolEnvironment() {
         <meshBasicMaterial color="#0f172a" />
       </mesh>
 
-      {/* 4. Crystal-Clear Transparent Water Surface (Zero Ghosting / Zero Double-Image Refraction) */}
+      {/* 4. Crystal-Clear Transparent Water Surface */}
       <mesh
         ref={waterRef}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -222,21 +239,46 @@ export default function PoolEnvironment() {
       {/* 5. OFFICIAL SAUVC 2026 COMPETITION MISSION OBJECTS        */}
       {/* ========================================================= */}
 
-      {/* === ZONE 1: ORANGE FLARE === */}
+      {/* === 1. ORANGE FLARE === */}
       <group position={[obstacles.orange_flare?.x ?? -6.0, 0, obstacles.orange_flare?.z ?? 2.0]}>
-        <mesh position={[0, 0.75, 0]} castShadow>
-          <cylinderGeometry args={[0.07, 0.07, 1.5, 16]} />
-          <meshStandardMaterial color="#ea580c" emissive="#c2410c" emissiveIntensity={0.35} roughness={0.25} />
-        </mesh>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
           <meshStandardMaterial color="#1e293b" />
         </mesh>
+        <group ref={orangeFlareGroupRef} position={[0, 0.1, 0]}>
+          <mesh position={[0, 0.7, 0]} castShadow>
+            <cylinderGeometry args={[0.07, 0.07, 1.4, 16]} />
+            <meshStandardMaterial color="#ea580c" emissive="#c2410c" emissiveIntensity={0.4} roughness={0.25} />
+          </mesh>
+        </group>
+
+        {/* 3D Visual Strategy Halo (TABRAK vs MENGHINDAR) */}
+        {flareStrategies.orange_flare === 'TABRAK' ? (
+          <group position={[0, 0.05, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.32, 0.38, 24]} />
+              <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} transparent opacity={0.8} />
+            </mesh>
+            <mesh position={[0, 1.6, 0]}>
+              <sphereGeometry args={[0.05, 12, 12]} />
+              <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.2} />
+            </mesh>
+          </group>
+        ) : (
+          <group position={[0, 0.75, 0]}>
+            <mesh>
+              <cylinderGeometry args={[0.38, 0.38, 1.5, 24, 1, true]} />
+              <meshBasicMaterial color="#00f0ff" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
+              <ringGeometry args={[0.36, 0.40, 24]} />
+              <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} transparent opacity={0.7} />
+            </mesh>
+          </group>
+        )}
       </group>
 
-      {/* === ZONE 2: FLARES (Blue, Red, Yellow) THAT FALL WHEN STRUCK === */}
-
-      {/* Blue Flare */}
+      {/* === 2. BLUE FLARE === */}
       <group position={[obstacles.blue_flare?.x ?? -2.0, 0, obstacles.blue_flare?.z ?? 2.2]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
@@ -245,12 +287,37 @@ export default function PoolEnvironment() {
         <group ref={blueFlareGroupRef} position={[0, 0.1, 0]}>
           <mesh position={[0, 0.7, 0]} castShadow>
             <cylinderGeometry args={[0.07, 0.07, 1.4, 16]} />
-            <meshStandardMaterial color="#0284c7" emissive="#0369a1" emissiveIntensity={0.35} roughness={0.25} />
+            <meshStandardMaterial color="#0284c7" emissive="#0369a1" emissiveIntensity={0.4} roughness={0.25} />
           </mesh>
         </group>
+
+        {/* 3D Visual Strategy Halo */}
+        {flareStrategies.blue_flare === 'TABRAK' ? (
+          <group position={[0, 0.05, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.32, 0.38, 24]} />
+              <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} transparent opacity={0.8} />
+            </mesh>
+            <mesh position={[0, 1.6, 0]}>
+              <sphereGeometry args={[0.05, 12, 12]} />
+              <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.2} />
+            </mesh>
+          </group>
+        ) : (
+          <group position={[0, 0.75, 0]}>
+            <mesh>
+              <cylinderGeometry args={[0.38, 0.38, 1.5, 24, 1, true]} />
+              <meshBasicMaterial color="#00f0ff" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
+              <ringGeometry args={[0.36, 0.40, 24]} />
+              <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} transparent opacity={0.7} />
+            </mesh>
+          </group>
+        )}
       </group>
 
-      {/* Red Flare */}
+      {/* === 3. RED FLARE === */}
       <group position={[obstacles.red_flare?.x ?? 0.5, 0, obstacles.red_flare?.z ?? 4.0]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
@@ -259,12 +326,37 @@ export default function PoolEnvironment() {
         <group ref={redFlareGroupRef} position={[0, 0.1, 0]}>
           <mesh position={[0, 0.7, 0]} castShadow>
             <cylinderGeometry args={[0.07, 0.07, 1.4, 16]} />
-            <meshStandardMaterial color="#dc2626" emissive="#b91c1c" emissiveIntensity={0.35} roughness={0.25} />
+            <meshStandardMaterial color="#dc2626" emissive="#b91c1c" emissiveIntensity={0.4} roughness={0.25} />
           </mesh>
         </group>
+
+        {/* 3D Visual Strategy Halo */}
+        {flareStrategies.red_flare === 'TABRAK' ? (
+          <group position={[0, 0.05, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.32, 0.38, 24]} />
+              <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} transparent opacity={0.8} />
+            </mesh>
+            <mesh position={[0, 1.6, 0]}>
+              <sphereGeometry args={[0.05, 12, 12]} />
+              <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.2} />
+            </mesh>
+          </group>
+        ) : (
+          <group position={[0, 0.75, 0]}>
+            <mesh>
+              <cylinderGeometry args={[0.38, 0.38, 1.5, 24, 1, true]} />
+              <meshBasicMaterial color="#00f0ff" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
+              <ringGeometry args={[0.36, 0.40, 24]} />
+              <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} transparent opacity={0.7} />
+            </mesh>
+          </group>
+        )}
       </group>
 
-      {/* Yellow Flare */}
+      {/* === 4. YELLOW FLARE === */}
       <group position={[obstacles.yellow_flare?.x ?? -0.5, 0, obstacles.yellow_flare?.z ?? -4.5]}>
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.26, 0.26, 0.1, 16]} />
@@ -273,9 +365,34 @@ export default function PoolEnvironment() {
         <group ref={yellowFlareGroupRef} position={[0, 0.1, 0]}>
           <mesh position={[0, 0.7, 0]} castShadow>
             <cylinderGeometry args={[0.07, 0.07, 1.4, 16]} />
-            <meshStandardMaterial color="#eab308" emissive="#ca8a04" emissiveIntensity={0.35} roughness={0.25} />
+            <meshStandardMaterial color="#eab308" emissive="#ca8a04" emissiveIntensity={0.4} roughness={0.25} />
           </mesh>
         </group>
+
+        {/* 3D Visual Strategy Halo */}
+        {flareStrategies.yellow_flare === 'TABRAK' ? (
+          <group position={[0, 0.05, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.32, 0.38, 24]} />
+              <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} transparent opacity={0.8} />
+            </mesh>
+            <mesh position={[0, 1.6, 0]}>
+              <sphereGeometry args={[0.05, 12, 12]} />
+              <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={1.2} />
+            </mesh>
+          </group>
+        ) : (
+          <group position={[0, 0.75, 0]}>
+            <mesh>
+              <cylinderGeometry args={[0.38, 0.38, 1.5, 24, 1, true]} />
+              <meshBasicMaterial color="#00f0ff" transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.7, 0]}>
+              <ringGeometry args={[0.36, 0.40, 24]} />
+              <meshBasicMaterial color="#00f0ff" side={THREE.DoubleSide} transparent opacity={0.7} />
+            </mesh>
+          </group>
+        )}
       </group>
 
       {/* === GATE with Red & Green Markers === */}

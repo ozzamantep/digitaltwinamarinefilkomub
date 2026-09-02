@@ -12,19 +12,21 @@ from std_msgs.msg import String
 from mavros_msgs.msg import PositionTarget
 from sauvc26_code.pid import PID
 
-ROTATE_SPEED = 1.0 # rad/s
+ROTATE_SPEED = 1.2 # rad/s - Increased from 1.0 for faster U-turns in competition
 FORWARD_SPEED_SCAN = 0.7 # m/s
 FORWARD_SPEED_GATE = 0.7 # m/s
 FORWARD_DURATION_GATE = 7.0 # s
 
-KP_DEPTH = 0.5
-KI_DEPTH = 0.1
-KD_DEPTH = 0.2
+# Optimized PID tuning for SAUVC 2026 competition - Fast & Stable
+KP_DEPTH = 0.6  # Increased from 0.5 for faster response
+KI_DEPTH = 0.12  # Increased from 0.1
+KD_DEPTH = 0.25  # Increased from 0.2
 TARGET_DEPTH = -0.3
 
-KP_GATE = 0.5
-KI_GATE = 0.1
-KD_GATE = 0.2
+# Aggressive tracking PID for gate - qualification mode
+KP_GATE = 0.7  # Increased from 0.5 for faster tracking
+KI_GATE = 0.15  # Increased from 0.1
+KD_GATE = 0.3  # Increased from 0.2
 
 class GuidedMove(Node):
     def __init__(self):
@@ -122,9 +124,11 @@ class GuidedMove(Node):
                 point.z = detection.get('z', 0.0)
                 
                 # Route to appropriate tracking variable
-                if class_name == 'gate':
+                # Handle both 'Gate' and 'gate' for case-insensitive matching
+                if class_name.lower() == 'gate':
                     self.gate_coord = point
                     self.last_gate_time = current_time
+                    self.get_logger().info(f'Gate detected: x={point.x:.3f}, z={point.z:.3f}')
                     
         except json.JSONDecodeError as e:
             self.get_logger().warn(f'Failed to parse YOLO JSON: {e}')
@@ -223,8 +227,10 @@ class GuidedMove(Node):
             gate_x = self.gate_coord.x
         else:
             if self.last_gate_coord is None:
+                self.get_logger().debug('No gate coord available')
                 return
             gate_x = self.last_gate_coord.x
+            self.get_logger().debug(f'Using last gate coord: x={gate_x:.3f}')
             
         # Deadzone to prevent oscillation near center
         deadzone = 0.05
@@ -237,7 +243,7 @@ class GuidedMove(Node):
         
         # Compute desired yaw rate from PID
         desired_yaw_rate = self.gate_pid.compute(gate_x)
-        desired_yaw_rate = max(-0.2, min(0.2, desired_yaw_rate))  # Limit yaw rate
+        desired_yaw_rate = max(-0.3, min(0.3, desired_yaw_rate))  # Increased limit from 0.2 to 0.3 for faster tracking
         
         # Apply rate limiting for smooth acceleration
         yaw_rate_diff = desired_yaw_rate - self.previous_yaw_rate
@@ -250,6 +256,7 @@ class GuidedMove(Node):
         
         self.cmd.yaw_rate = yaw_rate
         self.previous_yaw_rate = yaw_rate
+        self.get_logger().debug(f'Gate track: gate_x={gate_x:.3f}, yaw_rate={yaw_rate:.3f}, deadzone={self.deadzone_gate}')
 
     def send_cmd(self):
         current_time = self.get_clock().now()
@@ -317,24 +324,38 @@ class GuidedMove(Node):
                     self.last_gate_coord = self.gate_coord
 
                 time_since_last_gate_coord = (current_time - self.last_gate_time).nanoseconds / 1e9
-                if time_since_last_gate_coord > 3.0:
-                    self.get_logger().warn('Lost target for 3s')
+                if time_since_last_gate_coord > 4.0:  # Increased timeout from 3s to 4s
+                    self.get_logger().warn(f'Lost target for {time_since_last_gate_coord:.1f}s, returning to scan')
                     self.last_gate_coord = None
                     self.change_state(2)
                     return
                 
                 if self.close_to_gate:
                     if self.deadzone_gate:
-                        self.get_logger().info('Close to gate and centered, moving forward')
+                        self.get_logger().info('🎯 Close to gate and centered, moving forward through gate')
                         self.forward_to_gate = True
                         self.change_state(2)
+                    else:
+                        # Safety check: if still not centered, wait for deadzone before proceeding
+                        self.track_gate()  # Continue fine-tuning heading
+                        self.get_logger().debug(f'Gate centering: x_offset={self.gate_coord.x if self.gate_coord else self.last_gate_coord.x:.3f}')
                 else:
-                    self.forward(FORWARD_SPEED_SCAN)
-                    if self.gate_coord is not None and self.gate_coord.z > 0.15:
-                        self.close_to_gate = True
-                        self.reset()
-
-                self.track_gate()
+                    # Track and move toward gate simultaneously
+                    self.track_gate()
+                    self.forward(FORWARD_SPEED_GATE)  # Use consistent forward speed
+                    
+                    # Check if close enough - HIGHER threshold to prevent collision
+                    if self.gate_coord is not None:
+                        gate_distance = self.gate_coord.z
+                        self.get_logger().debug(f'Gate distance: {gate_distance:.3f}, x_offset: {self.gate_coord.x:.3f}')
+                        if gate_distance > 0.20:  # INCREASED: 0.20 instead of 0.12 (more standoff distance)
+                            self.close_to_gate = True
+                            self.reset()  # Stop movement to lock in heading
+                    elif self.last_gate_coord is not None:
+                        # Use last known position if current not available
+                        if self.last_gate_coord.z > 0.20:
+                            self.close_to_gate = True
+                            self.reset()
                     
             case 5: # surface
                 self.surface()

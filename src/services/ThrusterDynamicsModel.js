@@ -150,23 +150,34 @@ class ThrusterDynamicsModel {
    * Compute cross-coupling efficiency loss
    * Adjacent thrusters disturb each other's flow → reduced efficiency
    * 
+   * IMPROVED: Only apply coupling loss when thrusters have DIFFERENT commands
+   * For symmetric forward/straight motion, paired thrusters get NO coupling loss
+   * This ensures stable forward motion with all thrusters equally responsive
+   * 
    * @param {number} thrusterIdx - Index of the thruster (0-5)
    * @param {number[]} allCommands - All 6 thruster commands
-   * @returns {number} Efficiency factor (0.85 to 1.0)
+   * @returns {number} Efficiency factor (0.90 to 1.0)
    */
   computeCrossCouplingFactor(thrusterIdx, allCommands) {
     let efficiencyLoss = 0;
 
     for (const [a, b, factor] of this.couplingPairs) {
-      if (a === thrusterIdx && Math.abs(allCommands[b]) > 10) {
-        efficiencyLoss += factor * (Math.abs(allCommands[b]) / 100);
+      // Only apply coupling loss if paired thrusters have DIFFERENT commands
+      // If commands are within 5%, treat as symmetric motion (no coupling loss)
+      const cmdA = Math.abs(allCommands[a] || 0);
+      const cmdB = Math.abs(allCommands[b] || 0);
+      const commandDifference = Math.abs(cmdA - cmdB);
+      
+      if (a === thrusterIdx && commandDifference > 5) {  // Tolerance: 5% difference
+        efficiencyLoss += factor * (cmdB / 100) * (commandDifference / 100);
       }
-      if (b === thrusterIdx && Math.abs(allCommands[a]) > 10) {
-        efficiencyLoss += factor * (Math.abs(allCommands[a]) / 100);
+      if (b === thrusterIdx && commandDifference > 5) {
+        efficiencyLoss += factor * (cmdA / 100) * (commandDifference / 100);
       }
     }
 
-    return Math.max(0.85, 1.0 - efficiencyLoss);
+    // Allow higher efficiency (up to 1.0) for symmetric configurations
+    return Math.max(0.90, Math.min(1.0, 1.0 - efficiencyLoss));
   }
 
   /**

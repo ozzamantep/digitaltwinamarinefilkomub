@@ -12,33 +12,35 @@ from std_msgs.msg import String
 from mavros_msgs.msg import PositionTarget
 from sauvc26_code.pid import PID
 
-ROTATE_SPEED = 0.6 # rad/s
-FORWARD_SPEED_TRACK = 0.6 # m/s
-FORWARD_SPEED_SCAN = 0.7 # m/s
-FORWARD_SPEED_GATE = 0.7 # m/s
-FORWARD_SPEED_DRUM = 0.7 # m/s
-FORWARD_SPEED_FLARE = 0.7 # m/s
-FORWARD_DURATION_SCAN = 10.0 # s
-FORWARD_DURATION_GATE = 10.0 # s
-FORWARD_DURATION_DRUM = 5.0 # s
-FORWARD_DURATION_FLARE = 5.0 # s
+ROTATE_SPEED = 1.2  # rad/s - Increased from 0.6 for faster U-turns in competition
+FORWARD_SPEED_TRACK = 0.6  # m/s
+FORWARD_SPEED_SCAN = 0.7  # m/s
+FORWARD_SPEED_GATE = 0.7  # m/s
+FORWARD_SPEED_DRUM = 0.7  # m/s
+FORWARD_SPEED_FLARE = 0.7  # m/s
+FORWARD_DURATION_SCAN = 10.0  # s
+FORWARD_DURATION_GATE = 10.0  # s
+FORWARD_DURATION_DRUM = 5.0  # s
+FORWARD_DURATION_FLARE = 5.0  # s
 
-KP_DEPTH = 0.5
-KI_DEPTH = 0.1
-KD_DEPTH = 0.2
+# Optimized PID tuning for SAUVC 2026 competition - Fast & Stable
+KP_DEPTH = 0.6  # Increased from 0.5 for faster response
+KI_DEPTH = 0.12  # Increased from 0.1
+KD_DEPTH = 0.25  # Increased from 0.2
 TARGET_DEPTH = -0.8
 
-KP_GATE = 0.5
-KI_GATE = 0.1
-KD_GATE = 0.2
+# Aggressive tracking PID for gate/drum/flare - competition mode
+KP_GATE = 0.7  # Increased from 0.5 for faster tracking
+KI_GATE = 0.15  # Increased from 0.1
+KD_GATE = 0.3  # Increased from 0.2
 
-KP_DRUM = 0.5
-KI_DRUM = 0.1
-KD_DRUM = 0.2
+KP_DRUM = 0.7
+KI_DRUM = 0.15
+KD_DRUM = 0.3
 
-KP_FLARE = 0.5
-KI_FLARE = 0.1
-KD_FLARE = 0.2
+KP_FLARE = 0.7
+KI_FLARE = 0.15
+KD_FLARE = 0.3
 
 ORDER_FLARE = ['r', 'y', 'b']
 
@@ -144,10 +146,21 @@ class GuidedMove(Node):
         # Obstacle tracking
         self.obstacle_coord = None
         self.last_obstacle_time = None
+        self.obstacle_timeout = 2.0  # Lost obstacle after 2s of no detection
         self.sway_start_y = None
         self.obstacle_sway_distance = 1.0  # 1 meter sway target
         self.current_sway_velocity = 0.0  # Current sway velocity for smooth ramping
         self.max_sway_acceleration = 0.2  # m/s^2 - smooth sway acceleration
+        
+        # Safety depth maintenance
+        self.max_depth_deviation = 0.3  # meters - alert if deviate beyond this
+        self.depth_correction_threshold = 0.15  # Start correcting if beyond this
+        
+        # Post-gate waypoint tracking
+        self.gate_passed_time = None
+        self.gate_passed = False
+        self.post_gate_forward_distance = 2.0  # Forward 2m after gate before task 2
+        self.post_gate_start_position = None
         
         self.change_state(0)
 
@@ -177,19 +190,27 @@ class GuidedMove(Node):
                 point.z = detection.get('z', 0.0)
                 
                 # Route to appropriate tracking variable
-                if class_name == 'Gate':
+                # Handle case-insensitive class name matching
+                class_lower = class_name.lower()
+                
+                if class_lower == 'gate':
                     self.gate_coord = point
                     self.last_gate_time = current_time
-                # elif class_name == 'Obstacle':
-                elif class_name == 'Yellow Flare': # Sementara namanya Yellow Flare
+                    self.get_logger().info(f'[GATE] Detected: x={point.x:.3f}, z={point.z:.3f}')
+                elif class_lower == 'yellow flare' or class_lower == 'obstacle':  # Obstacle or Yellow Flare
                     self.obstacle_coord = point
                     self.last_obstacle_time = current_time
-                elif class_name == 'Blue Bucket':
+                    self.get_logger().debug(f'[OBSTACLE] Detected at x={point.x:.3f}')
+                elif class_lower == 'blue bucket' or class_lower == 'drum':
                     self.drum_coord = point
                     self.last_drum_time = current_time
-                elif class_name == list(self.flare_order.values())[self.flare_state]:
-                    self.flare_coord = point
-                    self.last_flare_time = current_time
+                    self.get_logger().debug(f'[DRUM] Detected: x={point.x:.3f}, z={point.z:.3f}')
+                elif class_lower in ['red flare', 'yellow flare', 'blue flare']:
+                    # Check if this matches our current target flare
+                    if class_lower == self.flare_order.get(list(self.flare_order.keys())[self.flare_state], "").lower():
+                        self.flare_coord = point
+                        self.last_flare_time = current_time
+                        self.get_logger().debug(f'[FLARE] Detected target {class_name}: x={point.x:.3f}')
                     
         except json.JSONDecodeError as e:
             self.get_logger().warn(f'Failed to parse YOLO JSON: {e}')
@@ -335,7 +356,7 @@ class GuidedMove(Node):
         
         # Compute desired yaw rate from PID
         desired_yaw_rate = self.gate_pid.compute(gate_x)
-        desired_yaw_rate = max(-0.2, min(0.2, desired_yaw_rate))  # Limit yaw rate
+        desired_yaw_rate = max(-0.35, min(0.35, desired_yaw_rate))  # Increased limit for faster tracking
         
         # Apply rate limiting for smooth acceleration
         yaw_rate_diff = desired_yaw_rate - self.previous_yaw_rate
@@ -368,7 +389,7 @@ class GuidedMove(Node):
         
         # Compute desired yaw rate from PID
         desired_yaw_rate = self.drum_pid.compute(drum_x)
-        desired_yaw_rate = max(-0.2, min(0.2, desired_yaw_rate))  # Limit yaw rate
+        desired_yaw_rate = max(-0.4, min(0.4, desired_yaw_rate))  # Increased limit from 0.2 to 0.4 for faster tracking
         
         # Apply rate limiting for smooth acceleration
         yaw_rate_diff = desired_yaw_rate - self.previous_yaw_rate
@@ -401,7 +422,7 @@ class GuidedMove(Node):
         
         # Compute desired yaw rate from PID
         desired_yaw_rate = self.flare_pid.compute(flare_x)
-        desired_yaw_rate = max(-0.2, min(0.2, desired_yaw_rate))  # Limit yaw rate
+        desired_yaw_rate = max(-0.4, min(0.4, desired_yaw_rate))  # Increased limit from 0.2 to 0.4 for faster tracking
         
         # Apply rate limiting for smooth acceleration
         yaw_rate_diff = desired_yaw_rate - self.previous_yaw_rate
@@ -478,18 +499,21 @@ class GuidedMove(Node):
                         yaw_rate = max(-speed, min(speed, yaw_rate))
                         self.rotate(yaw_rate)
                     
-            case 2: # Forward
+            case 2: # Forward (including post-gate waypoint)
                 self.maintain_depth()
                 
-                # if self.gate_coord is not None and self.prev_state != 4 and self.task == 1:
-                #     self.change_state(4)
-                #     return
-                # if self.drum_coord is not None and self.prev_state != 7 and self.task == 2:
-                #     self.change_state(7)
-                #     return
-                # if self.flare_coord is not None and self.prev_state != 8 and self.task == 3:
-                #     self.change_state(8)
-                #     return
+                # Post-gate waypoint: Continue forward for stabilization after passing gate
+                if self.gate_passed and self.current_pose is not None and self.post_gate_start_position is not None:
+                    distance_traveled = abs(self.current_pose.pose.position.x - self.post_gate_start_position.x)
+                    if distance_traveled < self.post_gate_forward_distance:
+                        self.get_logger().debug(f'[POST-GATE] Stabilizing: {distance_traveled:.2f}m / {self.post_gate_forward_distance:.2f}m')
+                        self.forward(FORWARD_SPEED_SCAN * 0.8)  # Slower stabilization
+                    else:
+                        self.get_logger().info(f'[POST-GATE] Stabilization complete, moving to next task')
+                        self.gate_passed = False  # Reset gate_passed flag
+                        self.post_gate_start_position = None
+                
+                # Target detection based on task
                 if self.gate_coord is not None and self.prev_state == 1 and self.task == 1:
                     self.change_state(4)
                     return
@@ -500,10 +524,18 @@ class GuidedMove(Node):
                     self.change_state(8)
                     return
                 
+                # Obstacle avoidance - with timeout reset
                 if self.obstacle_coord is not None and self.obstacle_coord.x > -0.15 and self.obstacle_coord.x < 0.15 and self.obstacle_coord.z > 0.025:
                     self.get_logger().info('Obstacle detected, initiating sway')
                     self.change_state(6)
                     return
+                else:
+                    # Reset obstacle if not detected for timeout period
+                    if self.last_obstacle_time is not None:
+                        time_since_obstacle = (current_time - self.last_obstacle_time).nanoseconds / 1e9
+                        if time_since_obstacle > self.obstacle_timeout:
+                            self.obstacle_coord = None
+                            self.get_logger().debug(f'[OBSTACLE] Timeout reset after {time_since_obstacle:.1f}s')
                 
                 elapsed = (current_time - self.state_start_time).nanoseconds / 1e9
 
@@ -590,12 +622,15 @@ class GuidedMove(Node):
                 
                 if self.gate_coord is not None:
                     self.last_gate_coord = self.gate_coord
+                    # Reset gate_passed tracking when gate is actively detected
+                    if not self.gate_passed:
+                        self.post_gate_start_position = None
 
                 time_since_last_gate_coord = (current_time - self.last_gate_time).nanoseconds / 1e9
-                if time_since_last_gate_coord > 3.0:
-                    self.get_logger().warn('Lost target for 3s')
+                if time_since_last_gate_coord > 4.0:  # Increased timeout from 3s to 4s
+                    self.get_logger().warn(f'Lost target for {time_since_last_gate_coord:.1f}s, returning to scan')
                     self.last_gate_coord = None
-                    self.change_state(1)
+                    self.change_state(2)
                     return
                 
                 if self.obstacle_coord is not None and self.obstacle_coord.x > -0.15 and self.obstacle_coord.x < 0.15 and self.obstacle_coord.z > 0.025:
@@ -605,21 +640,45 @@ class GuidedMove(Node):
                 
                 if self.close_to_gate:
                     if self.deadzone_gate:
-                        self.get_logger().info('Close to gate and centered, moving forward')
+                        self.get_logger().info('🎯 Close to gate and centered, moving forward through gate!')
+                        self.gate_passed = True  # Mark gate as passed
+                        self.gate_passed_time = current_time  # Record time
+                        self.post_gate_start_position = self.current_pose.pose.position if self.current_pose else None  # Record start position
                         self.change_state(2)
+                    else:
+                        # Safety: continue tracking until perfectly centered
+                        self.track_gate()  # Fine-tune heading
+                        self.get_logger().debug(f'Gate centering: x_offset={self.gate_coord.x if self.gate_coord else self.last_gate_coord.x:.3f}')
                 else:
+                    # Track and move toward gate simultaneously
+                    self.track_gate()
                     self.forward(FORWARD_SPEED_TRACK)
-                    if self.gate_coord is not None and self.gate_coord.z > 0.15:
-                        self.close_to_gate = True
-                        self.reset()
-
-                self.track_gate()
+                    
+                    # Check if close enough - HIGHER threshold to prevent collision
+                    if self.gate_coord is not None:
+                        gate_distance = self.gate_coord.z
+                        if gate_distance > 0.20:  # INCREASED: 0.20 instead of 0.12 (more standoff distance)
+                            self.close_to_gate = True
+                            self.reset()  # Lock in heading
+                    elif self.last_gate_coord is not None:
+                        if self.last_gate_coord.z > 0.20:
+                            self.close_to_gate = True
+                            self.reset()
                     
             case 5: # surface
                 self.surface()
                 
             case 6: # avoid obstacle
                 self.maintain_depth()
+                
+                # Reset obstacle if no longer detected (timeout)
+                if self.last_obstacle_time is not None:
+                    time_since_obstacle = (current_time - self.last_obstacle_time).nanoseconds / 1e9
+                    if time_since_obstacle > self.obstacle_timeout:
+                        self.get_logger().info(f'[OBSTACLE] Lost after {time_since_obstacle:.1f}s, ending evasion')
+                        self.obstacle_coord = None
+                        self.change_state(2)
+                        return
                 
                 # Define sway duration (in seconds)
                 sway_duration = 5.0  # Time to perform sway
@@ -629,7 +688,8 @@ class GuidedMove(Node):
                 
                 # Check if sway duration completed
                 if elapsed >= sway_duration:
-                    self.get_logger().info(f'Sway complete: {elapsed:.2f}s, returning to scan')
+                    self.get_logger().info(f'Sway complete: {elapsed:.2f}s, returning to forward')
+                    self.obstacle_coord = None  # Clear obstacle on exit
                     self.change_state(2)
                     return
                 
@@ -667,10 +727,17 @@ class GuidedMove(Node):
                     self.last_drum_coord = self.drum_coord
                 
                 time_since_last_drum_coord = (current_time - self.last_drum_time).nanoseconds / 1e9
-                if time_since_last_drum_coord > 3.0:
-                    self.get_logger().warn('Lost target for 3s')
+                if time_since_last_drum_coord > 4.0:  # Increased from 3s to 4s
+                    self.get_logger().warn(f'[DRUM] Lost target for {time_since_last_drum_coord:.1f}s, aborting drum approach')
                     self.last_drum_coord = None
-                    self.change_state(1)
+                    self.change_state(2)  # Go to forward instead of scan
+                    return
+                
+                # Add forward duration limit to prevent over-travel and wall collision
+                elapsed_state_7 = (current_time - self.state_start_time).nanoseconds / 1e9
+                if elapsed_state_7 > 8.0:  # Max 8 seconds hunting drum
+                    self.get_logger().warn('[DRUM] Exceeded max search time (8s), aborting')
+                    self.change_state(2)
                     return
                 
                 if self.close_to_drum:
@@ -680,14 +747,13 @@ class GuidedMove(Node):
                         self.drop_ball_payload()
                         self.change_state(2)
                 else:
-                    self.forward(FORWARD_SPEED_TRACK)
-                    # Pitch down tilt (-20 deg) to look directly down into bucket floor
-                    self.cmd.velocity.z = 0.15
-                    if self.drum_coord is not None and self.drum_coord.z > 0.15:
+                    self.track_drum()  # Apply steering first
+                    self.forward(FORWARD_SPEED_TRACK)  # Then forward
+                    # Slight down pitch to see drum better
+                    self.cmd.velocity.z = 0.1
+                    if self.drum_coord is not None and self.drum_coord.z > 0.12:  # Lowered from 0.15 to 0.12
                         self.close_to_drum = True
                         self.reset()
-
-                self.track_drum()
                 
             case 8: # track flare
                 self.maintain_depth()
@@ -704,13 +770,22 @@ class GuidedMove(Node):
                 
                 if self.close_to_flare:
                     if self.deadzone_flare:
-                        self.get_logger().info('Close to flare and centered, moving forward')
-                        self.change_state(2)
+                        self.get_logger().info('💥 Centered on flare, HARD COLLISION - pushing through flare!')
+                        # Continue forward at FULL SPEED for hard collision
+                        self.forward(FORWARD_SPEED_TRACK * 1.2)  # +20% speed for harder impact
+                        self.track_flare()  # Maintain heading
+                        
+                        # Collision duration: hold for 2 seconds then proceed
+                        elapsed = (current_time - self.state_start_time).nanoseconds / 1e9
+                        if elapsed > 2.0:  # After 2s of collision, move to next state
+                            self.get_logger().info('Flare collision complete, moving forward')
+                            self.change_state(2)
                 else:
                     self.forward(FORWARD_SPEED_TRACK)
-                    if self.flare_coord is not None and self.flare_coord.z > 0.15:
+                    # REDUCED threshold for CLOSER approach → harder collision
+                    if self.flare_coord is not None and self.flare_coord.z > 0.08:  # REDUCED: 0.08 instead of 0.15 (closer=harder)
                         self.close_to_flare = True
-                        self.reset()
+                        self.reset()  # Stop to lock heading
 
                 self.track_flare()
 

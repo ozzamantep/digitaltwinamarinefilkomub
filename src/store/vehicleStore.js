@@ -142,8 +142,25 @@ const useVehicleStore = create((set, get) => ({
     },
   })),
 
-  // Flares Status (Red, Blue, Yellow can be knocked down; Orange is inspected)
+  // Flares Status (Red, Blue, Yellow, Orange can be knocked down if TABRAK is selected)
   flaresFallen: { red: false, blue: false, yellow: false, orange: false },
+  
+  // Flare Navigation Strategy: 'TABRAK' (Ram/Knockdown) vs 'MENGHINDAR' (Avoid/Bypass)
+  flareStrategies: {
+    orange_flare: 'MENGHINDAR', // Default SAUVC standard: inspect and avoid
+    blue_flare: 'TABRAK',       // Default SAUVC standard: knockdown
+    red_flare: 'TABRAK',        // Default SAUVC standard: knockdown
+    yellow_flare: 'TABRAK',     // Default SAUVC standard: knockdown
+  },
+
+  setFlareStrategy: (flareKey, strategy) => set((s) => ({
+    flareStrategies: { ...s.flareStrategies, [flareKey]: strategy },
+    // If set to MENGHINDAR, unfall the flare if it was fallen
+    flaresFallen: strategy === 'MENGHINDAR' 
+      ? { ...s.flaresFallen, [flareKey.replace('_flare', '')]: false }
+      : s.flaresFallen,
+  })),
+
   knockdownFlare: (color) => set((s) => ({
     flaresFallen: { ...s.flaresFallen, [color]: true },
     obstacles: {

@@ -223,21 +223,53 @@ export default function BlueROV2Model({ onFrame }) {
       groupRef.current.quaternion.slerp(targetQuat, 0.18);
     }
 
-    // Dynamic Propeller Spins - strictly driven by active thruster efforts
+    // Dynamic Propeller Spins — speed-coupled realistic T200 thruster simulation
+    // Propeller RPM scales with BOTH thruster effort AND vehicle speed,
+    // so faster movement = faster propeller spin, matching the real-life twin.
     propRefs.forEach((ref, idx) => {
       if (ref.current) {
         if (armed) {
           const effort = thrusters[idx] || 0;
           if (Math.abs(effort) > 2) {
-            // Spin speed strictly proportional to actual thruster effort (-100% to +100%)
-            const rpm = (effort / 100) * 32.0 * delta;
-            
+            // Base spin from thruster effort command (-100% to +100%)
+            const baseRPM = (effort / 100) * 32.0;
+
+            // Speed-coupled boost: vehicle velocity amplifies propeller spin
+            // Horizontal thrusters (0-3) respond to linear/surge/sway speed
+            // Vertical thrusters (4-5) respond to heave speed
+            let speedBoost = 1.0;
+            if (idx < 4) {
+              // Horizontal thrusters: boost from linear velocity (surge + sway combined)
+              const linearSpeed = Math.abs(speed.linear || 0);
+              const surgeSpeed = Math.abs(speed.surge || 0);
+              const swaySpeed = Math.abs(speed.sway || 0);
+              const combinedSpeed = Math.max(linearSpeed, Math.sqrt(surgeSpeed * surgeSpeed + swaySpeed * swaySpeed));
+              // Scale: 0 m/s → 1.0x, 0.5 m/s → 1.5x, 1.0 m/s → 2.0x, 2.0 m/s → 3.0x
+              speedBoost = 1.0 + combinedSpeed * 1.0;
+            } else {
+              // Vertical thrusters: boost from heave (vertical) speed
+              const heaveSpeed = Math.abs(speed.heave || 0);
+              // Scale: 0 m/s → 1.0x, 0.5 m/s → 1.75x, 1.0 m/s → 2.5x
+              speedBoost = 1.0 + heaveSpeed * 1.5;
+            }
+
+            // Also factor in angular velocity for yaw-involved thrusters
+            const angularSpeed = Math.abs(speed.angular || 0);
+            if (idx < 4 && angularSpeed > 0.05) {
+              speedBoost += angularSpeed * 0.5;
+            }
+
+            // Cap the boost to prevent unrealistically fast spins
+            speedBoost = Math.min(speedBoost, 4.0);
+
+            const finalRPM = baseRPM * speedBoost * delta;
+
             if (idx >= 4) {
               // 4 & 5: Vertical thrusters in yellow cowls rotate around vertical Y-axis
-              ref.current.rotation.y += rpm;
+              ref.current.rotation.y += finalRPM;
             } else {
               // 0, 1, 2, 3: Horizontal corner thrusters rotate around local shaft Z-axis
-              ref.current.rotation.z += rpm;
+              ref.current.rotation.z += finalRPM;
             }
           }
         }

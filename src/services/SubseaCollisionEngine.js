@@ -68,6 +68,8 @@ class SubseaCollisionEngine {
   getDynamicObstacles() {
     const store = useVehicleStore.getState ? useVehicleStore.getState() : null;
     const obs = store?.obstacles;
+    const flaresFallen = store?.flaresFallen || {};
+    const flareStrategies = store?.flareStrategies || {};
     if (!obs) return DEFAULT_POOL_OBSTACLES;
 
     const orangeX = obs.orange_flare?.x ?? -6.0;
@@ -77,16 +79,7 @@ class SubseaCollisionEngine {
     const drumX = obs.drum_red_tgt?.x ?? 10.5;
     const drumZ = obs.drum_red_tgt?.z ?? 1.5;
 
-    return [
-      {
-        id: 'flare_orange',
-        type: 'cylinder',
-        x: orangeX,
-        z: orangeZ,
-        radius: 0.24,
-        minY: 0.0,
-        maxY: 1.65,
-      },
+    const list = [
       {
         id: 'gate_left_post',
         type: 'cylinder',
@@ -125,9 +118,37 @@ class SubseaCollisionEngine {
         maxY: 0.48,
       },
     ];
+
+    const flareKeys = [
+      { key: 'orange_flare', color: 'orange', x: orangeX, z: orangeZ },
+      { key: 'blue_flare',   color: 'blue',   x: obs.blue_flare?.x ?? -2.0,   z: obs.blue_flare?.z ?? 2.2 },
+      { key: 'red_flare',    color: 'red',    x: obs.red_flare?.x ?? 0.5,    z: obs.red_flare?.z ?? 4.0 },
+      { key: 'yellow_flare', color: 'yellow', x: obs.yellow_flare?.x ?? -0.5, z: obs.yellow_flare?.z ?? -4.5 },
+    ];
+
+    for (const fl of flareKeys) {
+      if (!flaresFallen[fl.color] && flareStrategies[fl.key] === 'MENGHINDAR') {
+        list.push({
+          id: `flare_${fl.color}`,
+          type: 'cylinder',
+          x: fl.x,
+          z: fl.z,
+          radius: 0.24,
+          minY: 0.0,
+          maxY: 1.65,
+        });
+      }
+    }
+
+    return list;
   }
 
   resolveCollision(posX, posZ, depth, velX = 0, velZ = 0) {
+    const store = useVehicleStore.getState ? useVehicleStore.getState() : null;
+    const obstacleDict = store?.obstacles;
+    const flaresFallen = store?.flaresFallen || {};
+    const flareStrategies = store?.flareStrategies || {};
+
     let correctedX = posX;
     let correctedZ = posZ;
     let correctedDepth = depth;
@@ -177,16 +198,16 @@ class SubseaCollisionEngine {
 
     // 3. DYNAMIC OBSTACLES RESOLUTION
     const activeObstacles = this.getDynamicObstacles();
-    for (const obs of activeObstacles) {
-      if (subY + this.subHeight * 0.5 < obs.minY || subY - this.subHeight * 0.5 > obs.maxY) {
+    for (const obstacleItem of activeObstacles) {
+      if (subY + this.subHeight * 0.5 < obstacleItem.minY || subY - this.subHeight * 0.5 > obstacleItem.maxY) {
         continue;
       }
 
-      if (obs.type === 'cylinder') {
-        const dx = correctedX - obs.x;
-        const dz = correctedZ - obs.z;
+      if (obstacleItem.type === 'cylinder') {
+        const dx = correctedX - obstacleItem.x;
+        const dz = correctedZ - obstacleItem.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
-        const minDist = obs.radius + this.subRadius;
+        const minDist = obstacleItem.radius + this.subRadius;
 
         if (dist < minDist && dist > 0.0001) {
           const overlap = minDist - dist;
@@ -197,23 +218,41 @@ class SubseaCollisionEngine {
           correctedZ += nz * overlap;
 
           isCollided = true;
-          hitObstacle = obs.id;
+          hitObstacle = obstacleItem.id;
           recoilX = nx * 0.25;
           recoilZ = nz * 0.25;
         }
-      } else if (obs.type === 'box') {
-        const inX = correctedX + this.subRadius > obs.minX && correctedX - this.subRadius < obs.maxX;
-        const inZ = correctedZ + this.subRadius > obs.minZ && correctedZ - this.subRadius < obs.maxZ;
-        const inY = subY + this.subHeight * 0.5 > obs.minY && subY - this.subHeight * 0.5 < obs.maxY;
+      } else if (obstacleItem.type === 'box') {
+        const inX = correctedX + this.subRadius > obstacleItem.minX && correctedX - this.subRadius < obstacleItem.maxX;
+        const inZ = correctedZ + this.subRadius > obstacleItem.minZ && correctedZ - this.subRadius < obstacleItem.maxZ;
+        const inY = subY + this.subHeight * 0.5 > obstacleItem.minY && subY - this.subHeight * 0.5 < obstacleItem.maxY;
 
         if (inX && inZ && inY) {
           // Push horizontally away from the crossbar
-          const midX = (obs.minX + obs.maxX) / 2;
+          const midX = (obstacleItem.minX + obstacleItem.maxX) / 2;
           const pushDir = correctedX < midX ? -1 : 1;
           correctedX += pushDir * 0.05;
           isCollided = true;
-          hitObstacle = obs.id;
+          hitObstacle = obstacleItem.id;
           recoilX = pushDir * 0.2;
+        }
+      }
+    }
+
+    // 4. Physical Flare Contact & Knockdown Check (ONLY for flares marked TABRAK)
+    if (obstacleDict) {
+      const flareColors = ['orange', 'blue', 'red', 'yellow'];
+      for (const color of flareColors) {
+        const flareKey = `${color}_flare`;
+        const isTabrak = flareStrategies[flareKey] === 'TABRAK';
+        const fObs = obstacleDict[flareKey];
+        if (fObs && !flaresFallen[color] && isTabrak) {
+          const dX = correctedX - fObs.x;
+          const dZ = correctedZ - fObs.z;
+          const dDist = Math.sqrt(dX * dX + dZ * dZ);
+          if (dDist < (0.28 + this.subRadius) && subY > 0.05 && subY < 1.65) {
+            store?.knockdownFlare(color);
+          }
         }
       }
     }

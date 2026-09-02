@@ -125,12 +125,12 @@ class MockRosConnection {
     let ctrl;
     if (!isArmed) {
       ctrl = auvMotionController.update(currentPose, input, flightMode, false, dt, store.battery.voltage || 16.0, t);
-    } else    if (flightMode === 'QUALIFIKASI') {
+    } else if (flightMode === 'QUALIFIKASI') {
       // =========================================================================
       // AUTONOMOUS QUALIFICATION STATE MACHINE (from qualification.py)
       // =========================================================================
       const obs = store.obstacles || { gate: { x: 4.0, z: 0.0 } };
-      const TARGET_DEPTH = 0.75; // Optimal depth (Y = 1.25m): directly through gate center
+      const TARGET_DEPTH = 0.85; // Optimal depth (Y = 1.15m): vertically centered in 1.5m gate opening
       const GATE_X = obs.gate?.x ?? 4.0;
       const GATE_Z = obs.gate?.z ?? 0.0;
 
@@ -141,9 +141,9 @@ class MockRosConnection {
 
       switch (this.qualState) {
         case 1: // State 1: Dive smoothly to target depth
-          statusText = 'State 1/5: Diving to Target Gate Depth 0.75m';
-          cmdHeave = Math.max(-0.4, Math.min(0.4, (TARGET_DEPTH - this.simDepth) * 2.0));
-          cmdSurge = 0.15; // Slow gentle forward drift while diving
+          statusText = 'State 1/5: Diving to Target Gate Depth 0.85m';
+          cmdHeave = Math.max(-0.45, Math.min(0.45, (TARGET_DEPTH - this.simDepth) * 2.2));
+          cmdSurge = 0.20; // Gentle forward glide while diving
           if (Math.abs(this.simDepth - TARGET_DEPTH) < 0.06) {
             this.qualPrevState = 1;
             this.qualState = 4;
@@ -151,19 +151,21 @@ class MockRosConnection {
           }
           break;
 
-        case 4: // State 4: Track Gate (YOLO Gate PID Tracking)
-          statusText = 'State 2/5: YOLO Gate PID Tracking & Center Align';
-          cmdHeave = Math.max(-0.35, Math.min(0.35, (TARGET_DEPTH - this.simDepth) * 2.0));
+        case 4: // State 4: Track Gate (YOLO Gate PID Vector Field Alignment)
+          statusText = 'State 2/5: YOLO Gate PID Tracking & Centerline Alignment';
+          cmdHeave = Math.max(-0.4, Math.min(0.4, (TARGET_DEPTH - this.simDepth) * 2.2));
           cmdSurge = 0.70;
 
-          // Target point is pre-gate window (GATE_X - 1.5, GATE_Z)
-          const targetHeading = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.5) - this.simX);
+          // Vector Field Pure Pursuit: Aim forward through gate centerline with zero singularity
+          const lookaheadX = Math.max(GATE_X + 1.2, this.simX + 2.2);
+          const targetHeading = Math.atan2((GATE_Z - this.simZ) * 1.8, lookaheadX - this.simX);
           let headingErr = targetHeading - this.simHeading;
           while (headingErr > Math.PI) headingErr -= Math.PI * 2;
           while (headingErr < -Math.PI) headingErr += Math.PI * 2;
-          cmdYaw = Math.max(-0.55, Math.min(0.55, headingErr * 2.2));
+          cmdYaw = Math.max(-0.65, Math.min(0.65, headingErr * 2.8));
 
-          if (this.simX >= GATE_X - 0.4) {
+          // When aligned in front of gate, transition to State 2 gate pass
+          if ((this.simX >= GATE_X - 1.2 && Math.abs(this.simZ - GATE_Z) < 0.35) || this.simX >= GATE_X - 0.2) {
             this.qualPrevState = 4;
             this.qualState = 2;
             this.qualStateStartTime = t;
@@ -171,34 +173,39 @@ class MockRosConnection {
           break;
 
         case 2: // State 2: Forward / Return through Gate
-          cmdHeave = Math.max(-0.35, Math.min(0.35, (TARGET_DEPTH - this.simDepth) * 2.0));
+          cmdHeave = Math.max(-0.4, Math.min(0.4, (TARGET_DEPTH - this.simDepth) * 2.2));
           const elapsed = t - this.qualStateStartTime;
 
           if (!this.qualReturnPass) {
             statusText = `State 3/5: Passing Forward Through Gate (${elapsed.toFixed(1)}s / 6.0s)`;
             cmdSurge = 0.75;
-            // Locked 0.0° heading through gate center window
-            let straightErr = 0.0 - this.simHeading;
+            
+            // Vector Field Pure Pursuit Line-Lock to GATE_Z
+            const desiredYaw = Math.atan2((GATE_Z - this.simZ) * 2.4, 2.0);
+            let straightErr = desiredYaw - this.simHeading;
             while (straightErr > Math.PI) straightErr -= Math.PI * 2;
             while (straightErr < -Math.PI) straightErr += Math.PI * 2;
-            const crossTrack = (GATE_Z - this.simZ) * 0.40;
-            cmdYaw = Math.max(-0.35, Math.min(0.35, (straightErr + crossTrack) * 2.0));
+            cmdYaw = Math.max(-0.65, Math.min(0.65, straightErr * 3.0));
 
-            if (elapsed >= 5.5 || this.simX >= GATE_X + 2.5) {
+            if (elapsed >= 5.5 || this.simX >= GATE_X + 2.8) {
               this.qualPrevState = 2;
               this.qualState = 3;
               this.qualStateStartTime = t;
               this.qualUTurnTargetYaw = Math.PI; // Exact 180° facing back
             }
           } else {
-            // Return pass: First pass back through gate to GATE_X - 2.5m before heading to start dock!
-            if (this.simX > GATE_X - 2.5) {
+            // Return pass: First pass back through gate to GATE_X - 2.8m before heading to start dock!
+            if (this.simX > GATE_X - 2.8) {
               statusText = `State 5/5: Gliding Back Through Gate (Z = ${GATE_Z.toFixed(1)}m)`;
               cmdSurge = 0.70;
-              let backStraightErr = Math.PI - Math.abs(this.simHeading);
-              let backErr = this.simHeading > 0 ? backStraightErr : -backStraightErr;
-              const backCrossTrack = (this.simZ - GATE_Z) * 0.40;
-              cmdYaw = Math.max(-0.4, Math.min(0.4, (backErr + backCrossTrack) * 2.0));
+              
+              // Return lookahead in -X direction towards gate center
+              const returnLookaheadX = Math.min(GATE_X - 2.8, this.simX - 2.0);
+              const returnDesiredYaw = Math.atan2((GATE_Z - this.simZ) * 1.8, returnLookaheadX - this.simX);
+              let returnErr = returnDesiredYaw - this.simHeading;
+              while (returnErr > Math.PI) returnErr -= Math.PI * 2;
+              while (returnErr < -Math.PI) returnErr += Math.PI * 2;
+              cmdYaw = Math.max(-0.65, Math.min(0.65, returnErr * 3.0));
             } else {
               statusText = `State 5/5: Returning to Start Zone (${elapsed.toFixed(1)}s / 8.0s)`;
               cmdSurge = 0.75;
@@ -206,7 +213,7 @@ class MockRosConnection {
               let retErr = returnHeading - this.simHeading;
               while (retErr > Math.PI) retErr -= Math.PI * 2;
               while (retErr < -Math.PI) retErr += Math.PI * 2;
-              cmdYaw = Math.max(-0.5, Math.min(0.5, retErr * 2.0));
+              cmdYaw = Math.max(-0.55, Math.min(0.55, retErr * 2.2));
 
               if (elapsed >= 8.0 || this.simX <= -10.0) {
                 this.qualPrevState = 2;
@@ -265,7 +272,7 @@ class MockRosConnection {
       );
     } else if (flightMode === 'FINAL') {
       // =========================================================================
-      // AUTONOMOUS SAUVC FINAL MISSION (Dynamic Pure-Pursuit from Reactive Obstacle Map)
+      // AUTONOMOUS SAUVC FINAL MISSION (High-Speed Direct Milestone Execution)
       // =========================================================================
       this.missionTime += dt;
 
@@ -291,134 +298,183 @@ class MockRosConnection {
       const drumX = obs.drum_red_tgt?.x ?? 10.5;
       const drumZ = obs.drum_red_tgt?.z ?? 1.5;
 
-      const waypoints = [
-        // 1. Approach Orange Flare (Safe distance 1.8m before obstacle)
-        {
-          id: 'orange_approach',
-          name: '1/12: 🚀 Approach Orange Flare',
-          x: orangeX - 1.8,
+      const flareStrategies = store.flareStrategies || {
+        orange_flare: 'MENGHINDAR',
+        blue_flare: 'TABRAK',
+        red_flare: 'TABRAK',
+        yellow_flare: 'TABRAK',
+      };
+      const flaresFallen = store.flaresFallen || {
+        red: false,
+        blue: false,
+        yellow: false,
+        orange: false,
+      };
+
+      const rawWaypoints = [];
+
+      // 1. TARGET 1: ORANGE FLARE ZONE
+      if (flareStrategies.orange_flare === 'TABRAK') {
+        rawWaypoints.push({
+          id: 'orange_flare',
+          title: '💥 Ram Orange Flare',
+          x: orangeX,
           z: orangeZ,
-          targetDepth: 0.8,
-          speed: 0.65,
-          threshold: 0.70,
-        },
-        // 2. Safe Stand-off Hover / Inspection (1.8s hover, ZERO collision)
-        {
-          id: 'orange_inspect',
-          name: '2/12: 🔍 Inspecting Orange Flare (Safe Stand-off: 1.8m)',
-          x: orangeX - 1.8,
-          z: orangeZ,
-          targetDepth: 0.8,
-          speed: 0.03,
-          threshold: 0.60,
-          inspectDuration: 1.8,
-        },
-        // 3. Smooth Starboard Bypass around Orange Flare
-        {
+          targetDepth: 0.85,
+          speed: 1.20,
+          threshold: 0.85,
+          hitFlare: 'orange',
+        });
+      } else {
+        const evadeSide = orangeZ >= 0 ? -1.5 : 1.5;
+        rawWaypoints.push({
           id: 'orange_bypass',
-          name: '3/12: ↪️ Smooth Bypass around Orange Flare',
-          x: orangeX + 1.5,
-          z: orangeZ - 1.4,
-          targetDepth: 0.8,
-          speed: 0.70,
-          threshold: 0.80,
-        },
-        // 4. Full-Body Ramming & Strike Blue Flare
-        {
+          title: '🛡️ Bypass Orange Flare',
+          x: orangeX + 0.6,
+          z: orangeZ + evadeSide,
+          targetDepth: 0.85,
+          speed: 1.15,
+          threshold: 0.90,
+        });
+      }
+
+      // 2. TARGET 2: BLUE FLARE ZONE
+      if (flareStrategies.blue_flare === 'TABRAK') {
+        rawWaypoints.push({
           id: 'blue_flare',
-          name: '4/12: 💥 Full-Body Ram Blue Flare (Sebadan-badannya)',
+          title: '💥 Ram Blue Flare',
           x: blueX,
           z: blueZ,
-          targetDepth: 0.8,
-          speed: 0.85,
-          threshold: 0.35,
+          targetDepth: 0.85,
+          speed: 1.20,
+          threshold: 0.85,
           hitFlare: 'blue',
-        },
-        // 5. Full-Body Ramming & Strike Red Flare
-        {
+        });
+      } else {
+        const evadeSide = blueZ >= 0 ? -1.5 : 1.5;
+        rawWaypoints.push({
+          id: 'blue_bypass',
+          title: '🛡️ Bypass Blue Flare',
+          x: blueX + 0.6,
+          z: blueZ + evadeSide,
+          targetDepth: 0.85,
+          speed: 1.15,
+          threshold: 0.90,
+        });
+      }
+
+      // 3. TARGET 3: RED FLARE ZONE
+      if (flareStrategies.red_flare === 'TABRAK') {
+        rawWaypoints.push({
           id: 'red_flare',
-          name: '5/12: 💥 Full-Body Ram Red Flare (Sebadan-badannya)',
+          title: '💥 Ram Red Flare',
           x: redX,
           z: redZ,
-          targetDepth: 0.8,
-          speed: 0.85,
-          threshold: 0.35,
+          targetDepth: 0.85,
+          speed: 1.20,
+          threshold: 0.85,
           hitFlare: 'red',
-        },
-        // 6. Full-Body Ramming & Strike Yellow Flare
-        {
+        });
+      } else {
+        const evadeSide = redZ >= 0 ? -1.5 : 1.5;
+        rawWaypoints.push({
+          id: 'red_bypass',
+          title: '🛡️ Bypass Red Flare',
+          x: redX + 0.6,
+          z: redZ + evadeSide,
+          targetDepth: 0.85,
+          speed: 1.15,
+          threshold: 0.90,
+        });
+      }
+
+      // 4. TARGET 4: YELLOW FLARE ZONE
+      if (flareStrategies.yellow_flare === 'TABRAK') {
+        rawWaypoints.push({
           id: 'yellow_flare',
-          name: '6/12: 💥 Full-Body Ram Yellow Flare (Sebadan-badannya)',
+          title: '💥 Ram Yellow Flare',
           x: yellowX,
           z: yellowZ,
-          targetDepth: 0.8,
-          speed: 0.85,
-          threshold: 0.35,
-          hitFlare: 'yellow',
-        },
-        // 7. Safe Arc Steering North Away from South Wall
-        {
-          id: 'gate_arc',
-          name: '7/12: 🔄 Aligning Trajectory towards Gate',
-          x: yellowX + 1.4,
-          z: yellowZ + 2.2,
-          targetDepth: 0.75,
-          speed: 0.70,
-          threshold: 0.80,
-        },
-        // 8. Pre-Gate Centerline Alignment Window (Locks onto Z = gateZ)
-        {
-          id: 'gate_align',
-          name: `8/12: 🎯 Pre-Gate Alignment (Z = ${gateZ.toFixed(1)}m)`,
-          x: gateX - 1.8,
-          z: gateZ,
-          targetDepth: 0.75,
-          speed: 0.70,
-          threshold: 0.80,
-        },
-        // 9. Straight & Confident Gate Transit (Locked 0.0° heading through center window)
-        {
-          id: 'gate_pass',
-          name: `9/12: 🚪 Smooth Straight Gate Transit (${gateZ.toFixed(1)}m Aligned)`,
-          x: gateX + 2.5,
-          z: gateZ,
-          targetDepth: 0.75,
-          speed: 0.75,
+          targetDepth: 0.85,
+          speed: 1.20,
           threshold: 0.85,
-          gateTransit: true,
-          gateTargetZ: gateZ,
-        },
-        // 10. Approach Red Target Drum (Carrying Ball with Gripper, Nose & Cam Tilt -35°)
-        {
-          id: 'drum_search',
-          name: '10/12: 🎯 Approach Target Drum (Carrying Ball with Gripper)',
-          x: drumX,
-          z: drumZ,
-          targetDepth: 0.95,
-          speed: 0.50,
-          threshold: 0.55,
-        },
-        // 11. Direct Payload Drop: Gripper opens smoothly and releases ball directly into drum!
-        {
-          id: 'drum_drop',
-          name: '11/12: 🔴 Gripper Opens: Ball Dropped Directly into Drum!',
-          x: drumX,
-          z: drumZ,
-          targetDepth: 0.88,
-          speed: 0.02,
-          threshold: 0.40,
-        },
-        // 12. Mission Complete - Ascend to Surface
-        {
-          id: 'mission_complete',
-          name: '🏆 MISSION COMPLETE! Surfacing at End Zone',
-          x: drumX + 1.0,
-          z: 0.0,
-          targetDepth: 0.15,
-          speed: 0.25,
-          threshold: 0.70,
-        },
-      ];
+          hitFlare: 'yellow',
+        });
+      } else {
+        const evadeSide = yellowZ >= 0 ? -1.5 : 1.5;
+        rawWaypoints.push({
+          id: 'yellow_bypass',
+          title: '🛡️ Bypass Yellow Flare',
+          x: yellowX + 0.6,
+          z: yellowZ + evadeSide,
+          targetDepth: 0.85,
+          speed: 1.15,
+          threshold: 0.90,
+        });
+      }
+
+      // 5. TARGET 5: GATE APPROACH & RUNWAY ALIGNMENT
+      rawWaypoints.push({
+        id: 'gate_align',
+        title: '🎯 Align with Gate Runway',
+        x: gateX - 1.6,
+        z: gateZ,
+        targetDepth: 0.85,
+        speed: 1.05,
+        threshold: 0.85,
+        gateAlign: true,
+      });
+
+      // 6. TARGET 6: FAST STRAIGHT GATE TRANSIT
+      rawWaypoints.push({
+        id: 'gate_pass',
+        title: '🚪 Straight Gate Transit',
+        x: gateX + 2.5,
+        z: gateZ,
+        targetDepth: 0.85,
+        speed: 1.25,
+        threshold: 1.0,
+        gateTransit: true,
+        gateTargetZ: gateZ,
+      });
+
+      // 7. TARGET 7: APPROACH TARGET DRUM
+      rawWaypoints.push({
+        id: 'drum_search',
+        title: '🎯 Approach Target Drum',
+        x: drumX - 0.4,
+        z: drumZ,
+        targetDepth: 0.95,
+        speed: 0.90,
+        threshold: 0.70,
+      });
+
+      // 8. TARGET 8: DIRECT PAYLOAD DROP
+      rawWaypoints.push({
+        id: 'drum_drop',
+        title: '🔴 Release Ball into Drum',
+        x: drumX,
+        z: drumZ,
+        targetDepth: 0.88,
+        speed: 0.10,
+        threshold: 0.50,
+      });
+
+      // 9. TARGET 9: MISSION COMPLETE & SURFACE
+      rawWaypoints.push({
+        id: 'mission_complete',
+        title: '🏆 MISSION COMPLETE! Surfacing',
+        x: drumX + 1.2,
+        z: 0.0,
+        targetDepth: 0.15,
+        speed: 0.35,
+        threshold: 0.80,
+      });
+
+      const waypoints = rawWaypoints.map((wp, idx) => ({
+        ...wp,
+        name: `${idx + 1}/${rawWaypoints.length}: ${wp.title}`,
+      }));
 
       const currentWp = waypoints[this.missionStage] || waypoints[waypoints.length - 1];
       const distToWp = Math.sqrt((currentWp.x - this.simX) ** 2 + (currentWp.z - this.simZ) ** 2);
@@ -426,33 +482,19 @@ class MockRosConnection {
       let cmdSurge = currentWp.speed;
       let cmdYaw = 0;
 
-      // 1. Full-Body Flare Direct Ramming Knockdown (< 0.40m full hull contact)
-      if (currentWp.hitFlare && distToWp < 0.40) {
+      // 1. Direct Flare Knockdown (Strict Proximity Only)
+      if (currentWp.hitFlare && distToWp < 0.65) {
         store.knockdownFlare(currentWp.hitFlare);
       }
 
-      // 2. Orange Flare Safe Stand-off Hover/Inspect
-      if (currentWp.id === 'orange_inspect') {
-        if (!this.orangeInspectStartTime) {
-          this.orangeInspectStartTime = t;
-        }
-        cmdSurge = 0.03; // Gentle hover holding position
-        const elapsedInspect = t - this.orangeInspectStartTime;
-        if (elapsedInspect >= (currentWp.inspectDuration || 1.8)) {
-          this.missionStage++;
-          this.orangeInspectStartTime = 0;
-        }
-      }
-
-      // 3. Drum Approach Pitch Tilt & Direct Ball Drop
+      // 2. Drum Approach Pitch Tilt & Instant Ball Drop
       if (currentWp.id === 'drum_search' || currentWp.id === 'drum_drop') {
-        if (distToWp < 2.5) {
-          const tiltFactor = Math.min(1.0, (2.5 - distToWp) / 1.2);
+        if (distToWp < 2.2) {
+          const tiltFactor = Math.min(1.0, (2.2 - distToWp) / 1.0);
           targetPitchAngle = -30.0 * tiltFactor;
         }
 
-        if (currentWp.id === 'drum_drop' && distToWp < 0.50) {
-          cmdSurge = 0.02;
+        if (currentWp.id === 'drum_drop') {
           if (!this.drumDropTriggered) {
             this.drumDropTriggered = true;
             this.drumWaitTime = t;
@@ -460,62 +502,115 @@ class MockRosConnection {
             store.dropBallIntoDrum(drumX, drumZ);
           }
 
-          if (t - this.drumWaitTime > 2.5) {
+          // Quick 0.6s release, then immediately surface!
+          if (t - this.drumWaitTime > 0.6) {
             this.missionStage++;
           }
         }
       }
 
-      // 4. Normal Waypoint Advance
+      // 3. Fast Deterministic Waypoint Advancement
+      let canAdvance = distToWp < currentWp.threshold;
+      if (currentWp.hitFlare && flaresFallen[currentWp.hitFlare]) {
+        canAdvance = true;
+      }
+
       if (
-        currentWp.id !== 'orange_inspect' &&
         currentWp.id !== 'drum_drop' &&
-        distToWp < currentWp.threshold &&
+        canAdvance &&
         this.missionStage < waypoints.length - 1
       ) {
         this.missionStage++;
       }
 
-      // 5. Depth PID Command
+      // 4. Depth PID Command
       const depthErr = currentWp.targetDepth - this.simDepth;
-      const cmdHeave = Math.max(-0.65, Math.min(0.65, depthErr * 1.6));
+      const cmdHeave = Math.max(-0.65, Math.min(0.65, depthErr * 2.0));
 
-      // 6. Yaw Heading Steering & Speed Modulation
+      // 5. Yaw Heading Steering (Fast Pure Pursuit with Local Obstacle Guard)
       if (currentWp.gateTransit) {
-        // Special Gate Centerline Lock: keep heading strictly 0.0 rad with gentle cross-track correction towards gateTargetZ
         const tgtZ = currentWp.gateTargetZ ?? gateZ;
-        let straightErr = 0.0 - this.simHeading;
-        while (straightErr > Math.PI) straightErr -= Math.PI * 2;
-        while (straightErr < -Math.PI) straightErr += Math.PI * 2;
-        const crossTrackCorrection = (tgtZ - this.simZ) * 0.40;
-        const combinedHeadingErr = straightErr + Math.max(-0.15, Math.min(0.15, crossTrackCorrection));
-        cmdYaw = Math.max(-0.45, Math.min(0.45, combinedHeadingErr * 2.2));
+        const desiredGateYaw = Math.atan2((tgtZ - this.simZ) * 2.5, 2.0);
+        let trackErr = desiredGateYaw - this.simHeading;
+        while (trackErr > Math.PI) trackErr -= Math.PI * 2;
+        while (trackErr < -Math.PI) trackErr += Math.PI * 2;
+        cmdYaw = Math.max(-0.85, Math.min(0.85, trackErr * 3.5));
         cmdSurge = currentWp.speed;
       } else {
-        // Standard waypoint tracking with heading-alignment speed scaling
-        const targetHeading = Math.atan2(currentWp.z - this.simZ, currentWp.x - this.simX);
+        let toWpX = currentWp.x - this.simX;
+        let toWpZ = currentWp.z - this.simZ;
+        const toWpDist = Math.sqrt(toWpX * toWpX + toWpZ * toWpZ) || 1.0;
+
+        let attX = toWpX / toWpDist;
+        let attZ = toWpZ / toWpDist;
+
+        // Reactive Obstacle Avoidance for nearby non-target standing flares (tight 1.2m radius)
+        let repX = 0;
+        let repZ = 0;
+
+        const allFlares = [
+          { key: 'orange_flare', color: 'orange', x: orangeX, z: orangeZ },
+          { key: 'blue_flare',   color: 'blue',   x: blueX,   z: blueZ },
+          { key: 'red_flare',    color: 'red',    x: redX,    z: redZ },
+          { key: 'yellow_flare', color: 'yellow', x: yellowX, z: yellowZ },
+        ];
+
+        for (const fl of allFlares) {
+          const isFallen = flaresFallen[fl.color];
+          const isCurrentRamTarget = currentWp.hitFlare === fl.color;
+          const isMarkedMenghindar = flareStrategies[fl.key] === 'MENGHINDAR';
+
+          if (!isFallen && !isCurrentRamTarget && isMarkedMenghindar) {
+            const dx = this.simX - fl.x;
+            const dz = this.simZ - fl.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            const AVOID_RADIUS = 1.2;
+
+            if (dist < AVOID_RADIUS && dist > 0.001) {
+              const force = ((AVOID_RADIUS - dist) / AVOID_RADIUS) * 2.0;
+              const sideSign = fl.z >= 0 ? -1 : 1;
+              repX += (dx / dist) * force;
+              repZ += ((dz / dist) + ((-dz / dist) * sideSign * 0.8)) * force;
+            }
+          }
+        }
+
+        const totalDirX = attX + repX;
+        const totalDirZ = attZ + repZ;
+        const targetHeading = Math.atan2(totalDirZ, totalDirX);
+
         let headingErr = targetHeading - this.simHeading;
         while (headingErr > Math.PI) headingErr -= Math.PI * 2;
         while (headingErr < -Math.PI) headingErr += Math.PI * 2;
-        cmdYaw = Math.max(-0.95, Math.min(0.95, headingErr * 2.6));
+        cmdYaw = Math.max(-0.95, Math.min(0.95, headingErr * 3.2));
 
-        // When heading error is large, slow down to turn sharply without overshooting!
-        const alignmentFactor = Math.max(0.18, Math.cos(headingErr));
-        cmdSurge = currentWp.speed * (alignmentFactor ** 2);
+        // High sustained forward cruise speed
+        const alignmentFactor = Math.max(0.60, Math.cos(headingErr));
+        cmdSurge = currentWp.speed * alignmentFactor;
       }
 
-      // Active Wall Safety Repulsion Barrier in FINAL mode (guarantees zero wall collisions)
+      // Active Gate Post Guard in FINAL mode
+      if (this.simX >= gateX - 2.0 && this.simX <= gateX + 1.2) {
+        const lateralOffset = this.simZ - gateZ;
+        if (lateralOffset < -0.25) {
+          cmdYaw += Math.min(0.45, (-0.25 - lateralOffset) * 2.5);
+        } else if (lateralOffset > 0.25) {
+          cmdYaw -= Math.min(0.45, (lateralOffset - 0.25) * 2.5);
+        }
+      }
+
+      // Active Wall Repulsion Guard
       let wallSafetyYaw = 0;
-      if (this.simZ < -5.0) {
-        wallSafetyYaw = ((-5.0 - this.simZ) / 2.0) * 0.90;
-      } else if (this.simZ > 5.0) {
-        wallSafetyYaw = -((this.simZ - 5.0) / 2.0) * 0.90;
+      if (this.simZ < -5.5) {
+        wallSafetyYaw = ((-5.5 - this.simZ) / 1.5) * 0.90;
+      } else if (this.simZ > 5.5) {
+        wallSafetyYaw = -((this.simZ - 5.5) / 1.5) * 0.90;
       }
       cmdYaw = Math.max(-0.95, Math.min(0.95, cmdYaw + wallSafetyYaw));
 
       let finalTarget = `[FINAL] ${currentWp.name}`;
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
-        finalTarget = `[FINAL] 11/12: 🎯 BALL DROPPED INTO RED DRUM!`;
+        finalTarget = `[FINAL] ${waypoints.length}/${waypoints.length}: 🎯 BALL DROPPED INTO RED DRUM!`;
       }
 
       if (store.activeTarget !== finalTarget) {
