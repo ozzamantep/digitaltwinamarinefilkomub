@@ -12,6 +12,8 @@ export default function Header() {
   const jetsonIp = useVehicleStore((s) => s.jetsonIp);
   const armed = useVehicleStore((s) => s.armed);
   const flightMode = useVehicleStore((s) => s.flightMode);
+  const activePage = useVehicleStore((s) => s.activePage);
+  const setActivePage = useVehicleStore((s) => s.setActivePage);
   const setJetsonIp = useVehicleStore((s) => s.setJetsonIp);
   const setMode = useVehicleStore((s) => s.setMode);
   const setArmed = useVehicleStore((s) => s.setArmed);
@@ -75,6 +77,69 @@ export default function Header() {
           <div className="header-logo-icon">🌊</div>
           <span className="header-logo-text">BLUEROV2 TWIN</span>
           <span className="header-logo-sub">SAUVC 2026 Competition</span>
+        </div>
+
+        {/* View Switcher Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            background: 'rgba(15, 23, 42, 0.85)',
+            border: '1px solid rgba(0, 240, 255, 0.25)',
+            borderRadius: '8px',
+            padding: '2px',
+            gap: '3px',
+            marginLeft: '12px',
+          }}
+        >
+          <button
+            onClick={() => setActivePage('mission')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              background:
+                activePage === 'mission'
+                  ? 'linear-gradient(135deg, rgba(0, 240, 255, 0.25) 0%, rgba(0, 128, 255, 0.25) 100%)'
+                  : 'transparent',
+              color: activePage === 'mission' ? '#00f0ff' : '#94a3b8',
+              boxShadow: activePage === 'mission' ? '0 0 10px rgba(0, 240, 255, 0.2)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span>🌊</span>
+            <span>AUV Mission 6-DOF</span>
+          </button>
+
+          <button
+            onClick={() => setActivePage('thruster_test')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              background:
+                activePage === 'thruster_test'
+                  ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.25) 0%, rgba(0, 180, 216, 0.25) 100%)'
+                  : 'transparent',
+              color: activePage === 'thruster_test' ? '#00ff88' : '#94a3b8',
+              boxShadow: activePage === 'thruster_test' ? '0 0 10px rgba(0, 255, 136, 0.2)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span>⚡</span>
+            <span>1x Thruster HIL Testbed</span>
+          </button>
         </div>
       </div>
 

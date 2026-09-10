@@ -5,31 +5,39 @@ import ChartPanel from './components/dashboard/ChartPanel';
 import CameraFeed from './components/dashboard/CameraFeed';
 import ControlPanel from './components/dashboard/ControlPanel';
 import DiagnosticsPanel from './components/dashboard/DiagnosticsPanel';
+import ThrusterTestbed from './components/thruster-test/ThrusterTestbed';
+import useVehicleStore from './store/vehicleStore';
 
 export default function App() {
+  const activePage = useVehicleStore((s) => s.activePage);
+
   return (
     <div className="app-layout">
       <Header />
 
-      <div className="app-body">
-        {/* Left Sidebar - Sensor Data */}
-        <div className="left-sidebar">
-          <SensorPanel />
-        </div>
+      {activePage === 'thruster_test' ? (
+        <ThrusterTestbed />
+      ) : (
+        <div className="app-body">
+          {/* Left Sidebar - Sensor Data */}
+          <div className="left-sidebar">
+            <SensorPanel />
+          </div>
 
-        {/* Center - 3D Viewport + Charts */}
-        <div className="center-area">
-          <VehicleScene />
-          <ChartPanel />
-        </div>
+          {/* Center - 3D Viewport + Charts */}
+          <div className="center-area">
+            <VehicleScene />
+            <ChartPanel />
+          </div>
 
-        {/* Right Sidebar - Camera, Controls, Diagnostics */}
-        <div className="right-sidebar">
-          <CameraFeed />
-          <ControlPanel />
-          <DiagnosticsPanel />
+          {/* Right Sidebar - Camera, Controls, Diagnostics */}
+          <div className="right-sidebar">
+            <CameraFeed />
+            <ControlPanel />
+            <DiagnosticsPanel />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

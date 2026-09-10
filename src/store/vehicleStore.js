@@ -5,6 +5,8 @@ const useVehicleStore = create((set, get) => ({
   connectionStatus: 'disconnected', // 'connected' | 'disconnected' | 'demo'
   jetsonIp: '192.168.1.100',
   mode: 'demo', // 'live' | 'demo'
+  activePage: 'mission', // 'mission' | 'thruster_test'
+  setActivePage: (page) => set({ activePage: page }),
 
   // Camera View Mode for 3D Viewport
   cameraViewMode: 'orbit', // 'orbit' | 'fpv' | 'chase'
