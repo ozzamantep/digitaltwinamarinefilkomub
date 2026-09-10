@@ -1,19 +1,17 @@
 import PIDController from './PidController';
 import hydrodynamicsEngine from './HydrodynamicsEngine';
 import thrusterDynamics from './ThrusterDynamicsModel';
+import vehicleConfig from '../dt-core/VehicleConfig';
+import Kinematics from '../dt-core/Kinematics';
 
 /**
  * 6-DOF Hydrodynamic Flight & PID Motion Controller for BlueROV2 AUV
  * 
- * NOW WITH REALISTIC PHYSICS:
- * - Full hydrodynamic model (added mass, nonlinear damping, Coriolis, restoring forces)
- * - Accurate T200 thruster dynamics (ramp-up lag, voltage sag, cross-coupling)
- * - Underwater current disturbance
- * - Proper force → acceleration → velocity integration through effective mass
- * 
- * Previous version used simplified drag coefficients and instant thruster response.
- * This version integrates HydrodynamicsEngine and ThrusterDynamicsModel for
- * physically accurate underwater vehicle motion.
+ * Features:
+ * - 6-DOF Fossen hydrodynamic model integration
+ * - Realistic T200 thruster dynamics (voltage sag, ramp-up lag, motor time constant)
+ * - Closed-loop Depth and Heading PID controllers with anti-windup
+ * - True 6-DOF state representation
  */
 class AUVMotionController {
   constructor() {
@@ -27,10 +25,12 @@ class AUVMotionController {
     this.pitchPid = new PIDController(0.8, 0.0, 0.3, 0.0, -0.8, 0.8);
     this.rollPid = new PIDController(0.8, 0.0, 0.3, 0.0, -0.8, 0.8);
 
-    // Dynamic Physics State (Velocities in body frame)
+    // Dynamic Physics State (Velocities in body frame: u, v, w, p, q, r)
     this.velSurge = 0.0;
     this.velSway = 0.0;
     this.velHeave = 0.0;
+    this.velRoll = 0.0;
+    this.velPitch = 0.0;
     this.velYaw = 0.0;
 
     this.dynamicPitch = 0.0;
@@ -38,6 +38,7 @@ class AUVMotionController {
 
     this.targetDepth = 0.8;
     this.targetHeading = 0;
+
     this.pidTelemetry = {
       depthError: 0,
       depthEffort: 0,
@@ -51,6 +52,7 @@ class AUVMotionController {
       dampingSurge: 0,
       dampingSway: 0,
       sagFactor: 1.0,
+      totalCurrent: 0,
     };
   }
 
@@ -60,7 +62,7 @@ class AUVMotionController {
   }
 
   setTargetHeading(rad) {
-    this.targetHeading = (rad + Math.PI * 2) % (Math.PI * 2);
+    this.targetHeading = Kinematics.wrapAngle(rad);
     this.yawPid.setSetpoint(this.targetHeading);
   }
 
@@ -80,6 +82,8 @@ class AUVMotionController {
     this.velSurge = 0;
     this.velSway = 0;
     this.velHeave = 0;
+    this.velRoll = 0;
+    this.velPitch = 0;
     this.velYaw = 0;
     this.dynamicPitch = 0;
     this.dynamicRoll = 0;
@@ -94,18 +98,16 @@ class AUVMotionController {
     if (!armed) {
       // =========================================================================
       // DISARMED: No thruster force, only hydrodynamic drag + buoyancy
-      // AUV coasts to a stop due to water drag, then floats up (positive buoyancy)
       // =========================================================================
-      
-      // Zero thrust commands → thruster dynamics still need to wind down
       thrusterDynamics.update([0, 0, 0, 0, 0, 0], batteryVoltage, dt);
 
-      // Hydrodynamic step with zero thrust force
       const hydroResult = hydrodynamicsEngine.step(
         {
           velSurge: this.velSurge,
           velSway: this.velSway,
           velHeave: this.velHeave,
+          velRoll: this.velRoll,
+          velPitch: this.velPitch,
           velYaw: this.velYaw,
           heading: currentPose.heading || 0,
           roll: currentPose.roll || 0,
@@ -120,17 +122,11 @@ class AUVMotionController {
       this.velSurge = hydroResult.velSurge;
       this.velSway = hydroResult.velSway;
       this.velHeave = hydroResult.velHeave;
+      this.velRoll = hydroResult.velRoll || 0;
+      this.velPitch = hydroResult.velPitch || 0;
       this.velYaw = hydroResult.velYaw;
 
-      // Natural Positive Buoyancy (Fail-safe float to surface: depth ~ 0.15m)
-      const currentDepth = currentPose.depth || 0.8;
-      if (currentDepth > 0.15) {
-        // Buoyancy force is already computed in hydro engine's restoring forces
-        // but we add a small explicit upward bias for fail-safe behavior
-        this.velHeave = Math.max(-0.12, this.velHeave - 0.08 * dt);
-      }
-
-      // Dampen attitude
+      // Dampen cosmetic attitude
       this.dynamicPitch *= Math.max(0, 1 - 2.0 * dt);
       this.dynamicRoll *= Math.max(0, 1 - 2.0 * dt);
 
@@ -141,6 +137,8 @@ class AUVMotionController {
         sway: this.velSway,
         yaw: this.velYaw,
         heave: this.velHeave,
+        rollRate: this.velRoll,
+        pitchRate: this.velPitch,
         pitch: this.dynamicPitch,
         roll: this.dynamicRoll,
         thrusters: [0, 0, 0, 0, 0, 0],
@@ -150,14 +148,11 @@ class AUVMotionController {
     }
 
     // =========================================================================
-    // ARMED: Full physics pipeline
-    // User command → PID → Thruster allocation → Thruster dynamics → 
-    // Body forces → Hydrodynamics → Velocity integration
+    // ARMED: Full physics pipeline (Smooth, Stable High-Agility Envelope)
     // =========================================================================
-
-    const targetSurge = (userCmd.surge || 0) * 1.3; // Max surge speed 1.3 m/s
-    const targetSway = (userCmd.sway || 0) * 1.1;   // Max lateral speed 1.1 m/s
-    let targetYawRate = (userCmd.yaw || 0) * 1.5;   // Max yaw rate 1.5 rad/s
+    const targetSurge = (userCmd.surge || 0) * 0.90; // Calibrated surge speed 0.90 m/s
+    const targetSway = (userCmd.sway || 0) * 0.55;   // Stable lateral speed 0.55 m/s
+    let targetYawRate = (userCmd.yaw || 0) * 0.95;   // Controlled stable yaw rate 0.95 rad/s
     let targetHeave = 0;
 
     // 1. Closed-loop Depth PID Regulation
@@ -167,11 +162,11 @@ class AUVMotionController {
         this.depthPid.setSetpoint(this.targetDepth);
       }
       const depthRes = this.depthPid.compute(currentPose.depth);
-      targetHeave = depthRes.output * 0.6;
+      targetHeave = depthRes.output * 0.7;
       this.pidTelemetry.depthError = depthRes.error;
       this.pidTelemetry.depthEffort = depthRes.output;
     } else {
-      targetHeave = (userCmd.heave || 0) * 0.6;
+      targetHeave = (userCmd.heave || 0) * 0.7;
       this.targetDepth = currentPose.depth;
       this.depthPid.setSetpoint(this.targetDepth);
       this.pidTelemetry.depthError = 0;
@@ -185,32 +180,27 @@ class AUVMotionController {
       this.pidTelemetry.yawError = 0;
       this.pidTelemetry.yawEffort = userCmd.yaw;
     } else if (flightMode === 'STABILIZE' || flightMode === 'ALT_HOLD') {
-      let headingErr = this.targetHeading - currentPose.heading;
-      while (headingErr > Math.PI) headingErr -= Math.PI * 2;
-      while (headingErr < -Math.PI) headingErr += Math.PI * 2;
-
+      const headingErr = Kinematics.wrapAngle(this.targetHeading - currentPose.heading);
       const yawRes = this.yawPid.compute(currentPose.heading);
-      targetYawRate = yawRes.output * 1.2;
+      targetYawRate = yawRes.output * 0.95;
       this.pidTelemetry.yawError = headingErr;
       this.pidTelemetry.yawEffort = yawRes.output;
     }
 
     // 3. Compute thruster allocation commands (percentage: -100 to +100)
-    //    Using improved 6-thruster vectored allocation with stability priority
-    const tSurge = (targetSurge / 1.3) * 65;
-    const tSway = (targetSway / 1.1) * 65;
-    const tYaw = (targetYawRate / 1.5) * 45;
-    const tHeave = (targetHeave / 0.6) * 60;
-    const tPitch = this.dynamicPitch * 4.0;
+    // 6-thruster vectored allocation (T200 geometry with balanced, calm authority)
+    const tSurge = (targetSurge / 0.90) * 75;
+    const tSway = (targetSway / 0.55) * 55;
+    const tYaw = (targetYawRate / 0.95) * 45;
+    const tHeave = (targetHeave / 0.7) * 70;
+    const tPitch = this.dynamicPitch * 1.8;
 
-    // 3. Compute thruster allocation commands (percentage: -100 to +100)
-    //    6-thruster vectored allocation with proportional yaw/sway steering
     let cmd1 = tSurge + tYaw - tSway;
     let cmd2 = tSurge - tYaw + tSway;
     let cmd3 = tSurge + tYaw + tSway;
     let cmd4 = tSurge - tYaw - tSway;
-    
-    // Desaturation logic: if commands saturate unevenly, re-normalize to maintain forward priority
+
+    // Desaturation logic: normalize if commands exceed 100%
     const maxCmd = Math.max(Math.abs(cmd1), Math.abs(cmd2), Math.abs(cmd3), Math.abs(cmd4));
     if (maxCmd > 100) {
       const scale = 100 / maxCmd;
@@ -219,33 +209,35 @@ class AUVMotionController {
       cmd3 *= scale;
       cmd4 *= scale;
     }
-    
+
     const thrusterCmd1 = Math.max(-100, Math.min(100, cmd1));
     const thrusterCmd2 = Math.max(-100, Math.min(100, cmd2));
     const thrusterCmd3 = Math.max(-100, Math.min(100, cmd3));
     const thrusterCmd4 = Math.max(-100, Math.min(100, cmd4));
-    
+
     const cmd5 = Math.max(-100, Math.min(100, tHeave + tPitch));
     const cmd6 = Math.max(-100, Math.min(100, tHeave - tPitch));
 
     const thrusterCommands = [thrusterCmd1, thrusterCmd2, thrusterCmd3, thrusterCmd4, cmd5, cmd6];
 
-    // 4. Pass through Thruster Dynamics Model (ramp-up, deadband, sag, coupling)
+    // 4. Pass through Thruster Dynamics Model (ramp-up lag, deadband, voltage sag)
     const thrusterResult = thrusterDynamics.update(thrusterCommands, batteryVoltage, dt);
 
     // 5. Convert actual thruster output to body-frame forces
     const bodyForces = thrusterDynamics.thrustToBodyForces(thrusterResult.thrusts);
 
-    // 6. Full Hydrodynamic Step (added mass, damping, Coriolis, restoring, current)
+    // 6. Full Hydrodynamic Step
     const hydroResult = hydrodynamicsEngine.step(
       {
         velSurge: this.velSurge,
         velSway: this.velSway,
         velHeave: this.velHeave,
+        velRoll: this.velRoll,
+        velPitch: this.velPitch,
         velYaw: this.velYaw,
         heading: currentPose.heading || 0,
-        roll: (currentPose.roll || 0),
-        pitch: (currentPose.pitch || 0),
+        roll: currentPose.roll || 0,
+        pitch: currentPose.pitch || 0,
         depth: currentPose.depth || 0.8,
       },
       bodyForces,
@@ -253,18 +245,19 @@ class AUVMotionController {
       time
     );
 
-    // 7. Update velocities from hydrodynamic integration
+    // 7. Update state velocities
     this.velSurge = hydroResult.velSurge;
     this.velSway = hydroResult.velSway;
     this.velHeave = hydroResult.velHeave;
+    this.velRoll = hydroResult.velRoll || 0;
+    this.velPitch = hydroResult.velPitch || 0;
     this.velYaw = hydroResult.velYaw;
 
-    // 8. Natural Hydrodynamic Tilt (Banking & Pitch from acceleration forces)
-    //    Now modulated by restoring forces from hydro engine
-    const targetPitchTilt = -this.velSurge * 3.5 + (this.velHeave * 2.0) + hydroResult.pitchAccel * 0.5;
-    const targetRollTilt = this.velSway * 4.2 + (this.velYaw * 1.8) + hydroResult.rollAccel * 0.5;
-    this.dynamicPitch += (targetPitchTilt - this.dynamicPitch) * Math.min(1, 3.0 * dt);
-    this.dynamicRoll += (targetRollTilt - this.dynamicRoll) * Math.min(1, 3.0 * dt);
+    // 8. Natural Hydrodynamic Tilt (calm and smooth)
+    const targetPitchTilt = -this.velSurge * 2.0 + (this.velHeave * 1.5) + (hydroResult.pitchAccel || 0) * 0.3;
+    const targetRollTilt = this.velSway * 2.2 + (this.velYaw * 1.2) + (hydroResult.rollAccel || 0) * 0.3;
+    this.dynamicPitch += (targetPitchTilt - this.dynamicPitch) * Math.min(1, 2.5 * dt);
+    this.dynamicRoll += (targetRollTilt - this.dynamicRoll) * Math.min(1, 2.5 * dt);
 
     // 9. Store debug telemetry
     this.hydroTelemetry = {
@@ -280,6 +273,8 @@ class AUVMotionController {
       sway: this.velSway,
       yaw: this.velYaw,
       heave: this.velHeave,
+      rollRate: this.velRoll,
+      pitchRate: this.velPitch,
       pitch: this.dynamicPitch,
       roll: this.dynamicRoll,
       thrusters: thrusterResult.efforts,

@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { TextureLoader } from 'three';
 import PoolCaustics from './PoolCaustics';
@@ -17,6 +18,22 @@ export default function PoolEnvironment() {
     drum_red_tgt: { x: 10.5, z: 1.5 },
     drum_blue: { x: 10.5, z: 4.5 },
   };
+  const obstacleOrder = useVehicleStore((s) => s.obstacleOrder || [
+    'orange_flare',
+    'blue_flare',
+    'red_flare',
+    'yellow_flare',
+    'gate',
+    'drum_red_tgt',
+  ]);
+  const obstacleEnabled = useVehicleStore((s) => s.obstacleEnabled || {
+    orange_flare: true,
+    blue_flare: true,
+    red_flare: true,
+    yellow_flare: true,
+    gate: true,
+    drum_red_tgt: true,
+  });
 
   const orangeFlareGroupRef = useRef();
   const blueFlareGroupRef = useRef();
@@ -43,49 +60,49 @@ export default function PoolEnvironment() {
   // Animate water surface ripples & physical flare toppling
   useFrame((state, delta) => {
     if (waterRef.current) {
-      waterRef.current.material.opacity = 0.18 + Math.sin(state.clock.elapsedTime * 1.5) * 0.02;
+      waterRef.current.material.opacity = 0.48 + Math.sin(state.clock.elapsedTime * 0.8) * 0.04;
     }
 
     // Orange Flare Topple Animation (Rotates 90 deg down if struck in TABRAK mode)
     if (orangeFlareGroupRef.current) {
-      const targetRot = flaresFallen.orange ? Math.PI / 2.05 : 0;
-      orangeFlareGroupRef.current.rotation.z = THREE.MathUtils.damp(
-        orangeFlareGroupRef.current.rotation.z,
-        targetRot,
-        6.0,
+      const targetRotationX = (flaresFallen.orange && flareStrategies.orange_flare === 'TABRAK') ? Math.PI / 2 : 0;
+      orangeFlareGroupRef.current.rotation.x = THREE.MathUtils.damp(
+        orangeFlareGroupRef.current.rotation.x,
+        targetRotationX,
+        9.0,
         delta
       );
     }
 
-    // Blue Flare Topple Animation (Rotates 90 deg down to pool floor)
+    // Blue Flare Topple Animation
     if (blueFlareGroupRef.current) {
-      const targetRot = flaresFallen.blue ? Math.PI / 2.05 : 0;
-      blueFlareGroupRef.current.rotation.z = THREE.MathUtils.damp(
-        blueFlareGroupRef.current.rotation.z,
-        targetRot,
-        6.0,
+      const targetRotationX = (flaresFallen.blue && flareStrategies.blue_flare === 'TABRAK') ? Math.PI / 2 : 0;
+      blueFlareGroupRef.current.rotation.x = THREE.MathUtils.damp(
+        blueFlareGroupRef.current.rotation.x,
+        targetRotationX,
+        9.0,
         delta
       );
     }
 
     // Red Flare Topple Animation
     if (redFlareGroupRef.current) {
-      const targetRot = flaresFallen.red ? Math.PI / 2.05 : 0;
-      redFlareGroupRef.current.rotation.z = THREE.MathUtils.damp(
-        redFlareGroupRef.current.rotation.z,
-        targetRot,
-        6.0,
+      const targetRotationX = (flaresFallen.red && flareStrategies.red_flare === 'TABRAK') ? Math.PI / 2 : 0;
+      redFlareGroupRef.current.rotation.x = THREE.MathUtils.damp(
+        redFlareGroupRef.current.rotation.x,
+        targetRotationX,
+        9.0,
         delta
       );
     }
 
     // Yellow Flare Topple Animation
     if (yellowFlareGroupRef.current) {
-      const targetRot = flaresFallen.yellow ? -Math.PI / 2.05 : 0;
-      yellowFlareGroupRef.current.rotation.z = THREE.MathUtils.damp(
-        yellowFlareGroupRef.current.rotation.z,
-        targetRot,
-        6.0,
+      const targetRotationX = (flaresFallen.yellow && flareStrategies.yellow_flare === 'TABRAK') ? Math.PI / 2 : 0;
+      yellowFlareGroupRef.current.rotation.x = THREE.MathUtils.damp(
+        yellowFlareGroupRef.current.rotation.x,
+        targetRotationX,
+        9.0,
         delta
       );
     }
@@ -252,6 +269,39 @@ export default function PoolEnvironment() {
           </mesh>
         </group>
 
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('orange_flare');
+          const isEnabled = obstacleEnabled.orange_flare !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 1.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ea580c') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#ea580c' }}>#{idx + 1}</span>
+                <span>Oren</span>
+                <span style={{ fontSize: '8px', opacity: 0.8 }}>({flareStrategies.orange_flare})</span>
+              </div>
+            </Html>
+          );
+        })()}
+
         {/* 3D Visual Strategy Halo (TABRAK vs MENGHINDAR) */}
         {flareStrategies.orange_flare === 'TABRAK' ? (
           <group position={[0, 0.05, 0]}>
@@ -290,6 +340,39 @@ export default function PoolEnvironment() {
             <meshStandardMaterial color="#0284c7" emissive="#0369a1" emissiveIntensity={0.4} roughness={0.25} />
           </mesh>
         </group>
+
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('blue_flare');
+          const isEnabled = obstacleEnabled.blue_flare !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 1.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#0284c7') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#0284c7' }}>#{idx + 1}</span>
+                <span>Biru</span>
+                <span style={{ fontSize: '8px', opacity: 0.8 }}>({flareStrategies.blue_flare})</span>
+              </div>
+            </Html>
+          );
+        })()}
 
         {/* 3D Visual Strategy Halo */}
         {flareStrategies.blue_flare === 'TABRAK' ? (
@@ -330,6 +413,39 @@ export default function PoolEnvironment() {
           </mesh>
         </group>
 
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('red_flare');
+          const isEnabled = obstacleEnabled.red_flare !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 1.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ef4444') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#ef4444' }}>#{idx + 1}</span>
+                <span>Merah</span>
+                <span style={{ fontSize: '8px', opacity: 0.8 }}>({flareStrategies.red_flare})</span>
+              </div>
+            </Html>
+          );
+        })()}
+
         {/* 3D Visual Strategy Halo */}
         {flareStrategies.red_flare === 'TABRAK' ? (
           <group position={[0, 0.05, 0]}>
@@ -369,6 +485,39 @@ export default function PoolEnvironment() {
           </mesh>
         </group>
 
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('yellow_flare');
+          const isEnabled = obstacleEnabled.yellow_flare !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 1.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#eab308') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#eab308' }}>#{idx + 1}</span>
+                <span>Kuning</span>
+                <span style={{ fontSize: '8px', opacity: 0.8 }}>({flareStrategies.yellow_flare})</span>
+              </div>
+            </Html>
+          );
+        })()}
+
         {/* 3D Visual Strategy Halo */}
         {flareStrategies.yellow_flare === 'TABRAK' ? (
           <group position={[0, 0.05, 0]}>
@@ -397,6 +546,38 @@ export default function PoolEnvironment() {
 
       {/* === GATE with Red & Green Markers === */}
       <group position={[obstacles.gate?.x ?? 4.0, 0, obstacles.gate?.z ?? 0.0]}>
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('gate');
+          const isEnabled = obstacleEnabled.gate !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 1.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#f59e0b') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#f59e0b' }}>#{idx + 1}</span>
+                <span>🚪 Gate Transit</span>
+              </div>
+            </Html>
+          );
+        })()}
+
         {/* Left Post */}
         <mesh position={[0, 0.75, -0.9]} castShadow>
           <cylinderGeometry args={[0.045, 0.045, 1.5, 16]} />
@@ -448,6 +629,38 @@ export default function PoolEnvironment() {
 
       {/* 2. Red Drum Target Bucket 1 - Primary Target Drop Zone */}
       <group position={[obstacles.drum_red_tgt?.x ?? 10.5, 0.18, obstacles.drum_red_tgt?.z ?? 1.5]}>
+        {/* 3D Priority Sequence Badge */}
+        {(() => {
+          const idx = obstacleOrder.indexOf('drum_red_tgt');
+          const isEnabled = obstacleEnabled.drum_red_tgt !== false;
+          if (idx === -1) return null;
+          return (
+            <Html position={[0, 0.85, 0]} center distanceFactor={14}>
+              <div
+                style={{
+                  background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
+                  border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ef4444') : 'rgba(255,255,255,0.2)'}`,
+                  borderRadius: '5px',
+                  padding: '2px 5px',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  boxShadow: idx === 0 ? '0 0 8px rgba(0, 255, 136, 0.6)' : 'none',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <span style={{ color: idx === 0 ? '#00ff88' : '#ef4444' }}>#{idx + 1}</span>
+                <span>🪣 Target Drum</span>
+              </div>
+            </Html>
+          );
+        })()}
+
         <mesh castShadow>
           <cylinderGeometry args={[0.35, 0.3, 0.45, 24, 1, true]} />
           <meshStandardMaterial color="#ef4444" side={THREE.DoubleSide} roughness={0.4} />

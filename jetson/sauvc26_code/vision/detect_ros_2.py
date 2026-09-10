@@ -2,7 +2,6 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
-from geometry_msgs.msg import Point
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 import cv2

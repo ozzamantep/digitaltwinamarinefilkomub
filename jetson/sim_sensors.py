@@ -13,10 +13,9 @@ import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu, BatteryState, Range, FluidPressure
-from geometry_msgs.msg import Twist, Quaternion
+from geometry_msgs.msg import Quaternion
 import math
 import random
-import time
 
 
 class BlueROV2Simulator(Node):

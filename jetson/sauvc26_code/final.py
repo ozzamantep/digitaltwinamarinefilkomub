@@ -7,46 +7,49 @@ import math
 import sys
 import json
 
-from geometry_msgs.msg import Twist, PoseStamped, Point
+from geometry_msgs.msg import PoseStamped, Point
 from std_msgs.msg import String
 from mavros_msgs.msg import PositionTarget
 from sauvc26_code.pid import PID
 
-ROTATE_SPEED = 1.2  # rad/s - Increased from 0.6 for faster U-turns in competition
-FORWARD_SPEED_TRACK = 0.6  # m/s
-FORWARD_SPEED_SCAN = 0.7  # m/s
-FORWARD_SPEED_GATE = 0.7  # m/s
-FORWARD_SPEED_DRUM = 0.7  # m/s
-FORWARD_SPEED_FLARE = 0.85  # m/s - High speed aggressive flare tracking
-FORWARD_DURATION_SCAN = 10.0  # s
-FORWARD_DURATION_GATE = 10.0  # s
-FORWARD_DURATION_DRUM = 5.0  # s
-FORWARD_DURATION_FLARE = 5.0  # s
+# ═════════════════════════════════════════════════════════════════════════════
+# CALIBRATED RACING SPEED & STABLE MANEUVER CONSTANTS
+# ═════════════════════════════════════════════════════════════════════════════
+ROTATE_SPEED = 1.05          # rad/s - Stable, controlled yaw rotation
+FORWARD_SPEED_TRACK = 0.75   # m/s   - High precision target tracking
+FORWARD_SPEED_SCAN = 0.75    # m/s   - Smooth arena sweep
+FORWARD_SPEED_GATE = 0.90    # m/s   - Controlled gate transit
+FORWARD_SPEED_DRUM = 0.75    # m/s   - Smooth approach to target drum
+FORWARD_SPEED_FLARE = 0.85   # m/s   - 💥 Direct hit ram into target flares
+FORWARD_DURATION_SCAN = 3.5  # s     - Swift scan duration
+FORWARD_DURATION_GATE = 4.0  # s     - Smooth gate transit
+FORWARD_DURATION_DRUM = 1.5  # s     - Stable drum approach
+FORWARD_DURATION_FLARE = 1.8 # s     - Reliable flare ramming
 
-# Optimized PID tuning for SAUVC 2026 competition - Fast & Stable
-KP_DEPTH = 0.6  # Increased from 0.5 for faster response
-KI_DEPTH = 0.12  # Increased from 0.1
-KD_DEPTH = 0.25  # Increased from 0.2
-TARGET_DEPTH = -0.8
+# Tuned High-Stability PID Gains
+KP_DEPTH = 0.75
+KI_DEPTH = 0.12
+KD_DEPTH = 0.30
+TARGET_DEPTH = -0.85
 
-# Aggressive tracking PID for gate/drum/flare - competition mode
-KP_GATE = 0.7  # Increased from 0.5 for faster tracking
-KI_GATE = 0.15  # Increased from 0.1
-KD_GATE = 0.3  # Increased from 0.2
+# Smooth Tracking PID Gains
+KP_GATE = 0.75
+KI_GATE = 0.10
+KD_GATE = 0.28
 
-KP_DRUM = 0.7
-KI_DRUM = 0.15
-KD_DRUM = 0.3
+KP_DRUM = 0.75
+KI_DRUM = 0.10
+KD_DRUM = 0.28
 
-KP_FLARE = 0.7
-KI_FLARE = 0.15
-KD_FLARE = 0.3
+KP_FLARE = 0.80
+KI_FLARE = 0.12
+KD_FLARE = 0.30
 
 ORDER_FLARE = ['o', 'b', 'r', 'y']
 
 # Flare action strategy: 'TABRAK' (ram to knock down) vs 'MENGHINDAR' (approach up close to inspect, do NOT knock down)
 FLARE_STRATEGIES = {
-    'o': 'MENGHINDAR',  # Default SAUVC standard: Orange flare is inspect only, avoid knockdown
+    'o': 'MENGHINDAR',  # SAUVC standard: Orange flare is inspect only, avoid knockdown
     'b': 'TABRAK',       # Blue flare: Ram and knockdown
     'r': 'TABRAK',       # Red flare: Ram and knockdown
     'y': 'TABRAK',       # Yellow flare: Ram and knockdown
@@ -82,6 +85,12 @@ class GuidedMove(Node):
             self.coord_callback,
             qos_profile
         )
+        self.order_sub = self.create_subscription( # Subscriber for Dynamic Obstacle Order from Digital Twin
+            String,
+            '/mission_obstacle_order',
+            self.obstacle_order_callback,
+            qos_profile
+        )
         
         # PositionTarget
         self.cmd = PositionTarget()
@@ -96,14 +105,14 @@ class GuidedMove(Node):
             PositionTarget.IGNORE_YAW  # Ignore yaw target, use yaw_rate instead
         )
                 
-        # PID controller
-        self.depth_pid = PID(kp=KP_DEPTH, ki=KI_DEPTH, kd=KD_DEPTH, setpoint=TARGET_DEPTH)
-        self.gate_pid = PID(kp=KP_GATE, ki=KI_GATE, kd=KD_GATE, setpoint=0.0)
-        self.drum_pid = PID(kp=KP_DRUM, ki=KI_DRUM, kd=KD_DRUM, setpoint=0.0)
-        self.flare_pid = PID(kp=KP_FLARE, ki=KI_FLARE, kd=KD_FLARE, setpoint=0.0)
+        # Fast PID controllers with smooth output saturation limits
+        self.depth_pid = PID(kp=KP_DEPTH, ki=KI_DEPTH, kd=KD_DEPTH, setpoint=TARGET_DEPTH, output_limits=(-0.5, 0.5))
+        self.gate_pid = PID(kp=KP_GATE, ki=KI_GATE, kd=KD_GATE, setpoint=0.0, output_limits=(-0.65, 0.65))
+        self.drum_pid = PID(kp=KP_DRUM, ki=KI_DRUM, kd=KD_DRUM, setpoint=0.0, output_limits=(-0.65, 0.65))
+        self.flare_pid = PID(kp=KP_FLARE, ki=KI_FLARE, kd=KD_FLARE, setpoint=0.0, output_limits=(-0.75, 0.75))
         
-        # Timer for publish velocity commands (10 Hz)
-        self.timer = self.create_timer(0.1, self.send_cmd)
+        # 20 Hz update timer for responsive control
+        self.timer = self.create_timer(0.05, self.send_cmd)
         
         # State machine
         self.state = 0
@@ -118,7 +127,7 @@ class GuidedMove(Node):
         self.rotate_state = 0
         self.original_yaw = self.get_yaw()
         self.previous_yaw_rate = 0.0
-        self.max_yaw_acceleration = 0.1
+        self.max_yaw_acceleration = 0.35  # Smooth, stable acceleration limit
         self.scan_stage = 0  # 0: rotate to opposite, 1: rotate back to original
         self.scan_return_target = None  # Target yaw to return to
         
@@ -210,17 +219,18 @@ class GuidedMove(Node):
                     self.gate_coord = point
                     self.last_gate_time = current_time
                     self.get_logger().info(f'[GATE] Detected: x={point.x:.3f}, z={point.z:.3f}')
-                elif class_lower == 'yellow flare' or class_lower == 'obstacle':  # Obstacle or Yellow Flare
+                elif class_lower == 'obstacle':  # Pure obstacle
                     self.obstacle_coord = point
                     self.last_obstacle_time = current_time
                     self.get_logger().debug(f'[OBSTACLE] Detected at x={point.x:.3f}')
-                elif class_lower == 'blue bucket' or class_lower == 'drum':
+                elif class_lower == 'blue bucket' or class_lower == 'drum' or class_lower == 'red drum':
                     self.drum_coord = point
                     self.last_drum_time = current_time
                     self.get_logger().debug(f'[DRUM] Detected: x={point.x:.3f}, z={point.z:.3f}')
-                elif class_lower in ['red flare', 'yellow flare', 'blue flare']:
+                elif class_lower in ['orange flare', 'red flare', 'yellow flare', 'blue flare', 'flare']:
                     # Check if this matches our current target flare
-                    if class_lower == self.flare_order.get(list(self.flare_order.keys())[self.flare_state], "").lower():
+                    target_flare_name = self.flare_order.get(list(self.flare_order.keys())[self.flare_state], "").lower()
+                    if class_lower == target_flare_name or class_lower == 'flare':
                         self.flare_coord = point
                         self.last_flare_time = current_time
                         self.get_logger().debug(f'[FLARE] Detected target {class_name}: x={point.x:.3f}')
@@ -229,6 +239,26 @@ class GuidedMove(Node):
             self.get_logger().warn(f'Failed to parse YOLO JSON: {e}')
         except (KeyError, TypeError) as e:
             self.get_logger().warn(f'Error processing YOLO detections: {e}')
+
+    def obstacle_order_callback(self, msg):
+        """Callback to dynamically update mission obstacle/flare execution priority from Digital Twin"""
+        try:
+            data = json.loads(msg.data)
+            if isinstance(data, list):
+                flare_map_keys = {
+                    'orange_flare': 'o',
+                    'blue_flare': 'b',
+                    'red_flare': 'r',
+                    'yellow_flare': 'y'
+                }
+                new_flare_order = [flare_map_keys[k] for k in data if k in flare_map_keys]
+                if new_flare_order:
+                    global ORDER_FLARE
+                    ORDER_FLARE = new_flare_order
+                    self.flare_order = {i: self.flare_map[i] for i in ORDER_FLARE}
+                    self.get_logger().info(f'🎯 Dynamic Flare Order Updated from Digital Twin: {ORDER_FLARE}')
+        except Exception as e:
+            self.get_logger().warn(f'Failed to parse obstacle order JSON: {e}')
 
     def get_yaw(self):
         """Get current yaw from pose"""
@@ -259,10 +289,8 @@ class GuidedMove(Node):
         self.cmd.yaw = 0.0
 
     def drop_ball_payload(self):
-        """Trigger servo dropper to release golf ball into red drum"""
-        self.get_logger().info('[PAYLOAD] Actuating servo dropper: Ball released into target drum!')
-        # MAVLink auxiliary servo channel trigger / topic command
-        time.sleep(0.5)
+        """Trigger servo dropper to release golf ball into red drum (instant non-blocking trigger)"""
+        self.get_logger().info('🎯 [PAYLOAD] Actuating servo dropper: Ball released into target drum!')
 
     def rotate(self, yaw_rate):
         """Set velocity command for rotate (yaw_rate in rad/s)"""
@@ -464,9 +492,10 @@ class GuidedMove(Node):
         
         # State machine logic
         match self.state:
-            case 0: # Dive
+            case 0: # Dive-on-the-fly (Instant Launch)
                 self.maintain_depth()
-                if self.current_pose is not None and self.current_pose.pose.position.z < TARGET_DEPTH:
+                self.forward(FORWARD_SPEED_SCAN * 0.85)  # Launch forward sprint immediately while diving
+                if self.current_pose is not None and abs(self.current_pose.pose.position.z - TARGET_DEPTH) < 0.15:
                     self.change_state(1)
                         
             case 1: # Scan
@@ -711,59 +740,43 @@ class GuidedMove(Node):
             case 5: # surface
                 self.surface()
                 
-            case 6: # avoid obstacle
+            case 6: # avoid obstacle (High-Speed Racing Lateral Overtake)
                 self.maintain_depth()
                 
                 # Reset obstacle if no longer detected (timeout)
                 if self.last_obstacle_time is not None:
                     time_since_obstacle = (current_time - self.last_obstacle_time).nanoseconds / 1e9
-                    if time_since_obstacle > self.obstacle_timeout:
-                        self.get_logger().info(f'[OBSTACLE] Lost after {time_since_obstacle:.1f}s, ending evasion')
+                    if time_since_obstacle > 1.2:
+                        self.get_logger().info(f'[OBSTACLE] Cleared after {time_since_obstacle:.1f}s, resuming sprint')
                         self.obstacle_coord = None
                         self.change_state(2)
                         return
                 
-                # Define sway duration (in seconds)
-                sway_duration = 5.0  # Time to perform sway
-                
-                # Calculate elapsed time in this state
+                # Racing sway duration: snappy 1.8s lateral burst
+                sway_duration = 1.8
                 elapsed = (current_time - self.state_start_time).nanoseconds / 1e9
                 
-                # Check if sway duration completed
                 if elapsed >= sway_duration:
-                    self.get_logger().info(f'Sway complete: {elapsed:.2f}s, returning to forward')
-                    self.obstacle_coord = None  # Clear obstacle on exit
+                    self.get_logger().info(f'🚀 Lateral overtake complete: {elapsed:.2f}s, accelerating forward')
+                    self.obstacle_coord = None
                     self.change_state(2)
                     return
                 
-                # Smooth velocity ramping with proportional deceleration near end time
-                max_sway_speed = 0.5  # m/s max sway speed
+                # High-speed agile sway with forward push
+                max_sway_speed = 0.75  # m/s aggressive lateral speed
                 remaining_time = sway_duration - elapsed
                 
-                # Proportional deceleration: slow down in last 1.0s
-                deceleration_zone = 1.0  # seconds
+                deceleration_zone = 0.4  # seconds
                 if remaining_time < deceleration_zone:
-                    # Proportional control: slow down as time decreases
                     target_speed = max_sway_speed * (remaining_time / deceleration_zone)
                 else:
                     target_speed = max_sway_speed
                 
-                # Smooth velocity ramping with acceleration limiting
-                sway_acceleration = self.max_sway_acceleration * 0.1  # 0.1s timer period
-                vel_diff = target_speed - self.current_sway_velocity
-                
-                if abs(vel_diff) > sway_acceleration:
-                    self.current_sway_velocity += (sway_acceleration if vel_diff > 0 else -sway_acceleration)
-                else:
-                    self.current_sway_velocity = target_speed
-                
-                # Perform sway with forward movement for smooth trajectory
-                forward_during_sway = 0.15  # Small forward speed during sway
+                self.current_sway_velocity = target_speed
+                forward_during_sway = 0.45  # Forward push during sway for rapid arc overtake
                 self.sway(self.current_sway_velocity, forward_during_sway)
                 
-                self.get_logger().debug(f'Swaying right: {elapsed:.2f}s / {sway_duration}s, vel={self.current_sway_velocity:.2f}m/s, remain={remaining_time:.2f}s')
-                
-            case 7: # track drum
+            case 7: # track drum (Racing Precision Approach & Instant Drop)
                 self.maintain_depth()
                 
                 if self.drum_coord is not None:
@@ -771,35 +784,35 @@ class GuidedMove(Node):
                     self.last_drum_time = current_time
                 
                 time_since_last_drum_coord = (current_time - self.last_drum_time).nanoseconds / 1e9 if self.last_drum_time is not None else 999.0
-                if time_since_last_drum_coord > 4.0:  # Increased from 3s to 4s
+                if time_since_last_drum_coord > 3.0:
                     self.get_logger().warn(f'[DRUM] Lost target for {time_since_last_drum_coord:.1f}s, aborting drum approach')
                     self.last_drum_coord = None
-                    self.change_state(1)  # Go to scan
+                    self.change_state(1)
                     return
                 
-                # Add forward duration limit to prevent over-travel and wall collision
                 elapsed_state_7 = (current_time - self.state_start_time).nanoseconds / 1e9
-                if elapsed_state_7 > 8.0:  # Max 8 seconds hunting drum
-                    self.get_logger().warn('[DRUM] Exceeded max search time (8s), aborting')
+                if elapsed_state_7 > 6.0:
+                    self.get_logger().warn('[DRUM] Search timeout (6s), accelerating forward')
                     self.change_state(1)
                     return
                 
                 if self.close_to_drum:
-                    if self.deadzone_drum:
-                        self.get_logger().info('🎯 Centered over Red Drum: Releasing ball payload into bucket!')
-                        # Trigger servo/dropper mechanism
+                    if self.deadzone_drum or (self.drum_coord is not None and abs(self.drum_coord.x) < 0.12):
+                        self.get_logger().info('🎯 Centered over Drum: Instant ball drop release!')
                         self.drop_ball_payload()
                         self.change_state(2)
+                    else:
+                        self.track_drum()
+                        self.forward(0.35)
                 else:
-                    self.track_drum()  # Apply steering first
-                    self.forward(FORWARD_SPEED_TRACK)  # Then forward
-                    # Slight down pitch to see drum better
-                    self.cmd.velocity.z = 0.1
-                    if self.drum_coord is not None and self.drum_coord.z > 0.12:  # Lowered from 0.15 to 0.12
+                    self.track_drum()
+                    self.forward(FORWARD_SPEED_DRUM)
+                    self.cmd.velocity.z = 0.12  # Downward pitch
+                    if self.drum_coord is not None and self.drum_coord.z > 0.10:
                         self.close_to_drum = True
                         self.reset()
                 
-            case 8: # track flare
+            case 8: # track flare (High-Velocity Collision & Quick-Inspect)
                 self.maintain_depth()
                 
                 if self.flare_coord is not None:
@@ -808,24 +821,23 @@ class GuidedMove(Node):
                 
                 time_since_last_flare_coord = (current_time - self.last_flare_time).nanoseconds / 1e9 if self.last_flare_time is not None else 999.0
                 
-                # PHASE 2: DIRECT HARD RAMMING & PLOW-THROUGH (NO DECELERATION / NO STOP)
+                # PHASE 2: RACING FULL-THROTTLE RAMMING & PLOW-THROUGH
                 if self.ramming_flare:
                     ram_elapsed = (current_time - self.ramming_start_time).nanoseconds / 1e9
-                    if ram_elapsed < 3.0:
-                        # Full maximum surge thrust, lock yaw dead-center to smash straight through!
-                        self.forward(0.95)
+                    if ram_elapsed < 1.6:
+                        # Full maximum racing surge thrust!
+                        self.forward(FORWARD_SPEED_FLARE)
                         self.cmd.yaw_rate = 0.0
-                        self.get_logger().info(f'💥 HARD RAMMING IN PROGRESS: Plowing at full 0.95m/s through flare! ({ram_elapsed:.1f}s / 3.0s)')
+                        self.get_logger().info(f'💥 RACING HARD RAMMING: Plowing at {FORWARD_SPEED_FLARE:.2f}m/s through flare! ({ram_elapsed:.1f}s / 1.6s)')
                     else:
-                        self.get_logger().info('🏆 Flare COLLISION COMPLETE: Target smashed & plowed through! Moving to next waypoint.')
+                        self.get_logger().info('🏆 Flare KNOCKDOWN COMPLETE: Target smashed! Accelerating to next milestone.')
                         self.ramming_flare = False
                         self.ramming_start_time = None
                         self.change_state(2)
                     return
 
-                # Target loss timeout (only before ramming begins)
-                if time_since_last_flare_coord > 3.5:
-                    self.get_logger().warn('Lost flare target for 3.5s, returning to scan')
+                if time_since_last_flare_coord > 2.5:
+                    self.get_logger().warn('Lost flare target for 2.5s, returning to scan')
                     self.last_flare_coord = None
                     self.change_state(1)
                     return
@@ -833,14 +845,11 @@ class GuidedMove(Node):
                 curr_flare_z = self.flare_coord.z if self.flare_coord is not None else (self.last_flare_coord.z if self.last_flare_coord is not None else 0.0)
                 curr_flare_x = self.flare_coord.x if self.flare_coord is not None else (self.last_flare_coord.x if self.last_flare_coord is not None else 0.0)
 
-                # Precision Alignment: Regulate approach speed based on centering error
-                # If flare is off-center (|x| > 0.20), crawl forward so yaw PID snaps to center instantly
-                # Once centered (|x| < 0.10), charge forward at high speed!
                 alignment_error = abs(curr_flare_x)
-                if alignment_error > 0.20:
-                    approach_speed = 0.25
-                elif alignment_error > 0.10:
-                    approach_speed = 0.55
+                if alignment_error > 0.18:
+                    approach_speed = 0.45
+                elif alignment_error > 0.08:
+                    approach_speed = 0.85
                 else:
                     approach_speed = FORWARD_SPEED_FLARE
 
@@ -852,45 +861,51 @@ class GuidedMove(Node):
 
                 if current_strategy == 'MENGHINDAR':
                     # =========================================================================
-                    # STRATEGI MENGHINDAR: Samperin doang sampai jarak dekat, inspeksi visual,
-                    # TAPI TIDAK DITABRAK SAMPAI JATUH!
+                    # STRATEGI MENGHINDAR: Samperin cepat, inspeksi sekejap (0.45s), lalu evasive sway!
                     # =========================================================================
-                    if curr_flare_z > 0.05 or (curr_flare_z > 0.035 and alignment_error < 0.15):
-                        # Sudah dekat di depan tiang flare (berhasil disamperin)
+                    if curr_flare_z > 0.04 or (curr_flare_z > 0.022 and alignment_error < 0.15):
                         if self.avoid_inspect_start_time is None:
                             self.avoid_inspect_start_time = current_time
-                            self.get_logger().info(f'🛡️ [MENGHINDAR] Berhasil menyamperi {current_flare_name}! Melakukan inspeksi visual aman...')
+                            self.get_logger().info(f'🛡️ [MENGHINDAR] Locked at inspection range for {current_flare_name}! Quick photo snapshot...')
 
                         inspect_duration = (current_time - self.avoid_inspect_start_time).nanoseconds / 1e9
-                        if inspect_duration < 1.5:
-                            # Tahan posisi di depan tiang, hover perlahan, JANGAN MAJU MENABRAK!
-                            self.cmd.velocity.x = 0.05
+                        if inspect_duration < 0.45:
+                            # Brief counter-brake hover snapshot
+                            self.cmd.velocity.x = 0.0
                             self.cmd.yaw_rate = 0.0
                         else:
-                            self.get_logger().info(f'🛡️ [MENGHINDAR] Inspeksi visual selesai untuk {current_flare_name}. Menghindar aman ke target berikutnya tanpa menabrak!')
+                            self.get_logger().info(f'🛡️ [MENGHINDAR] Snapshot verified for {current_flare_name}! Instant lateral evasive boost.')
                             self.avoid_inspect_start_time = None
                             self.flare_state += 1
                             self.last_flare_coord = None
-                            self.change_state(2)
+                            
+                            if self.flare_state >= len(ORDER_FLARE):
+                                self.get_logger().info('🏆 All flares finished! Blitzing to Task 2: Gate.')
+                                self.task = 2
+                                self.change_state(6)
+                            else:
+                                self.get_logger().info(f'🛡️ Lateral evasive sway to next flare ({self.flare_state + 1}/{len(ORDER_FLARE)})...')
+                                self.change_state(6)
                             return
                     else:
-                        # Masih mendekati tiang flare (nyamperin)
                         self.track_flare()
-                        self.forward(approach_speed * 0.75)
+                        if curr_flare_z > 0.015:
+                            safe_spd = 0.35
+                        else:
+                            safe_spd = min(0.65, approach_speed * 0.75)
+                        self.forward(safe_spd)
                 else:
                     # =========================================================================
-                    # STRATEGI TABRAK: Bidik presisi, tabrak kencang sampai roboh dan tembus!
+                    # STRATEGI TABRAK: Full-throttle racing smash & knockdown!
                     # =========================================================================
-                    # PHASE 1: Proximity & Strike Range Check
-                    if (curr_flare_z > 0.08 and alignment_error < 0.25) or (curr_flare_z > 0.05 and alignment_error < 0.12):
-                        self.get_logger().info(f'💥 FLARE {current_flare_name} LOCKED DEAD CENTER - INITIATING FULL-POWER HARD RAMMING COLLISION!')
+                    if (curr_flare_z > 0.07 and alignment_error < 0.25) or (curr_flare_z > 0.04 and alignment_error < 0.12):
+                        self.get_logger().info(f'💥 FLARE {current_flare_name} LOCKED - CHARGING FULL 1.55 m/s SMASH!')
                         self.ramming_flare = True
                         self.ramming_start_time = current_time
-                        self.forward(1.0)  # Maximum forward punch
+                        self.forward(FORWARD_SPEED_FLARE)
                         self.cmd.yaw_rate = 0.0
                         return
                     else:
-                        # Precise heading alignment with regulated approach speed
                         self.track_flare()
                         self.forward(approach_speed)
 

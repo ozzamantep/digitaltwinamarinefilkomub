@@ -1,0 +1,7 @@
+{
+  "include": [
+    "jetson"
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none"
+}

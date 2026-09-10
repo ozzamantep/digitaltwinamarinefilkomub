@@ -5,6 +5,7 @@ import topicPublisher from '../../services/TopicPublisher';
 import auvMotionController from '../../services/AUVMotionController';
 import mockRos from '../../services/MockRosConnection';
 import sysIdEngine from '../../services/SystemIdentificationEngine';
+import DigitalTwinPanel from './DigitalTwinPanel';
 
 function VirtualSubseaJoystick() {
   const areaRef = useRef(null);
@@ -117,12 +118,33 @@ export default function ControlPanel() {
     yellow_flare: 'TABRAK',
   });
   const setFlareStrategy = useVehicleStore((s) => s.setFlareStrategy);
+  const obstacleOrder = useVehicleStore((s) => s.obstacleOrder || [
+    'orange_flare',
+    'blue_flare',
+    'red_flare',
+    'yellow_flare',
+    'gate',
+    'drum_red_tgt',
+  ]);
+  const obstacleEnabled = useVehicleStore((s) => s.obstacleEnabled || {
+    orange_flare: true,
+    blue_flare: true,
+    red_flare: true,
+    yellow_flare: true,
+    gate: true,
+    drum_red_tgt: true,
+  });
+  const moveObstacleOrder = useVehicleStore((s) => s.moveObstacleOrder);
+  const setObstaclePriority = useVehicleStore((s) => s.setObstaclePriority);
+  const toggleObstacleEnabled = useVehicleStore((s) => s.toggleObstacleEnabled);
+  const applyOrderPreset = useVehicleStore((s) => s.applyOrderPreset);
   const payloadState = useVehicleStore((s) => s.payloadState);
   const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
   const connectionStatus = useVehicleStore((s) => s.connectionStatus);
 
   const [activeTab, setActiveTab] = useState('pilot'); // 'pilot' | 'pid' | 'sysid' | 'sync'
   const [selectedLayoutPreset, setSelectedLayoutPreset] = useState('standard');
+  const [selectedOrderPreset, setSelectedOrderPreset] = useState('standard');
   const [gamepadConnected, setGamepadConnected] = useState(false);
   const [gamepadName, setGamepadName] = useState('');
   const gamepadPrevButtons = useRef({});
@@ -924,6 +946,11 @@ export default function ControlPanel() {
       {/* 4. TWIN SYNC & DYNAMIC ARENA CONFIGURATION */}
       {activeTab === 'sync' && (
         <div style={{ fontSize: '0.62rem' }}>
+          {/* Digital Twin Core Health & Intelligence Center */}
+          <div style={{ marginBottom: '10px' }}>
+            <DigitalTwinPanel />
+          </div>
+
           {/* Link Status */}
           <div
             style={{
@@ -939,7 +966,7 @@ export default function ControlPanel() {
           >
             <div>
               <div style={{ fontWeight: 'bold', color: connectionStatus === 'connected' ? 'var(--accent-green)' : 'var(--accent-cyan)' }}>
-                {connectionStatus === 'connected' ? '🟢 REAL-WORLD JETSON (LIVE ROS2)' : '🔵 SITL SIMULATION TWIN'}
+                {connectionStatus === 'connected' ? '🟢 REAL-WORLD JETSON (LIVE ROS2)' : '🔵 DIGITAL TWIN SHADOW / SITL'}
               </div>
               <div style={{ fontSize: '0.55rem', color: 'var(--text-tertiary)' }}>
                 Sync Topics: /odom, /yolo_target_coord, /mission_state
@@ -1039,43 +1066,314 @@ export default function ControlPanel() {
             </button>
           </div>
 
-          {/* Dynamic Coordinate Sliders & Flare Action Mode (TABRAK vs MENGHINDAR) */}
-          <div style={{ maxHeight: '175px', overflowY: 'auto', paddingRight: '4px' }}>
-            {[
-              { key: 'orange_flare', label: '🟠 Orange Flare', color: '#ea580c', isFlare: true },
-              { key: 'blue_flare', label: '🔵 Blue Flare', color: '#0284c7', isFlare: true },
-              { key: 'red_flare', label: '🔴 Red Flare', color: '#ef4444', isFlare: true },
-              { key: 'yellow_flare', label: '🟡 Yellow Flare', color: '#eab308', isFlare: true },
-              { key: 'gate', label: '🚪 Gate Center', color: '#f59e0b', isFlare: false },
-              { key: 'drum_red_tgt', label: '🪣 Target Red Drum', color: '#ef4444', isFlare: false },
-            ].map(({ key, label, color, isFlare }) => {
+          {/* Mission Execution Order & Task Priority Roadmap */}
+          <div style={{ marginBottom: '8px', background: 'rgba(0,240,255,0.03)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(0,240,255,0.15)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <div style={{ fontWeight: 'bold', color: '#38bdf8', fontSize: '0.62rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>🎯</span>
+                <span>Urutan Eksekusi Target (Mission Queue)</span>
+              </div>
+              <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)' }}>
+                {obstacleOrder.filter(k => obstacleEnabled[k] !== false).length} / {obstacleOrder.length} Target Aktif
+              </span>
+            </div>
+
+            <div style={{ fontSize: '0.54rem', color: 'var(--text-tertiary)', marginBottom: '6px', lineHeight: 1.3 }}>
+              Pilih target mana yang dikerjakan duluan. AUV akan mengejar target urutan <b>#1</b> hingga selesai.
+            </div>
+
+            {/* Visual Queue Flow Breadcrumb */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '6px' }}>
+              {obstacleOrder.map((key, idx) => {
+                const meta = {
+                  orange_flare: { label: 'Oren', color: '#ea580c', icon: '🟠' },
+                  blue_flare:   { label: 'Biru', color: '#0284c7', icon: '🔵' },
+                  red_flare:    { label: 'Merah', color: '#ef4444', icon: '🔴' },
+                  yellow_flare: { label: 'Kuning', color: '#eab308', icon: '🟡' },
+                  gate:         { label: 'Gate', color: '#f59e0b', icon: '🚪' },
+                  drum_red_tgt: { label: 'Ember', color: '#ef4444', icon: '🪣' },
+                }[key] || { label: key, color: '#94a3b8', icon: '📍' };
+                const isEnabled = obstacleEnabled[key] !== false;
+
+                return (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        padding: '2px 5px',
+                        borderRadius: '4px',
+                        background: isEnabled ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${isEnabled ? meta.color : 'rgba(255,255,255,0.08)'}`,
+                        opacity: isEnabled ? 1 : 0.4,
+                        fontSize: '0.52rem',
+                        color: isEnabled ? '#f8fafc' : 'var(--text-tertiary)',
+                        textDecoration: isEnabled ? 'none' : 'line-through',
+                      }}
+                    >
+                      <span style={{ fontWeight: 'bold', color: meta.color }}>#{idx + 1}</span>
+                      <span>{meta.icon}</span>
+                      <span>{meta.label}</span>
+                    </div>
+                    {idx < obstacleOrder.length - 1 && (
+                      <span style={{ fontSize: '0.50rem', color: 'rgba(255,255,255,0.25)' }}>➔</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Order Strategy Presets */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '3px' }}>
+              <button
+                className={`control-btn ${selectedOrderPreset === 'standard' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedOrderPreset('standard');
+                  applyOrderPreset('standard');
+                  topicPublisher.publishObstacleOrder(['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'gate', 'drum_red_tgt']);
+                }}
+                title="Urutan Standar SAUVC: Oren ➔ Biru ➔ Merah ➔ Kuning ➔ Gate ➔ Ember"
+                style={{ padding: '3px 2px', fontSize: '0.52rem' }}
+              >
+                📍 Standard
+              </button>
+              <button
+                className={`control-btn ${selectedOrderPreset === 'reverse_flares' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedOrderPreset('reverse_flares');
+                  applyOrderPreset('reverse_flares');
+                  topicPublisher.publishObstacleOrder(['yellow_flare', 'red_flare', 'blue_flare', 'orange_flare', 'gate', 'drum_red_tgt']);
+                }}
+                title="Urutan Terbalik: Kuning ➔ Merah ➔ Biru ➔ Oren ➔ Gate ➔ Ember"
+                style={{ padding: '3px 2px', fontSize: '0.52rem' }}
+              >
+                🔄 Reverse
+              </button>
+              <button
+                className={`control-btn ${selectedOrderPreset === 'tabrak_first' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedOrderPreset('tabrak_first');
+                  applyOrderPreset('tabrak_first');
+                }}
+                title="Prioritaskan semua flare TABRAK terlebih dahulu sebelum MENGHINDAR"
+                style={{ padding: '3px 2px', fontSize: '0.52rem' }}
+              >
+                💥 Tabrak Dulu
+              </button>
+              <button
+                className={`control-btn ${selectedOrderPreset === 'gate_first' ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedOrderPreset('gate_first');
+                  applyOrderPreset('gate_first');
+                  topicPublisher.publishObstacleOrder(['gate', 'orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'drum_red_tgt']);
+                }}
+                title="Lolos Gate terlebih dahulu sebelum menargetkan flare dan ember"
+                style={{ padding: '3px 2px', fontSize: '0.52rem' }}
+              >
+                🚪 Gate Dulu
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Coordinate Sliders, Flare Action Mode & Task Reordering */}
+          <div style={{ maxHeight: '230px', overflowY: 'auto', paddingRight: '4px' }}>
+            {obstacleOrder.map((key, index) => {
+              const metaMap = {
+                orange_flare: { label: '🟠 Orange Flare', shortLabel: 'Orange', color: '#ea580c', isFlare: true },
+                blue_flare:   { label: '🔵 Blue Flare',   shortLabel: 'Blue',   color: '#0284c7', isFlare: true },
+                red_flare:    { label: '🔴 Red Flare',    shortLabel: 'Red',    color: '#ef4444', isFlare: true },
+                yellow_flare: { label: '🟡 Yellow Flare', shortLabel: 'Yellow', color: '#eab308', isFlare: true },
+                gate:         { label: '🚪 Gate Center',  shortLabel: 'Gate',   color: '#f59e0b', isFlare: false },
+                drum_red_tgt: { label: '🪣 Target Red Drum', shortLabel: 'Drum', color: '#ef4444', isFlare: false },
+              };
+              const meta = metaMap[key] || { label: key, shortLabel: key, color: '#38bdf8', isFlare: false };
               const obs = obstacles[key] || { x: 0, z: 0 };
               const currentStrategy = flareStrategies[key] || (key === 'orange_flare' ? 'MENGHINDAR' : 'TABRAK');
+              const isEnabled = obstacleEnabled[key] !== false;
 
               return (
                 <div
                   key={key}
                   style={{
-                    background: 'rgba(0,0,0,0.3)',
-                    padding: '5px 7px',
-                    borderRadius: '5px',
-                    marginBottom: '5px',
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    background: isEnabled ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    marginBottom: '6px',
+                    border: isEnabled ? `1px solid ${index === 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,255,255,0.08)'}` : '1px dashed rgba(255,255,255,0.08)',
+                    opacity: isEnabled ? 1 : 0.65,
+                    transition: 'all 0.2s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                    <span style={{ color, fontWeight: 'bold', fontSize: '0.58rem' }}>{label}</span>
-                    <span style={{ fontSize: '0.52rem', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
-                      X: {obs.x?.toFixed(1)}m | Z: {obs.z?.toFixed(1)}m
-                    </span>
+                  {/* Card Top Header: Priority Badge + Name + Enable Toggle + Coords */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.52rem',
+                          fontWeight: 'bold',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          background: index === 0
+                            ? 'linear-gradient(135deg, rgba(0,255,136,0.3), rgba(0,240,255,0.3))'
+                            : 'rgba(255,255,255,0.08)',
+                          color: index === 0 ? '#00ff88' : '#cbd5e1',
+                          border: `1px solid ${index === 0 ? 'rgba(0,255,136,0.5)' : 'rgba(255,255,255,0.15)'}`,
+                          boxShadow: index === 0 ? '0 0 8px rgba(0,255,136,0.3)' : 'none',
+                        }}
+                      >
+                        {index === 0 ? '🌟 #1 PRIORITAS' : `#${index + 1}`}
+                      </span>
+                      <span style={{ color: meta.color, fontWeight: 'bold', fontSize: '0.58rem' }}>
+                        {meta.label}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        onClick={() => {
+                          toggleObstacleEnabled(key);
+                        }}
+                        title={isEnabled ? "Klik untuk melewati obstacle ini dalam misi" : "Klik untuk mengaktifkan obstacle ini"}
+                        style={{
+                          padding: '1px 4px',
+                          fontSize: '0.48rem',
+                          fontWeight: '600',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          background: isEnabled ? 'rgba(0,255,136,0.15)' : 'rgba(239,68,68,0.15)',
+                          border: `1px solid ${isEnabled ? 'rgba(0,255,136,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                          color: isEnabled ? '#86efac' : '#fca5a5',
+                        }}
+                      >
+                        {isEnabled ? '✓ AKTIF' : '⏭️ LEWATI'}
+                      </button>
+                      <span style={{ fontSize: '0.50rem', color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+                        X:{obs.x?.toFixed(1)}m | Z:{obs.z?.toFixed(1)}m
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Priority & Reordering Controls Toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '5px', background: 'rgba(255,255,255,0.02)', padding: '2px 4px', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <button
+                        onClick={() => {
+                          moveObstacleOrder(key, 'up');
+                          const updated = [...obstacleOrder];
+                          const idx = updated.indexOf(key);
+                          if (idx > 0) {
+                            const [m] = updated.splice(idx, 1);
+                            updated.splice(idx - 1, 0, m);
+                            topicPublisher.publishObstacleOrder(updated);
+                          }
+                        }}
+                        disabled={index === 0}
+                        title={`Pindahkan ${meta.label} ke urutan lebih awal`}
+                        style={{
+                          padding: '2px 5px',
+                          fontSize: '0.50rem',
+                          borderRadius: '3px',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          color: index === 0 ? 'rgba(255,255,255,0.2)' : 'var(--text-secondary)',
+                          cursor: index === 0 ? 'not-allowed' : 'pointer',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        ▲ Naik
+                      </button>
+                      <button
+                        onClick={() => {
+                          moveObstacleOrder(key, 'down');
+                          const updated = [...obstacleOrder];
+                          const idx = updated.indexOf(key);
+                          if (idx < updated.length - 1) {
+                            const [m] = updated.splice(idx, 1);
+                            updated.splice(idx + 1, 0, m);
+                            topicPublisher.publishObstacleOrder(updated);
+                          }
+                        }}
+                        disabled={index === obstacleOrder.length - 1}
+                        title={`Pindahkan ${meta.label} ke urutan setelahnya`}
+                        style={{
+                          padding: '2px 5px',
+                          fontSize: '0.50rem',
+                          borderRadius: '3px',
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          color: index === obstacleOrder.length - 1 ? 'rgba(255,255,255,0.2)' : 'var(--text-secondary)',
+                          cursor: index === obstacleOrder.length - 1 ? 'not-allowed' : 'pointer',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        ▼ Turun
+                      </button>
+                      {index !== 0 && (
+                        <button
+                          onClick={() => {
+                            setObstaclePriority(key, 0);
+                            const updated = [...obstacleOrder];
+                            const idx = updated.indexOf(key);
+                            const [m] = updated.splice(idx, 1);
+                            updated.unshift(m);
+                            topicPublisher.publishObstacleOrder(updated);
+                          }}
+                          title={`Jadikan ${meta.label} sebagai target pertama (#1)`}
+                          style={{
+                            padding: '2px 5px',
+                            fontSize: '0.50rem',
+                            borderRadius: '3px',
+                            background: 'rgba(0,255,136,0.12)',
+                            border: '1px solid rgba(0,255,136,0.3)',
+                            color: '#86efac',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                          }}
+                        >
+                          ⭐ Jadikan #1
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <span style={{ fontSize: '0.48rem', color: 'var(--text-tertiary)' }}>Posisi:</span>
+                      <select
+                        value={index}
+                        onChange={(e) => {
+                          const targetIdx = parseInt(e.target.value, 10);
+                          setObstaclePriority(key, targetIdx);
+                          const updated = [...obstacleOrder];
+                          const curIdx = updated.indexOf(key);
+                          const [m] = updated.splice(curIdx, 1);
+                          updated.splice(targetIdx, 0, m);
+                          topicPublisher.publishObstacleOrder(updated);
+                        }}
+                        style={{
+                          background: '#0f172a',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#f8fafc',
+                          fontSize: '0.50rem',
+                          borderRadius: '3px',
+                          padding: '1px 3px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {obstacleOrder.map((_, i) => (
+                          <option key={i} value={i}>
+                            #{i + 1} {i === 0 ? '(Prioritas Utama)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   {/* TABRAK / MENGHINDAR Strategy Selector Buttons for Flares */}
-                  {isFlare && (
+                  {meta.isFlare && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '5px' }}>
                       <button
                         onClick={() => setFlareStrategy(key, 'TABRAK')}
-                        title={`Pilih mode TABRAK untuk ${label} (AUV akan menabrak hingga roboh)`}
+                        title={`Pilih mode TABRAK untuk ${meta.label} (AUV akan menabrak hingga roboh)`}
                         style={{
                           padding: '3px 4px',
                           fontSize: '0.54rem',
@@ -1101,7 +1399,7 @@ export default function ControlPanel() {
                       </button>
                       <button
                         onClick={() => setFlareStrategy(key, 'MENGHINDAR')}
-                        title={`Pilih mode MENGHINDAR untuk ${label} (AUV akan inspeksi / melewati aman tanpa kontak)`}
+                        title={`Pilih mode MENGHINDAR untuk ${meta.label} (AUV akan inspeksi / melewati aman tanpa kontak)`}
                         style={{
                           padding: '3px 4px',
                           fontSize: '0.54rem',
@@ -1139,7 +1437,7 @@ export default function ControlPanel() {
                         step="0.1"
                         value={obs.x ?? 0}
                         onChange={(e) => setObstaclePos(key, e.target.value, obs.z ?? 0)}
-                        style={{ width: '100%', accentColor: color }}
+                        style={{ width: '100%', accentColor: meta.color }}
                       />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -1151,7 +1449,7 @@ export default function ControlPanel() {
                         step="0.1"
                         value={obs.z ?? 0}
                         onChange={(e) => setObstaclePos(key, obs.x ?? 0, e.target.value)}
-                        style={{ width: '100%', accentColor: color }}
+                        style={{ width: '100%', accentColor: meta.color }}
                       />
                     </div>
                   </div>

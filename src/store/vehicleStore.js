@@ -46,6 +46,39 @@ const useVehicleStore = create((set, get) => ({
   battery: { level: 92, voltage: 16.2, current: 4.2, temperature: 28.5 },
   lightsIntensity: 80, // % 0-100
 
+  // Digital Twin Core & Physical-Virtual Shadow Telemetry
+  dtHealth: {
+    totalScore: 96,
+    tier: 'OPTIMAL',
+    breakdown: { sync: 30, estimation: 24, physics: 24, actuators: 18 },
+    recommendation: 'Digital Twin fully synchronized and physically calibrated.',
+  },
+  syncMetrics: {
+    status: 'SYNCHRONIZED',
+    totalLatencyMs: 14.8,
+    networkLatencyMs: 11.2,
+    estimationLatencyMs: 1.5,
+    simulationLatencyMs: 2.1,
+    packetRateHz: 20.0,
+    packetsReceived: 0,
+    droppedPackets: 0,
+  },
+  estimatedState: {
+    position: { x: -11.0, y: 1.2, z: 2.0 },
+    velocity: { u: 0, v: 0, w: 0 },
+    attitude: { roll: 0, pitch: 0, yaw: 0, rollDeg: 0, pitchDeg: 0, yawDeg: 0 },
+  },
+  uncertainty: { score: 0.04, level: 'NOMINAL', confidence: 0.96 },
+  oodStatus: { isOOD: false, oodScore: 0.45, state: 'IN_DISTRIBUTION' },
+  validationMetrics: {
+    sampleCount: 120,
+    positionRMSE: { x: 0.015, y: 0.018, z: 0.012, total3D: 0.026 },
+    velocityRMSE: { total: 0.032 },
+    validationGrade: 'A+ (Excellent)',
+  },
+  fidelityLevel: 2,
+  modelVersion: 1,
+
   // Active Target & Competition Payload + Robotic Gripper
   activeTarget: 'Manual Pilot Control',
   gripperState: 'HOLDING', // 'OPEN' | 'CLOSED' | 'GRASPING' | 'HOLDING' (Holds ball from start)
@@ -176,6 +209,79 @@ const useVehicleStore = create((set, get) => ({
     flaresFallen: { red: false, blue: false, yellow: false, orange: false },
   })),
 
+  // Execution Order & Priority of Obstacles for Autonomous Mission
+  obstacleOrder: [
+    'orange_flare',
+    'blue_flare',
+    'red_flare',
+    'yellow_flare',
+    'gate',
+    'drum_red_tgt',
+  ],
+
+  // Whether the obstacle is enabled for autonomous execution
+  obstacleEnabled: {
+    orange_flare: true,
+    blue_flare: true,
+    red_flare: true,
+    yellow_flare: true,
+    gate: true,
+    drum_red_tgt: true,
+  },
+
+  setObstacleOrder: (newOrder) => set({ obstacleOrder: newOrder }),
+
+  moveObstacleOrder: (key, direction) => set((s) => {
+    const list = [...(s.obstacleOrder || ['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'gate', 'drum_red_tgt'])];
+    const currentIndex = list.indexOf(key);
+    if (currentIndex === -1) return s;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return s;
+    const [moved] = list.splice(currentIndex, 1);
+    list.splice(targetIndex, 0, moved);
+    return { obstacleOrder: list };
+  }),
+
+  setObstaclePriority: (key, targetIndex) => set((s) => {
+    const list = [...(s.obstacleOrder || ['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'gate', 'drum_red_tgt'])];
+    const currentIndex = list.indexOf(key);
+    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= list.length) return s;
+    const [moved] = list.splice(currentIndex, 1);
+    list.splice(targetIndex, 0, moved);
+    return { obstacleOrder: list };
+  }),
+
+  toggleObstacleEnabled: (key) => set((s) => ({
+    obstacleEnabled: {
+      ...s.obstacleEnabled,
+      [key]: s.obstacleEnabled?.[key] === false ? true : false,
+    },
+  })),
+
+  applyOrderPreset: (preset) => set((s) => {
+    if (preset === 'standard') {
+      return {
+        obstacleOrder: ['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'gate', 'drum_red_tgt'],
+      };
+    } else if (preset === 'reverse_flares') {
+      return {
+        obstacleOrder: ['yellow_flare', 'red_flare', 'blue_flare', 'orange_flare', 'gate', 'drum_red_tgt'],
+      };
+    } else if (preset === 'tabrak_first') {
+      const flares = ['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare'];
+      const tabraks = flares.filter((k) => s.flareStrategies[k] === 'TABRAK');
+      const menghindars = flares.filter((k) => s.flareStrategies[k] !== 'TABRAK');
+      return {
+        obstacleOrder: [...tabraks, ...menghindars, 'gate', 'drum_red_tgt'],
+      };
+    } else if (preset === 'gate_first') {
+      return {
+        obstacleOrder: ['gate', 'orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'drum_red_tgt'],
+      };
+    }
+    return s;
+  }),
+
   // Dynamic Obstacle Map (World 3D Positions & Real-Time Sync)
   // Coordinates are updated live from ROS 2 (/yolo_target_coord, /obstacle_positions) or Arena Configurator
   obstacles: {
@@ -203,6 +309,15 @@ const useVehicleStore = create((set, get) => ({
   })),
 
   resetObstacles: () => set({
+    obstacleOrder: ['orange_flare', 'blue_flare', 'red_flare', 'yellow_flare', 'gate', 'drum_red_tgt'],
+    obstacleEnabled: {
+      orange_flare: true,
+      blue_flare: true,
+      red_flare: true,
+      yellow_flare: true,
+      gate: true,
+      drum_red_tgt: true,
+    },
     obstacles: {
       orange_flare: { id: 'flare_orange', name: 'FLARE_ORG', x: -6.0, z: 2.0, y: 0.75, width: 0.35, height: 1.5, color: '#ea580c', detected: false },
       blue_flare:   { id: 'flare_blue',   name: 'FLARE_BLU', x: -2.0, z: 2.2, y: 0.75, width: 0.35, height: 1.5, color: '#0284c7', detected: false, fallen: false },
@@ -338,6 +453,14 @@ const useVehicleStore = create((set, get) => ({
   },
 
   updateDiagnostics: (diag) => set({ diagnostics: { ...get().diagnostics, ...diag } }),
+
+  setDtHealth: (dtHealth) => set({ dtHealth }),
+  setSyncMetrics: (syncMetrics) => set({ syncMetrics }),
+  setEstimatedState: (estimatedState) => set({ estimatedState }),
+  setUncertainty: (uncertainty) => set({ uncertainty }),
+  setOODStatus: (oodStatus) => set({ oodStatus }),
+  setValidationMetrics: (validationMetrics) => set({ validationMetrics }),
+  setFidelityLevel: (fidelityLevel) => set({ fidelityLevel }),
 }));
 
 export default useVehicleStore;

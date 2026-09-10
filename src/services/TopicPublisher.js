@@ -4,6 +4,7 @@ class TopicPublisher {
   constructor() {
     this.cmdVelTopic = null;
     this.thrusterCmdTopic = null;
+    this.obstacleOrderTopic = null;
   }
 
   init(ros) {
@@ -23,7 +24,14 @@ class TopicPublisher {
       messageType: 'std_msgs/msg/Float64MultiArray',
     });
 
-    console.log('[TopicPublisher] Advertised /cmd_vel & /thruster_commands on ROS2');
+    // 3. Dynamic Obstacle Order & Priority Topic (for Jetson Autonomous Sequencing)
+    this.obstacleOrderTopic = new Topic({
+      ros,
+      name: '/mission_obstacle_order',
+      messageType: 'std_msgs/msg/String',
+    });
+
+    console.log('[TopicPublisher] Advertised /cmd_vel, /thruster_commands & /mission_obstacle_order on ROS2');
   }
 
   /**
@@ -59,6 +67,20 @@ class TopicPublisher {
     this.thrusterCmdTopic.publish(msg);
   }
 
+  /**
+   * Publish obstacle priority order to Jetson / ROS2 network
+   */
+  publishObstacleOrder(orderList) {
+    if (!this.obstacleOrderTopic || !orderList) return;
+
+    const msg = {
+      data: JSON.stringify(orderList),
+    };
+
+    this.obstacleOrderTopic.publish(msg);
+    console.log('[TopicPublisher] 📡 Published updated obstacle execution order:', orderList);
+  }
+
   emergencyStop() {
     this.publishVelocity(0, 0, 0, 0);
     this.publishThrusters([0, 0, 0, 0, 0, 0]);
@@ -73,6 +95,10 @@ class TopicPublisher {
     if (this.thrusterCmdTopic) {
       this.thrusterCmdTopic.unadvertise();
       this.thrusterCmdTopic = null;
+    }
+    if (this.obstacleOrderTopic) {
+      this.obstacleOrderTopic.unadvertise();
+      this.obstacleOrderTopic = null;
     }
   }
 }

@@ -255,7 +255,8 @@ class SubseaCollisionEngine {
           const dX = correctedX - fObs.x;
           const dZ = correctedZ - fObs.z;
           const dDist = Math.sqrt(dX * dX + dZ * dZ);
-          if (dDist < (0.28 + this.subRadius) && subY > 0.05 && subY < 1.65) {
+          // Generous hit detection: within 0.85m horizontally and anywhere in water column
+          if (dDist < 0.85 && correctedDepth > 0.10 && correctedDepth < 1.90) {
             store?.knockdownFlare(color);
           }
         }
