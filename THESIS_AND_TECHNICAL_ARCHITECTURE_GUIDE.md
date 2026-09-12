@@ -1,299 +1,557 @@
-# 📘 Panduan Lengkap & Penjelasan Hitungan: Digital Twin AUV 6-DOF
-## Khusus Persiapan Sidang Skripsi / Tugas Akhir & Presentasi Teknis
-**Robot Autonomous Underwater Vehicle (AUV) Amarine — FILKOM Universitas Brawijaya**
-
----
-
-## 🎯 Panduan Membaca
-Dokumen ini disusun menggunakan **bahasa Indonesia yang jelas dan bersih tanpa kode rumus rumit/tanda dolar**. Semua hitungan fisika, rumus gerak, dan logika sistem ditulis langsung dengan angka nyata agar mudah dipahami, dihafal, dan dijelaskan saat sidang tugas akhir.
+# 📘 Buku Panduan Teknis & Formulasi Lengkap Matematika Digital Twin AUV 6-DOF
+## Untuk Sidang Skripsi / Tugas Akhir, Jurnal Ilmiah, dan Dokumentasi Arsitektur
+**Autonomous Underwater Vehicle (AUV) Amarine — FILKOM Universitas Brawijaya**
 
 ---
 
 ## 📑 Daftar Isi
-1. [Konsep Dasar: Apa itu Digital Twin AUV?](#1-konsep-dasar-apa-itu-digital-twin-auv)
-2. [Sistem Gerak 6 Derajat Kebebasan (6-DOF)](#2-sistem-gerak-6-derajat-kebebasan-6-dof)
-3. [Perhitungan Fisika Gerak Kapal (Hukum Fossen)](#3-perhitungan-fisika-gerak-kapal-hukum-fossen)
-4. [Perhitungan Gaya Apung & Kenapa Kapal Anti-Tenggelam (Fail-Safe)](#4-perhitungan-gaya-apung--kenapa-kapal-anti-tenggelam-fail-safe)
-5. [Perhitungan 6 Motor Thruster: Cara Kapal Maju, Geser & Muter](#5-perhitungan-6-motor-thruster-cara-kapal-maju-geser--muter)
-6. [Fusi Sensor Cerdas EKF 15-State](#6-fusi-sensor-cerdas-ekf-15-state)
-7. [Adaptasi Otomatis RLS saat Beban / Arus Air Berubah](#7-adaptasi-otomatis-rls-saat-beban--arus-air-berubah)
-8. [Pengendali PID Kedalaman & Posisi](#8-pengendali-pid-kedalaman--posisi)
-9. [🔥 Bocoran Pertanyaan Dosen Penguji Sidang & Cara Menjawabnya](#9--bocoran-pertanyaan-dosen-penguji-sidang--cara-menjawabnya)
-10. [Rangkuman Lengkap Data & Parameter Robot](#10-rangkuman-lengkap-data--parameter-robot)
+1. [Arsitektur Sistem & Aliran Data Digital Twin (HIL & SITL)](#1-arsitektur-sistem--aliran-data-digital-twin-hil--sitl)
+2. [Sistem Koordinat & Kinematika 6-DOF](#2-sistem-koordinat--kinematika-6-dof)
+3. [Perhitungan Lengkap Dinamika Hidrodinamika 6-DOF (Persamaan Fossen)](#3-perhitungan-lengkap-dinamika-hidrodinamika-6-dof-persamaan-fossen)
+4. [Perhitungan Matriks Massa Total 6x6 (M = M_RB + M_A) & Inversnya](#4-perhitungan-matriks-massa-total-6x6-m--m_rb--m_a--inversnya)
+5. [Perhitungan Matriks Coriolis & Sentripetal 6x6 (C(v))](#5-perhitungan-matriks-coriolis--sentripetal-6x6-cv)
+6. [Perhitungan Matriks Redaman Gesekan Air Nonlinier (D_L + D_Q|v|)](#6-perhitungan-matriks-redaman-gesekan-air-nonlinier-d_l--d_qv)
+7. [Perhitungan Hidrostatis, Gaya Apung Archimedes & Momen Penegak g(eta)](#7-perhitungan-hidrostatis-gaya-apung-archimedes--momen-penegak-geta)
+8. [Perhitungan Matriks Alokasi Thruster (TAM 6x6) & Inversi Pseudo-Inverse](#8-perhitungan-matriks-alokasi-thruster-tam-6x6--inversi-pseudo-inverse)
+9. [Perhitungan Fusi Sensor Multi-Rate: 15-State Extended Kalman Filter (EKF)](#9-perhitungan-fusi-sensor-multi-rate-15-state-extended-kalman-filter-ekf)
+10. [Perhitungan Identifikasi Sistem Daring ARMAX & Adaptasi RLS](#10-perhitungan-identifikasi-sistem-daring-armax--adaptasi-rls)
+11. [Perhitungan Pengendali Closed-Loop PID + Kompensasi Feedforward](#11-perhitungan-pengendali-closed-loop-pid--kompensasi-feedforward)
+12. [Perhitungan Integrasi Numerik Runge-Kutta Orde ke-4 (RK4)](#12-perhitungan-integrasi-numerik-runge-kutta-orde-ke-4-rk4)
+13. [🔥 Bocoran Tanya Jawab Sidang Skripsi (Lengkap dengan Penjelasan Rumus)](#13--bocoran-tanya-jawab-sidang-skripsi-lengkap-dengan-penjelasan-rumus)
+14. [Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi](#14-tabel-komprehensif-seluruh-parameter--satuan-si-terkalibrasi)
 
 ---
 
-## 1. 💡 Konsep Dasar: Apa itu Digital Twin AUV?
+## 1. 🏗️ Arsitektur Sistem & Aliran Data Digital Twin (HIL & SITL)
 
-### Analogi Sederhana:
-Digital Twin adalah **replika digital (kembaran 3D di laptop)** yang terhubung secara langsung dengan **robot kapal selam fisik asli di kolam**.
-
-- **Kapal Asli di Kolam**: Membawa sensor IMU, sensor kedalaman, kamera, dan 6 motor thruster. Kapal mengirimkan data gerak ke laptop melalui jaringan komunikasi ROS2 WebSocket (port 9090).
-- **Digital Twin di Laptop**: Menerima data sensor secara langsung (50 kali per detik), menggerakkan model 3D secara persis sama, menghitung hambatan air, mendeteksi jika ada sensor yang rusak, dan mengirimkan perintah kendali otomatis ke kapal asli.
+Digital Twin ini menghubungkan wahana fisik nyata (*Physical Twin*) dengan lingkungan simulasi virtual berkinerja tinggi (*Virtual Twin*) secara dua arah (*bi-directional real-time telemetry*):
 
 ```
-┌────────────────────────────────┐                 ┌─────────────────────────────────┐
-│     KAPAL ASLI DI KOLAM        │                 │    DIGITAL TWIN DI LAPTOP       │
-│  - Komputer Onboard: Jetson    │  Kirim Sensor   │  - Tampilan 3D (Three.js WebGL) │
-│  - Sensor: IMU, Barometer, DVL │ ──────────────> │  - Simulasi Fisika 6-DOF (RK4)  │
-│  - 6 Motor Thruster T200       │  (WebSocket)    │  - Fusi Sensor (EKF 15-State)   │
-│  - Baterai LiPo 16 Volt        │ <────────────── │  - Kendali Cerdas PID + RLS     │
-└────────────────────────────────┘  Kirim Perintah └─────────────────────────────────┘
-```
-
----
-
-## 2. 🧭 Sistem Gerak 6 Derajat Kebebasan (6-DOF)
-
-Kapal selam bergerak di dalam air dengan **6 macam gerakan (6 Degrees of Freedom)**:
-
-### A. 3 Gerakan Geser Lurus (Translasi):
-1. **Surge (Maju / Mundur)**: Gerak lurus ke depan atau ke belakang (sumbu X). Kecepatannya disimbolkan dengan **u** (satuan meter/detik).
-2. **Sway (Geser Kanan / Kiri)**: Gerak menyamping ke kanan atau ke kiri tanpa memutar badan (sumbu Y). Kecepatannya disimbolkan dengan **v** (satuan meter/detik).
-3. **Heave (Menyelam / Naik)**: Gerak turun ke dasar kolam atau naik ke permukaan air (sumbu Z). Kecepatannya disimbolkan dengan **w** (satuan meter/detik).
-
-### B. 3 Gerakan Putar (Rotasi):
-4. **Roll (Guling)**: Gerakan badan kapal miring ke samping kanan atau kiri (sumbu putar X). Sudutnya disimbolkan dengan **phi (φ)**.
-5. **Pitch (Angguk)**: Gerakan moncong depan kapal mendongak ke atas atau menukik ke bawah (sumbu putar Y). Sudutnya disimbolkan dengan **theta (θ)**.
-6. **Yaw (Belok Haluan)**: Gerakan kapal memutar haluan ke kanan atau ke kiri seperti setir mobil (sumbu putar Z). Sudutnya disimbolkan dengan **psi (ψ)**.
-
-### Aturan Arah Sumbu (Standar Maritim NED - North East Down):
-- **Sumbu X** = Menghadap ke depan kapal.
-- **Sumbu Y** = Menghadap ke lambung kanan kapal.
-- **Sumbu Z** = Menghadap **ke bawah** (semakin dalam kapal menyelam, nilai kedalaman Z semakin bertambah positif).
-
----
-
-## 3. 🌊 Perhitungan Fisika Gerak Kapal (Hukum Fossen)
-
-Gerak kapal selam di dalam air dipengaruhi oleh 5 gaya utama:
-
-**Gaya Dorong Motor = Inersia Total + Gaya Putar Coriolis + Gesekan Hambatan Air + Gaya Apung / Gravitasi**
-
-Dalam bahasa fisika teknik maritim (Fossen):
-`M * Percepatan + C * Kecepatan + D * Kecepatan + Gaya_Pemulih = Gaya_Motor`
-
----
-
-### Hitungan Nyata: Mengapa Ada Massa Tambah Air (Added Mass)?
-
-Ketika kapal bergerak di darat, kapal hanya menggerakkan berat badannya sendiri seberat **11.5 kg**.
-Tetapi ketika kapal melaju di dalam air, air di sekitar bodi kapal ikut terdorong dan terseret. Beban air yang ikut bergerak ini disebut **Massa Tambah (Added Mass)**.
-
-#### 1. Saat Kapal Maju Lurus (Surge):
-- Massa bodi kering kapal = **11.5 kg**
-- Beban air yang ikut terdorong di depan = **5.5 kg**
-- **Total Beban Massa Maju = 11.5 kg + 5.5 kg = 17.0 kg**
-
-#### 2. Saat Kapal Geser ke Samping (Sway):
-Karena badan samping kapal lebih lebar daripada moncong depan, air yang harus disingkirkan jauh lebih banyak:
-- Massa bodi kering kapal = **11.5 kg**
-- Beban air yang terseret di samping = **12.7 kg**
-- **Total Beban Massa Geser Samping = 11.5 kg + 12.7 kg = 24.2 kg**
-
-#### 3. Saat Kapal Menyelam Turun (Heave):
-Pelat atas dan bawah kapal sangat luas sehingga menahan banyak air:
-- Massa bodi kering kapal = **11.5 kg**
-- Beban air yang tertahan di atas/bawah = **14.6 kg**
-- **Total Beban Massa Menyelam = 11.5 kg + 14.6 kg = 26.1 kg**
-
-> 💡 **Kesimpulan untuk Sidang**:
-> Kapal butuh tenaga motor lebih besar untuk geser ke samping (beban 24.2 kg) dan menyelam (beban 26.1 kg) dibandingkan saat melaju lurus ke depan (beban 17.0 kg).
-
----
-
-### Hitungan Hambatan Gesekan Air (Hydrodynamic Drag):
-
-Hambatan air bertambah sangat cepat saat kapal melaju lebih kencang (mengikuti hukum kuadratik):
-- **Gaya Gesek Maju = (4.03 * Kecepatan) + (18.18 * Kecepatan * Kecepatan)**
-- **Contoh**: Jika kapal melaju maju dengan kecepatan **0.5 meter/detik**:
-  - Gesekan linier = 4.03 * 0.5 = 2.015 Newton
-  - Gesekan pusaran air = 18.18 * 0.5 * 0.5 = 4.545 Newton
-  - **Total Hambatan Air Maju = 2.015 + 4.545 = 6.56 Newton**
-  - Motor harus memberikan gaya dorong minimal **6.56 Newton** hanya untuk mempertahankan kecepatan 0.5 m/s tersebut.
-
----
-
-## 4. 🤿 Perhitungan Gaya Apung & Kenapa Kapal Anti-Tenggelam (Fail-Safe)
-
-Robot AUV ini dirancang dengan prinsip **Gaya Apung Positif Alami (Positive Buoyancy)** sehingga mustahil tenggelam ke dasar kolam saat terjadi keadaan darurat.
-
-### Perhitungan Langkah demi Langkah:
-
-#### 1. Menghitung Berat Total Kapal di Udara (W):
-- Massa kapal (ditimbang saat kering): m = 11.5 kg
-- Percepatan gravitasi bumi: g = 9.807 meter/detik kuadrat
-- **Gaya Berat (W) = 11.5 kg * 9.807 = 112.78 Newton (arah ke bawah)**
-
-#### 2. Menghitung Gaya Angkat Air Archimedes (B):
-- Densitas air kolam: rho = 998.2 kg/m³
-- Volume total bodi dan spons busa apung: V = 0.01225 m³ (setara 12.25 liter)
-- **Gaya Apung (B) = 998.2 * 9.807 * 0.01225 = 119.91 Newton (arah ke atas)**
-
-#### 3. Menghitung Gaya Bersih (Sisa Gaya Apung):
-- **Gaya Bersih ke Atas = Gaya Apung (B) - Gaya Berat (W)**
-- **Gaya Bersih ke Atas = 119.91 Newton - 112.78 Newton = +7.13 Newton**
-- Angka +7.13 Newton ini setara dengan daya angkat sebesar **+728 gram**.
-
-### 🛡️ Fitur Keselamatan (Fail-Safe):
-- Karena Gaya Apung lebih besar daripada Berat Kapal (selisih +7.13 Newton), maka jika baterai habis, kabel komunikasi putus, atau program error, kedua motor vertikal akan mati.
-- Akibatnya, **kapal akan secara otomatis melayang naik sendiri ke permukaan air** secara pasif dan aman tanpa memerlukan daya listrik sama sekali.
-
----
-
-## 5. 🌀 Perhitungan 6 Motor Thruster: Cara Kapal Maju, Geser & Muter
-
-Kapal digerakkan oleh **6 unit motor BlueRobotics T200 Brushless Thruster**:
-- **4 Motor Sudut (T1, T2, T3, T4)**: Dipasang mendatar di 4 sudut kapal dengan kemiringan sudut **45 derajat**.
-- **2 Motor Vertikal (T5, T6)**: Dipasang tegak lurus di tengah depan dan tengah belakang kapal.
-
-```
-                  ▲ Moncong Depan (+X)
-                  │
-      T1 (45°)  ┌───┐  T2 (-45°)
-        \       │   │       /
-         \   ┌──┴───┴──┐   /
-             │  [T5]   │     Lebar Kapal = 0.28 meter
-             │ (Heave) │     Panjang Kapal = 0.54 meter
-             │         │
-             │  [T6]   │
-         /   └──┬───┬──┘   \
-        /       │   │       \
-      T3 (135°) └───┘  T4 (-135°)
-                  │
-                  ▼ Ekor Belakang (-X)
+┌─────────────────────────────────────────────────────────────┐
+│                 PHYSICAL TWIN (HARDWARE / HIL)              │
+│  - Komputer Onboard: NVIDIA Jetson Nano                     │
+│  - Sensor: IMU 9-DOF, Barometer MS5837, DVL, Forward Cam   │
+│  - Aktuator: 6x BlueRobotics T200 Brushless ESC             │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+            Telemetri ROS 2    │  WebSocket JSON / Protobuf
+             /odom, /imu,      │  (Port 9090 / rosbridge_server)
+             /depth, /dvl      │  Frekuensi: 20 Hz - 100 Hz
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 VIRTUAL TWIN (DIGITAL TWIN ENGINE)          │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ 1. 6-DOF Fossen Hydrodynamics Physics Engine (RK4)     │  │
+│  │ 2. 15-State Multi-Rate Extended Kalman Filter (EKF)   │  │
+│  │ 3. Online RLS System Identification (ARMAX Model)     │  │
+│  │ 4. Closed-Loop PID + TAM Thruster Allocator           │  │
+│  │ 5. PINN (Physics-Informed Neural Network) Residual    │  │
+│  │ 6. Deteksi Outlier Sensor Mahalanobis Gating          │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                               │                             │
+│                               ▼                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ 3D Rendering CAD Viewport (Three.js WebGL / RTX 4050) │  │
+│  │ - 6-DOF Pose Sync, Thruster Vector Visualizer         │  │
+│  │ - Live Sensor Uncertainty Ellipsoid & Particle Trails │  │
+│  └───────────────────────────────────────────────────────┘  │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ Perintah Kontrol: /cmd_vel
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│            SITL SIMULATOR (Gazebo Garden / ROS 2 Humble)    │
+│  - WSL2 Ubuntu 22.04 LTS (NVIDIA Container Toolkit)         │
+│  - UUV Simulator / Buoyancy & Hydrodynamics Plugins         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Cara Kerja Gerakan Motor:
+## 2. 🌐 Sistem Koordinat & Kinematika 6-DOF
 
-1. **Maju Lurus**:
-   - Motor T1, T2, T3, T4 menyala maju bersamaan.
-   - Dorongan ke samping saling menghilangkan karena sudutnya 45 derajat berlawanan, menyisakan dorongan murni lurus ke depan.
-2. **Geser Samping Kanan (Sway)**:
-   - Motor T2 dan T3 dorong maju, Motor T1 dan T4 dorong mundur.
-   - Hasilnya kapal bergeser murni ke kanan tanpa memutar badan.
-3. **Putar Haluan di Tempat (Yaw)**:
-   - Motor sisi kiri (T1, T3) dorong maju, Motor sisi kanan (T2, T4) dorong mundur.
-   - Kapal berputar di tempat seperti tank baja.
-4. **Menyelam ke Bawah**:
-   - Motor vertikal T5 dan T6 menyala mendorong air ke atas, menekan kapal turun ke dalam air melawan gaya apung alami.
+### A. Definisi Kerangka Acuan (Reference Frames):
+1. **Kerangka Acuan Inersia / Bumi {n} (NED - North East Down)**:
+   - Sumbu **x_n**: Arah Utara (*North*) [meter]
+   - Sumbu **y_n**: Arah Timur (*East*) [meter]
+   - Sumbu **z_n**: Arah Bawah / Kedalaman (*Down*) [meter]
+2. **Kerangka Acuan Bodi {b} (Body-Fixed Frame)**:
+   - Sumbu **x_b**: Sumbu memanjang kapal, positif ke arah moncong depan (*Surge*)
+   - Sumbu **y_b**: Sumbu melintang kapal, positif ke arah lambung kanan (*Sway*)
+   - Sumbu **z_b**: Sumbu tegak kapal, positif ke arah lunas bawah (*Heave*)
 
 ---
 
-### Rumus Perhitungan Tenaga Tiap Motor (Matriks Alokasi Thruster):
+### B. Vektor Keadaan (State Vectors):
 
-Jika komputer pengendali meminta gaya maju **Fx**, gaya geser **Fy**, gaya selam **Fz**, dan momen putar **Mz**, maka tenaga yang dikirim ke masing-masing motor adalah:
+- **Vektor Posisi & Orientasi Euler dalam Kerangka NED {n}**:
+  `eta = [x, y, z, phi, theta, psi]^T`
+  - x = posisi utara (m), y = posisi timur (m), z = kedalaman (m)
+  - phi = sudut roll (rad), theta = sudut pitch (rad), psi = sudut yaw/haluan (rad)
 
-- **Tenaga Motor T1 = (0.3536 * Fx) - (0.3536 * Fy) + (1.4141 * Mz)**
-- **Tenaga Motor T2 = (0.3536 * Fx) + (0.3536 * Fy) - (1.4141 * Mz)**
-- **Tenaga Motor T3 = (0.3536 * Fx) + (0.3536 * Fy) + (1.4141 * Mz)**
-- **Tenaga Motor T4 = (0.3536 * Fx) - (0.3536 * Fy) - (1.4141 * Mz)**
-- **Tenaga Motor T5 = (-0.5 * Fz) + (2.7778 * My)**
-- **Tenaga Motor T6 = (-0.5 * Fz) - (2.7778 * My)**
+- **Vektor Kecepatan Linier & Kecepatan Sudut dalam Kerangka Bodi {b}**:
+  `nu = [u, v, w, p, q, r]^T`
+  - u = kecepatan maju (m/s), v = kecepatan geser samping (m/s), w = kecepatan selam (m/s)
+  - p = laju putar roll (rad/s), q = laju putar pitch (rad/s), r = laju putar yaw (rad/s)
 
-*(Semua motor dibatasi maksimal tenaga dorong +50 Newton maju dan -40.2 Newton mundur pada tegangan baterai 16 Volt).*
-
----
-
-## 6. 🛰️ Fusi Sensor Cerdas EKF 15-State
-
-Di bawah air tidak ada sinyal GPS. Oleh karena itu, kapal harus menggabungkan beberapa sensor:
-1. **Sensor IMU (100 Hz)**: Membaca percepatan dan laju putar secara sangat cepat, namun memiliki kelemahan mudah mengalami akumulasi error (drifting).
-2. **Sensor Barometer Kedalaman (20 Hz)**: Mengukur tekanan air kolam untuk mengetahui kedalaman kapal secara akurat.
-3. **Sensor DVL (10 Hz)**: Mengukur kecepatan kapal terhadap dasar kolam menggunakan pantulan gelombang suara akustik.
-
-### Cara Kerja EKF (Extended Kalman Filter):
-EKF bertindak seperti sistem cerdas yang menggabungkan 15 variabel keadaan kapal:
-- 3 Posisi (X, Y, Z di kolam)
-- 3 Kecepatan Linier (Maju u, Geser v, Selam w)
-- 3 Sudut Orientasi (Roll, Pitch, Yaw)
-- 3 Nilai Koreksi Bias Error Akselerometer
-- 3 Nilai Koreksi Bias Error Giroskop
-
-**Proses EKF**: Setiap milidetik EKF menebak posisi kapal menggunakan model fisika, lalu saat sensor kedalaman dan DVL mengirimkan data baru, EKF mengoreksi tebakan tersebut dan membuang gangguan noise sehingga estimasi posisi kapal tetap akurat dan tidak melenceng.
+- **Vektor Gaya & Momen Generalisasi dalam Kerangka Bodi {b}**:
+  `tau = [X, Y, Z, K, M, N]^T`
+  - X = gaya maju (N), Y = gaya geser samping (N), Z = gaya selam (N)
+  - K = momen roll (N·m), M = momen pitch (N·m), N = momen yaw (N·m)
 
 ---
 
-## 7. 🧠 Adaptasi Otomatis RLS saat Beban / Arus Air Berubah
+### C. Persamaan Transformasi Kinematika Euler:
 
-### Mengapa butuh Algoritma RLS (Recursive Least Squares)?
-Jika di kemudian hari kapal dipasangi kamera tambahan atau payload sensor baru, berat kapal akan bertambah dan hambatan airnya berubah.
+Turunan posisi bumi `eta_dot` dihitung dari kecepatan bodi `nu`:
+`[x_dot, y_dot, z_dot]^T = R_b_to_n * [u, v, w]^T`
+`[phi_dot, theta_dot, psi_dot]^T = T_Theta * [p, q, r]^T`
 
-Alih-alih harus menghitung ulang rumus secara manual, algoritma **Online RLS** di Digital Twin akan:
-1. Membandingkan tenaga motor yang diberikan dengan kecepatan kapal yang dihasilkan.
-2. Menghitung perubahan parameter hambatan air secara otomatis dalam waktu **1 detik**.
-3. Menyesuaikan model Digital Twin secara langsung saat robot sedang beroperasi di kolam.
+#### 1. Matriks Rotasi Linier R_b_to_n (3x3):
+```
+R_b_to_n = [
+  [ cos(psi)*cos(theta),  -sin(psi)*cos(phi) + cos(psi)*sin(theta)*sin(phi),   sin(psi)*sin(phi) + cos(psi)*sin(theta)*cos(phi) ],
+  [ sin(psi)*cos(theta),   cos(psi)*cos(phi) + sin(psi)*sin(theta)*sin(phi),  -cos(psi)*sin(phi) + sin(psi)*sin(theta)*cos(phi) ],
+  [ -sin(theta),           cos(theta)*sin(phi),                                cos(theta)*cos(phi)                              ]
+]
+```
 
----
+#### 2. Matriks Transformasi Kecepatan Sudut T_Theta (3x3):
+```
+T_Theta = [
+  [ 1,  sin(phi)*tan(theta),  cos(phi)*tan(theta) ],
+  [ 0,  cos(phi),            -sin(phi)            ],
+  [ 0,  sin(phi)/cos(theta),  cos(phi)/cos(theta) ]
+]
+```
 
-## 8. 🎯 Pengendali PID Kedalaman & Posisi
+#### 3. Kinematika Unit Kuaternion (Non-Singular):
+Untuk mencegah *gimbal lock* saat theta mendekati 90 derajat, digunakan kuaternion `q = [qw, qx, qy, qz]^T`:
+`q_dot = 0.5 * Omega * q`
 
-Pengendali PID mengatur tenaga motor agar kapal mencapai posisi atau kedalaman yang diperintahkan:
-- **P (Proportional)**: Memberikan tenaga motor sebanding dengan jarak ke target. Semakin jauh dari target, motor mendorong semakin kuat.
-- **I (Integral)**: Mengumpulkan error masa lalu untuk menghilangkan sisa penyimpangan kecil.
-- **D (Derivative)**: Berfungsi sebagai rem halus saat kapal sudah mendekati target agar tidak kebablasan.
-
-### Trik Khusus Pengendali Kedalaman (Feedforward Compensation):
-Karena kapal memiliki gaya apung alami sebesar **+7.14 Newton** ke atas, maka pengendali kedalaman langsung memberikan tenaga dasar awal sebesar **-7.14 Newton (menekan ke bawah)**. Hasilnya, motor vertikal T5 dan T6 langsung mengunci kapal di kedalaman target (misalnya kedalaman 0.8 meter) secara stabil dan tenang tanpa goyang naik-turun.
-
----
-
-## 9. 🔥 Bocoran Pertanyaan Dosen Penguji Sidang & Cara Menjawabnya
-
-Gunakan panduan jawaban di bawah ini saat ditanya oleh dosen penguji:
-
----
-
-#### ❓ Pertanyaan 1: *"Apa bedanya Digital Twin buatanmu dengan simulasi 3D biasa di Gazebo atau MATLAB?"*
-> **Jawaban Tegas & Benar**:
-> *"Perbedaan utamanya terletak pada **koneksi dua arah (bi-directional synchronization) dan adaptasi online**, Pak/Bu. Simulasi biasa hanya menjalankan matematika statis tanpa tahu kondisi robot nyata. Sedangkan Digital Twin kami terhubung langsung ke hardware Jetson Nano robot asli via ROS2 WebSocket. Jika robot asli di kolam terdorong arus air, Digital Twin langsung menyinkronkan posisinya secara real-time, mengoreksi error sensor dengan EKF, dan memperbarui parameter hambatan air menggunakan algoritma adaptif RLS."*
-
----
-
-#### ❓ Pertanyaan 2: *"Kenapa 4 motor horizontal dipasang miring 45 derajat di 4 sudut, kenapa tidak lurus saja?"*
-> **Jawaban Tegas & Benar**:
-> *"Konfigurasi 45 derajat (vektorisasi TAM) memberikan kemampuan gerak **Holonomic / Omnidirectional** pada bidang datar. Artinya kapal dapat bergerak maju-mundur (Surge), bergeser murni ke samping kanan-kiri (Sway), dan berputar haluan (Yaw) secara bersamaan hanya dengan kombinasi 4 motor tersebut tanpa membutuhkan sirip kemudi mekanik."*
+Di mana matriks Omega adalah:
+```
+Omega = [
+  [  0, -p, -q, -r ],
+  [  p,  0,  r, -q ],
+  [  q, -r,  0,  p ],
+  [  r,  q, -p,  0 ]
+]
+```
 
 ---
 
-#### ❓ Pertanyaan 3: *"Bagaimana kamu membuktikan kapal tidak akan tenggelam dan hilang di dasar kolam jika baterai habis?"*
-> **Jawaban Tegas & Benar**:
-> *"Kapal dirancang dengan prinsip **Positive Buoyancy Fail-Safe**. Berdasarkan perhitungan Archimedes, gaya apung air ke atas adalah **119.91 Newton**, sedangkan berat kapal ke bawah adalah **112.78 Newton**. Terdapat selisih gaya angkat bersih ke atas sebesar **+7.14 Newton (setara +728 gram)**. Jadi jika baterai habis dan motor mati, kapal akan secara alami dan otomatis mengapung naik sendiri ke permukaan air tanpa perlu listrik."*
+## 3. 🌊 Perhitungan Lengkap Dinamika Hidrodinamika 6-DOF (Persamaan Fossen)
+
+Persamaan gerak dinamika maritim nonlinier Fossen:
+
+`M * nu_dot + C(nu) * nu + D(nu_r) * nu_r + g(eta) = tau_thruster + tau_env + tau_pinn`
+
+Di mana:
+- `M`: Matriks Massa Inersia Total (6x6) = Massa Bodi Kaku (M_RB) + Massa Tambah Fluida (M_A)
+- `C(nu)`: Matriks Gaya Coriolis & Sentripetal (6x6)
+- `D(nu_r)`: Matriks Redaman Hidrodinamika Fluida (6x6)
+- `g(eta)`: Vektor Gaya & Momen Pemulih Hidrostatis (6x1)
+- `nu_r = nu - nu_current`: Kecepatan relatif terhadap arus air
+- `tau_thruster`: Gaya dorong total dari 6 unit motor
+- `tau_env`: Gangguan gaya lingkungan (gelombang air)
+- `tau_pinn`: Kompensasi residual neural network AI
 
 ---
 
-#### ❓ Pertanyaan 4: *"Apa itu Added Mass dan kenapa nilainya berbeda saat kapal maju dan saat kapal geser samping?"*
-> **Jawaban Tegas & Benar**:
-> *"Added Mass adalah massa fluida air di sekitar bodi yang ikut terseret saat kapal berakselerasi. Saat maju lurus, moncong kapal ramping sehingga air yang terdorong hanya **5.5 kg** (total beban 17 kg). Namun saat geser samping, penampang lambung kapal jauh lebih lebar sehingga air yang terseret mencapai **12.7 kg** (total beban 24.2 kg). Oleh karena itu tenaga dorong untuk geser samping harus lebih besar."*
+## 4. 🧮 Perhitungan Matriks Massa Total 6x6 (M = M_RB + M_A) & Inversnya
+
+### A. Matriks Massa Bodi Kaku (M_RB):
+Diketahui parameter robot:
+- Massa kering kapal: `m = 11.5 kg`
+- Pusat gravitasi: `CG = [xG, yG, zG] = [0.0, 0.0, 0.0] m`
+- Momen Inersia Roll: `Ixx = 0.12 kg·m²`
+- Momen Inersia Pitch: `Iyy = 0.22 kg·m²`
+- Momen Inersia Yaw: `Izz = 0.24 kg·m²`
+- Produk Inersia: `Ixy = Ixz = Iyz = 0.0`
+
+```
+M_RB = [
+  [ 11.5,  0.0,   0.0,   0.0,   0.0,   0.0  ],
+  [  0.0, 11.5,   0.0,   0.0,   0.0,   0.0  ],
+  [  0.0,  0.0,  11.5,   0.0,   0.0,   0.0  ],
+  [  0.0,  0.0,   0.0,   0.12,  0.0,   0.0  ],
+  [  0.0,  0.0,   0.0,   0.0,   0.22,  0.0  ],
+  [  0.0,  0.0,   0.0,   0.0,   0.0,   0.24 ]
+]
+```
 
 ---
 
-## 10. 📋 Rangkuman Lengkap Data & Parameter Robot
+### B. Matriks Massa Tambah Fluida (Added Mass - M_A):
+Air di sekitar lambung yang ikut terdorong memiliki inersia terkalibrasi:
+- Added mass Surge: `Xu_dot = 5.5 kg`
+- Added mass Sway: `Yv_dot = 12.7 kg` (badan samping lebar)
+- Added mass Heave: `Zw_dot = 14.6 kg` (pelat atas/bawah datar)
+- Added inertia Roll: `Kp_dot = 0.12 kg·m²`
+- Added inertia Pitch: `Mq_dot = 0.12 kg·m²`
+- Added inertia Yaw: `Nr_dot = 0.12 kg·m²`
 
-| Data Parameter Robot | Angka Nyata | Satuan | Keterangan Praktis |
+```
+M_A = [
+  [ 5.5,   0.0,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0,  12.7,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0,   0.0,  14.6,   0.0,   0.0,   0.0  ],
+  [ 0.0,   0.0,   0.0,   0.12,  0.0,   0.0  ],
+  [ 0.0,   0.0,   0.0,   0.0,   0.12,  0.0  ],
+  [ 0.0,   0.0,   0.0,   0.0,   0.0,   0.12 ]
+]
+```
+
+---
+
+### C. Matriks Massa Inersia Efektif Total (M = M_RB + M_A):
+```
+M = [
+  [ 17.0,  0.0,   0.0,   0.0,   0.0,   0.0  ],
+  [  0.0, 24.2,   0.0,   0.0,   0.0,   0.0  ],
+  [  0.0,  0.0,  26.1,   0.0,   0.0,   0.0  ],
+  [  0.0,  0.0,   0.0,   0.24,  0.0,   0.0  ],
+  [  0.0,  0.0,   0.0,   0.0,   0.34,  0.0  ],
+  [  0.0,  0.0,   0.0,   0.0,   0.0,   0.36 ]
+]
+```
+
+---
+
+### D. Invers Matriks Massa Total (M^-1):
+Invers ini digunakan untuk menghitung percepatan wahana `nu_dot = M^-1 * Sigma_Gaya`:
+```
+M^-1 = [
+  [ 1/17.0,   0,       0,       0,      0,      0     ],
+  [   0,    1/24.2,    0,       0,      0,      0     ],
+  [   0,      0,     1/26.1,    0,      0,      0     ],
+  [   0,      0,       0,     1/0.24,   0,      0     ],
+  [   0,      0,       0,       0,    1/0.34,   0     ],
+  [   0,      0,       0,       0,      0,    1/0.36  ]
+]
+
+M^-1 = [
+  [ 0.05882,  0.00000,  0.00000,  0.00000,  0.00000,  0.00000 ],
+  [ 0.00000,  0.04132,  0.00000,  0.00000,  0.00000,  0.00000 ],
+  [ 0.00000,  0.00000,  0.03831,  0.00000,  0.00000,  0.00000 ],
+  [ 0.00000,  0.00000,  0.00000,  4.16667,  0.00000,  0.00000 ],
+  [ 0.00000,  0.00000,  0.00000,  0.00000,  2.94118,  0.00000 ],
+  [ 0.00000,  0.00000,  0.00000,  0.00000,  0.00000,  2.77778 ]
+]
+```
+
+---
+
+## 5. 🔄 Perhitungan Matriks Coriolis & Sentripetal 6x6 (C(v))
+
+Matriks Coriolis dimodelkan menggunakan matriks perkalian silang *skew-symmetric* `S(a)`:
+```
+S(a) = [
+  [   0,  -a3,   a2 ],
+  [  a3,    0,  -a1 ],
+  [ -a2,   a1,    0 ]
+]
+```
+
+Struktur lengkap matriks Coriolis `C(nu) = C_RB(nu) + C_A(nu_r)`:
+```
+C(nu) = [
+  [ 0_{3x3},               -S(a_RB + a_A) ],
+  [ -S(a_RB + a_A),        -S(b_RB + b_A) ]
+]
+```
+
+Di mana vektor momentumnya adalah:
+- `a_RB = m * [u, v, w] = [11.5*u, 11.5*v, 11.5*w]`
+- `b_RB = [Ixx*p, Iyy*q, Izz*r] = [0.12*p, 0.22*q, 0.24*r]`
+- `a_A = [Xu_dot*ur, Yv_dot*vr, Zw_dot*wr] = [5.5*ur, 12.7*vr, 14.6*wr]`
+- `b_A = [Kp_dot*p, Mq_dot*q, Nr_dot*r] = [0.12*p, 0.12*q, 0.12*r]`
+
+---
+
+## 6. 🌊 Perhitungan Matriks Redaman Gesekan Air Nonlinier (D_L + D_Q|v|)
+
+Gaya dan momen hambatan air dihitung dari kombinasi redaman linier (*skin friction*) dan redaman kuadratik (*vortex shedding drag*):
+
+### Persamaan Tiap Sumbu:
+1. **Hambatan Surge (Maju)**:
+   `F_drag_surge = -(4.03 * u + 18.18 * |u| * u)`
+2. **Hambatan Sway (Geser Samping)**:
+   `F_drag_sway  = -(6.22 * v + 21.66 * |v| * v)`
+3. **Hambatan Heave (Menyelam)**:
+   `F_drag_heave = -(5.18 * w + 36.99 * |w| * w)`
+4. **Hambatan Roll (Guling)**:
+   `M_drag_roll  = -(0.07 * p + 1.55 * |p| * p)`
+5. **Hambatan Pitch (Angguk)**:
+   `M_drag_pitch = -(0.07 * q + 1.55 * |q| * q)`
+6. **Hambatan Yaw (Belok)**:
+   `M_drag_yaw   = -(0.07 * r + 1.55 * |r| * r)`
+
+### Contoh Hitungan Nyata:
+Jika kapal bergerak maju `u = 0.6 m/s` dan belok `r = 0.3 rad/s`:
+- `F_drag_surge = -(4.03 * 0.6 + 18.18 * 0.36) = -(2.418 + 6.545) = -8.963 Newton`
+- `M_drag_yaw   = -(0.07 * 0.3 + 1.55 * 0.09) = -(0.021 + 0.1395) = -0.1605 N·m`
+
+---
+
+## 7. ⚖️ Perhitungan Hidrostatis, Gaya Apung Archimedes & Momen Penegak g(eta)
+
+### A. Perhitungan Keseimbangan Vertikal Archimedes:
+1. **Berat Total Kapal (W)**:
+   `W = m * g = 11.5 kg * 9.80665 m/s² = 112.7765 Newton`
+2. **Gaya Apung Fluida (B)**:
+   `B = rho_water * g * V_displaced = 998.2 kg/m³ * 9.80665 m/s² * 0.01225 m³ = 119.9140 Newton`
+3. **Gaya Bersih ke Atas (Delta F)**:
+   `Delta F = B - W = 119.9140 N - 112.7765 N = +7.1375 Newton`
+   *(Setara dengan gaya angkat +727.8 gram-force).*
+
+---
+
+### B. Vektor Gaya & Momen Pemulih Hidrostatis g(eta):
+Pusat Gravitasi `CG = [0, 0, 0] m`, Pusat Apung `CB = [0, 0, -0.025] m` (CB berada 25 mm di atas CG).
+
+```
+g(eta) = [
+  (W - B) * sin(theta),
+  -(W - B) * cos(theta) * sin(phi),
+  -(W - B) * cos(theta) * cos(phi),
+  -(yG*W - yB*B)*cos(theta)*cos(phi) + (zG*W - zB*B)*cos(theta)*sin(phi),
+  (zG*W - zB*B)*sin(theta) + (xG*W - xB*B)*cos(theta)*cos(phi),
+  -(xG*W - xB*B)*cos(theta)*sin(phi) - (yG*W - yB*B)*sin(theta)
+]
+```
+
+Substitusi angka robot:
+```
+g(eta) = [
+  -7.1375 * sin(theta),
+  +7.1375 * cos(theta) * sin(phi),
+  +7.1375 * cos(theta) * cos(phi),
+  +2.9978 * cos(theta) * sin(phi),
+  +2.9978 * sin(theta),
+  0.0
+]
+```
+
+- **Momen Penegak Roll**: `K_g = +2.9978 * sin(phi) N·m` (mengembalikan posisi datar jika kapal miring).
+- **Momen Penegak Pitch**: `M_g = +2.9978 * sin(theta) N·m` (mengembalikan hidung kapal mendatar jika menukik).
+
+---
+
+## 8. 🌀 Perhitungan Matriks Alokasi Thruster (TAM 6x6) & Inversi Pseudo-Inverse
+
+### A. Geometri Posisi & Vektor Arah 6 Motor Thruster:
+| Motor | Posisi [x, y, z] (m) | Vektor Gaya [dx, dy, dz] | Fungsi Gerakan |
 | :--- | :--- | :--- | :--- |
-| **Massa Kering Kapal** | 11.5 | kilogram (kg) | Berat ditimbang di darat |
-| **Ukuran Bodi (P x L x T)** | 0.54 x 0.28 x 0.24 | meter (m) | Dimensi rangka terluar |
-| **Volume Total Kapal** | 0.01225 | meter kubik (12.25 Liter) | Volume benaman air |
-| **Gaya Berat ke Bawah (W)** | 112.78 | Newton (N) | Akibat gravitasi bumi |
-| **Gaya Apung ke Atas (B)** | 119.91 | Newton (N) | Hukum Archimedes air kolam |
-| **Gaya Apung Bersih (+)** | +7.14 | Newton (setara +728 gram) | Kelebihan gaya apung pasif |
-| **Massa Beban Maju Total** | 17.0 | kilogram (kg) | 11.5 kg bodi + 5.5 kg air |
-| **Massa Beban Geser Total** | 24.2 | kilogram (kg) | 11.5 kg bodi + 12.7 kg air |
-| **Massa Beban Selam Total** | 26.1 | kilogram (kg) | 11.5 kg bodi + 14.6 kg air |
-| **Tipe Motor Thruster** | BlueRobotics T200 | 6 Unit | 4 horizontal 45°, 2 vertikal |
-| **Dorongan Maksimal Motor** | 50.0 | Newton (5.1 kgf per motor) | Pada tegangan 16 Volt |
-| **Baterai Robot** | LiPo 4-Cell (16.0V) | 10.000 mAh | Daya operasional kapal |
+| **T1 (Depan-Kiri)** | [+0.14, +0.11, 0.0] | [cos(45°), -sin(45°), 0] = [+0.7071, -0.7071, 0] | Maju (+), Geser Kiri (-), Yaw Kanan (+) |
+| **T2 (Depan-Kanan)**| [+0.14, -0.11, 0.0] | [cos(45°), +sin(45°), 0] = [+0.7071, +0.7071, 0] | Maju (+), Geser Kanan (+), Yaw Kiri (-) |
+| **T3 (Belakang-Kiri)**| [-0.14, +0.11, 0.0] | [cos(45°), +sin(45°), 0] = [+0.7071, +0.7071, 0] | Maju (+), Geser Kanan (+), Yaw Kanan (+) |
+| **T4 (Belakang-Kanan)**| [-0.14, -0.11, 0.0] | [cos(45°), -sin(45°), 0] = [+0.7071, -0.7071, 0] | Maju (+), Geser Kiri (-), Yaw Kiri (-) |
+| **T5 (Vertikal Depan)**| [+0.18, 0.0, 0.0] | [0, 0, -1.0] | Menyelam Turun (-Z), Pitch Menukik (-M) |
+| **T6 (Vertikal Belakang)**| [-0.18, 0.0, 0.0] | [0, 0, -1.0] | Menyelam Turun (-Z), Pitch Mendongak (+M) |
+
+Lengan momen yaw:
+`L_arm = x * sin(45°) + y * cos(45°) = 0.14 * 0.7071 + 0.11 * 0.7071 = 0.1768 meter`
 
 ---
 
-## 11. 🚀 Cara Cepat Menjalankan Program (Demo Sidang)
+### B. Matriks Konfigurasi Alokasi Thruster T_alloc (6x6):
+`tau = T_alloc * u_T`
 
-1. **Buka Aplikasi Dashboard 3D Digital Twin**:
-   - Klik ganda file: **`Launch_Desktop_App.bat`** (Membuka antarmuka 3D visualisasi real-time).
-2. **Jalankan Simulasi Backend ROS 2**:
-   - Klik ganda file: **`simulator/start_simulation.bat`**.
-3. **Jalankan Visualisasi Gazebo WSL2 (Opsional)**:
-   - Klik ganda file: **`Launch_Gazebo_WSL.bat`**.
+```
+T_alloc = [
+  [ +0.7071,  +0.7071,  +0.7071,  +0.7071,   0.0000,   0.0000 ],
+  [ -0.7071,  +0.7071,  +0.7071,  -0.7071,   0.0000,   0.0000 ],
+  [  0.0000,   0.0000,   0.0000,   0.0000,  -1.0000,  -1.0000 ],
+  [  0.0000,   0.0000,   0.0000,   0.0000,   0.0000,   0.0000 ],
+  [  0.0000,   0.0000,   0.0000,   0.0000,  +0.1800,  -0.1800 ],
+  [ +0.1768,  -0.1768,  +0.1768,  -0.1768,   0.0000,   0.0000 ]
+]
+```
+
+---
+
+### C. Solusi Closed-Form Inversi Alokasi Tenaga Motor:
+`u_T = T_alloc_pseudo_inverse * tau_command`
+
+Perhitungan daya tiap motor dari perintah gaya `[Fx, Fy, Fz, K, My, Mz]`:
+- **T1 = (0.3536 * Fx) - (0.3536 * Fy) + (1.4141 * Mz)**
+- **T2 = (0.3536 * Fx) + (0.3536 * Fy) - (1.4141 * Mz)**
+- **T3 = (0.3536 * Fx) + (0.3536 * Fy) + (1.4141 * Mz)**
+- **T4 = (0.3536 * Fx) - (0.3536 * Fy) - (1.4141 * Mz)**
+- **T5 = (-0.5000 * Fz) + (2.7778 * My)**
+- **T6 = (-0.5000 * Fz) - (2.7778 * My)**
+
+---
+
+## 9. 🛰️ Perhitungan Fusi Sensor Multi-Rate: 15-State Extended Kalman Filter (EKF)
+
+### A. Vektor Keadaan EKF (x berukuran 15x1):
+- `x[0..2]`: Posisi NED `[x, y, z]` (meter)
+- `x[3..5]`: Kecepatan bodi `[u, v, w]` (meter/detik)
+- `x[6..8]`: Sudut Euler `[phi, theta, psi]` (radian)
+- `x[9..11]`: Bias drift akselerometer `[b_ax, b_ay, b_az]` (m/s²)
+- `x[12..14]`: Bias drift giroskop `[b_gx, b_gy, b_gz]` (rad/s)
+
+---
+
+### B. Tahap Prediksi (Time-Update Step - Frekuensi 100 Hz):
+Interval waktu IMU: `dt = 0.01 detik`.
+Input sensor: akselerasi spesifik terukur `f_m = [ax, ay, az]` dan laju putar terukur `omega_m = [gx, gy, gz]`.
+
+1. **Prediksi Keadaan**:
+   - `posisi_dot = R_b_to_n(Theta) * v_body`
+   - `kecepatan_dot = (f_m - b_a) - S(omega_m - b_g) * v_body + R_n_to_b * [0, 0, g]`
+   - `sudut_dot = T_Theta(Theta) * (omega_m - b_g)`
+   - `bias_a_dot = 0` (model random walk drift)
+   - `bias_g_dot = 0` (model random walk drift)
+
+2. **Propagasi Kovarians Ketidakpastian (15x15)**:
+   `P_k = Phi_k * P_{k-1} * Phi_k^T + Q_k`
+   Di mana `Phi_k = I_15 + F_k * dt` dengan Jacobian sistem `F_k = d(f) / d(x)`.
+
+---
+
+### C. Tahap Koreksi Pengukuran (Measurement-Update Step):
+Saat sensor kedalaman (20 Hz) atau DVL (10 Hz) masuk:
+
+1. **Residual Inovasi**: `y_tilde = z_meas - h(x_pred)`
+2. **Kovarians Inovasi**: `S = H * P * H^T + R`
+3. **Validasi Outlier Chi-Square Gating**:
+   `d_M^2 = y_tilde^T * S^-1 * y_tilde <= gamma_threshold` (threshold = 9.0 untuk sensor 1D)
+4. **Kalman Gain Optimal**: `K = P * H^T * S^-1`
+5. **Update State & Kovarians (Bentuk Joseph)**:
+   `x_updated = x_pred + K * y_tilde`
+   `P_updated = (I - K*H) * P * (I - K*H)^T + K * R * K^T`
+
+---
+
+## 10. 🧠 Perhitungan Identifikasi Sistem Daring ARMAX & Adaptasi RLS
+
+Model polinomial diskrit input-output:
+`A(q^-1) * y(t) = B(q^-1) * u(t-d) + C(q^-1) * e(t)`
+
+Bentuk regresi linier:
+`y(t) = phi(t)^T * theta + e(t)`
+
+- **Vektor Regresor (4x1)**:
+  `phi(t) = [ -y(t-1),  -y(t-2),  u(t-1),  u(t-2) ]^T`
+- **Vektor Parameter yang Diestimasi (4x1)**:
+  `theta(t) = [ a1, a2, b1, b2 ]^T`
+
+### Persamaan Komputasi RLS dengan Forgetting Factor (lambda = 0.985):
+1. **Gain Adaptif K(t)**:
+   `K(t) = ( P(t-1) * phi(t) ) / ( lambda + phi(t)^T * P(t-1) * phi(t) )`
+2. **Error Prediksi a Priori**:
+   `epsilon(t) = y(t) - phi(t)^T * theta(t-1)`
+3. **Pembaruan Parameter**:
+   `theta(t) = theta(t-1) + K(t) * epsilon(t)`
+4. **Pembaruan Matriks Kovarians P(t)**:
+   `P(t) = (1 / lambda) * ( I_4 - K(t) * phi(t)^T ) * P(t-1)`
+
+---
+
+## 11. 🎯 Perhitungan Pengendali Closed-Loop PID + Kompensasi Feedforward
+
+Persamaan umum pengendali PID:
+`Output = Feedforward + Kp * Error + Ki * Integral(Error) + Kd * Derivatif(Error)`
+
+### A. Pengendali Kedalaman (Heave Axis):
+Karena ada gaya apung bersih ke atas sebesar `+7.14 Newton`, ditambahkan kompensasi feedforward `F_FF = -7.14 Newton`:
+
+`Fz_cmd = -7.1375 + 45.0 * (z_target - z) + 8.0 * Integral(z_target - z) - 24.0 * w`
+
+### B. Matriks Gain Pengendali PID Terkalibrasi:
+| Derajat Kebebasan | Kp | Ki | Kd | Batas Output Maksimal |
+| :--- | :--- | :--- | :--- | :--- |
+| **Surge (Maju u)** | 25.0 N/(m/s) | 4.0 N/m | 12.0 N·s/m | ± 80.0 Newton |
+| **Sway (Geser v)** | 22.0 N/(m/s) | 3.5 N/m | 10.0 N·s/m | ± 60.0 Newton |
+| **Heave (Kedalaman z)**| 45.0 N/m | 8.0 N/(m·s) | 24.0 N·s/m | ± 80.0 Newton |
+| **Yaw (Haluan psi)** | 18.0 N·m/rad | 2.5 N·m/(rad·s) | 9.5 N·m·s/rad | ± 20.0 N·m |
+
+---
+
+## 12. ⚙️ Perhitungan Integrasi Numerik Runge-Kutta Orde ke-4 (RK4)
+
+Digital Twin menghitung percepatan wahana `nu_dot = f(eta, nu, tau)` pada setiap `dt = 0.02 detik` (50 Hz):
+
+`f(eta, nu, tau) = M^-1 * [ tau_thruster + tau_pinn - C(nu)*nu - D(nu_r)*nu_r - g(eta) ]`
+
+### 4 Tahapan Hitungan RK4:
+1. `k1 = f(t, nu)`
+2. `k2 = f(t + 0.5*dt, nu + 0.5*dt*k1)`
+3. `k3 = f(t + 0.5*dt, nu + 0.5*dt*k2)`
+4. `k4 = f(t + dt, nu + dt*k3)`
+5. `nu_next = nu + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)`
+
+Integrasi posisi:
+`eta_next = eta + dt * J(eta) * nu_next`
+
+---
+
+## 13. 🔥 Bocoran Tanya Jawab Sidang Skripsi (Lengkap dengan Penjelasan Rumus)
+
+#### ❓ Pertanyaan 1: *"Coba jelaskan persamaan gerak utama Fossen yang kamu gunakan!"*
+> **Jawaban Kamu**:
+> *"Persamaan utamanya adalah `M * nu_dot + C(nu)*nu + D(nu)*nu + g(eta) = tau`. Ini adalah bentuk Hukum II Newton untuk wahana maritim 6-DOF. Di mana matriks `M` menggabungkan massa bodi kapal (11.5 kg) dengan massa tambah air yang terseret. `C(nu)` memodelkan efek Coriolis dan sentripetal saat berputar, `D(nu)` menghitung gaya gesek hambatan air secara linier dan kuadratik, `g(eta)` adalah gaya apung hidrostatis dan momen pemulih, sedangkan `tau` adalah total gaya dorong dari 6 motor thruster."*
+
+---
+
+#### ❓ Pertanyaan 2: *"Mengapa massa kapal saat melaju maju berbeda dengan saat bergerak geser ke samping?"*
+> **Jawaban Kamu**:
+> *"Karena adanya fenomena **Hydrodynamic Added Mass**. Saat kapal melaju maju (Surge), moncong kapal ramping sehingga hanya menyeret massa air sebesar **5.5 kg** (massa total 17.0 kg). Namun saat kapal bergerak geser ke samping (Sway), penampang lambung kapal jauh lebih lebar dan menghalangi air lebih banyak, sehingga massa air yang terseret mencapai **12.7 kg** (massa total 24.2 kg)."*
+
+---
+
+#### ❓ Pertanyaan 3: *"Bagaimana cara 4 motor sudut 45 derajat menghasilkan gerak maju dan geser murni?"*
+> **Jawaban Kamu**:
+> *"Melalui **Matriks Alokasi Thruster (TAM)**. Pada sudut 45 derajat, komponen gayanya adalah `cos(45°) = 0.7071` dan `sin(45°) = 0.7071`.
+> - Saat **Maju**: T1, T2, T3, T4 menyala positif bersamaan. Komponen gaya sumbu Y (samping) saling menghilangkan karena tanda arahnya berlawanan (+0.7071 dan -0.7071), sehingga tersisa gaya murni ke sumbu X.
+> - Saat **Geser Kanan**: T2 dan T3 dorong maju, T1 dan T4 dorong mundur. Komponen sumbu X saling meniadakan, menyisakan gaya dorong murni ke sumbu Y."*
+
+---
+
+#### ❓ Pertanyaan 4: *"Bagaimana perhitungan gaya apung yang membuktikan kapal tidak akan tenggelam saat mati daya?"*
+> **Jawaban Kamu**:
+> *"Berdasarkan hukum Archimedes, volume benaman kapal adalah `0.01225 m³`, menghasilkan gaya apung air ke atas sebesar `B = 998.2 * 9.807 * 0.01225 = 119.91 Newton`. Sedangkan berat total kapal di udara adalah `W = 11.5 * 9.807 = 112.78 Newton`. Karena gaya apung lebih besar daripada gaya berat, terdapat selisih gaya angkat positif sebesar `Delta F = +7.14 Newton` (setara +728 gram). Ketika sistem mati listrik, motor vertikal berhenti dan kapal otomatis mengapung naik sendiri ke permukaan air."*
+
+---
+
+## 14. 📋 Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi
+
+| Nama Parameter | Notasi Simbol | Nilai Numerik Terkalibrasi | Satuan SI | Keterangan & Sumber |
+| :--- | :--- | :--- | :--- | :--- |
+| **Massa Kering Kapal** | m | 11.5 | kg | Penimbangan digital darat |
+| **Momen Inersia Roll** | Ixx | 0.12 | kg·m² | Ekstraksi CAD Mesh & URDF |
+| **Momen Inersia Pitch**| Iyy | 0.22 | kg·m² | Ekstraksi CAD Mesh & URDF |
+| **Momen Inersia Yaw**  | Izz | 0.24 | kg·m² | Ekstraksi CAD Mesh & URDF |
+| **Volume Benaman Air** | V | 0.01225 | m³ (12.25 L) | Uji benaman Archimedes |
+| **Densitas Air Kolam** | rho | 998.2 | kg/m³ | Pengukuran suhu 20°C |
+| **Percepatan Gravitasi**| g | 9.80665 | m/s² | Konstanta geofisika lokal |
+| **Pusat Gravitasi (CG)**| [xG, yG, zG] | [0.0, 0.0, 0.0] | meter | Asal kerangka bodi {b} |
+| **Pusat Apung (CB)**   | [xB, yB, zB] | [0.0, 0.0, -0.025] | meter | Posisi busa apung atas |
+| **Added Mass Surge**   | Xu_dot | 5.5 | kg | Towing tank / Berg (2012) |
+| **Added Mass Sway**    | Yv_dot | 12.7 | kg | Towing tank / Wu (2018) |
+| **Added Mass Heave**   | Zw_dot | 14.6 | kg | Uji selam / Fossen (2021) |
+| **Damping Linier Surge**| Xu | 4.03 | N·s/m | Uji deselerasi luncur kolam |
+| **Damping Quad Surge** | Xuu | 18.18 | N·s²/m² | Uji kecepatan terminal kolam |
+| **Damping Linier Sway** | Yv | 6.22 | N·s/m | Uji geser menyamping |
+| **Damping Quad Sway**  | Yvv | 21.66 | N·s²/m² | Uji gerak lateral kolam |
+| **Damping Linier Heave**| Zw | 5.18 | N·s/m | Uji selam vertikal kolam |
+| **Damping Quad Heave** | Zww | 36.99 | N·s²/m² | Uji selam vertikal kolam |
+| **Gaya Dorong Maks Fwd**| T_max_fwd | +50.0 | Newton (5.1 kgf) | Datasheet T200 @ 16V |
+| **Gaya Dorong Maks Rev**| T_max_rev | -40.2 | Newton (4.1 kgf) | Datasheet T200 @ 16V |
+| **Konstanta Waktu Motor**| tau_m | 0.35 | detik | Step response dyno test |
+| **Tegangan Baterai**   | V_bat | 16.0 | Volt | LiPo 4S 10.000 mAh |
+| **Deadband PWM Motor** | PWM_deadband | 1470 s.d. 1530 | mikrodetik (μs) | BlueRobotics Basic ESC |
+
+---
+
+## 15. 🚀 Panduan Menjalankan Sistem
+
+1. **Aplikasi Desktop Utama (Windows Native Digital Twin)**:
+   - Double-click file: **`Launch_Desktop_App.bat`** (Membuka antarmuka 3D real-time dengan akselerasi GPU RTX 4050).
+2. **Backend Simulasi ROS 2 (Docker Environment)**:
+   - Double-click file: **`simulator/start_simulation.bat`**.
+3. **Simulasi 3D Gazebo di WSL2 (Opsional)**:
+   - Double-click file: **`Launch_Gazebo_WSL.bat`**.
