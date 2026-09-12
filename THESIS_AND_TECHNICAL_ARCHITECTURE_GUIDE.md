@@ -17,8 +17,8 @@
 10. [Perhitungan Identifikasi Sistem Daring ARMAX & Adaptasi RLS](#10-perhitungan-identifikasi-sistem-daring-armax--adaptasi-rls)
 11. [Perhitungan Pengendali Closed-Loop PID + Kompensasi Feedforward](#11-perhitungan-pengendali-closed-loop-pid--kompensasi-feedforward)
 12. [Perhitungan Integrasi Numerik Runge-Kutta Orde ke-4 (RK4)](#12-perhitungan-integrasi-numerik-runge-kutta-orde-ke-4-rk4)
-13. [🔥 Bocoran Tanya Jawab Sidang Skripsi (Lengkap dengan Penjelasan Rumus)](#13--bocoran-tanya-jawab-sidang-skripsi-lengkap-dengan-penjelasan-rumus)
-14. [Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi](#14-tabel-komprehensif-seluruh-parameter--satuan-si-terkalibrasi)
+13. [Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi](#13-tabel-komprehensif-seluruh-parameter--satuan-si-terkalibrasi)
+14. [Panduan Menjalankan Sistem](#14-panduan-menjalankan-sistem)
 
 ---
 
@@ -489,35 +489,7 @@ Integrasi posisi:
 
 ---
 
-## 13. 🔥 Bocoran Tanya Jawab Sidang Skripsi (Lengkap dengan Penjelasan Rumus)
-
-#### ❓ Pertanyaan 1: *"Coba jelaskan persamaan gerak utama Fossen yang kamu gunakan!"*
-> **Jawaban Kamu**:
-> *"Persamaan utamanya adalah `M * nu_dot + C(nu)*nu + D(nu)*nu + g(eta) = tau`. Ini adalah bentuk Hukum II Newton untuk wahana maritim 6-DOF. Di mana matriks `M` menggabungkan massa bodi kapal (11.5 kg) dengan massa tambah air yang terseret. `C(nu)` memodelkan efek Coriolis dan sentripetal saat berputar, `D(nu)` menghitung gaya gesek hambatan air secara linier dan kuadratik, `g(eta)` adalah gaya apung hidrostatis dan momen pemulih, sedangkan `tau` adalah total gaya dorong dari 6 motor thruster."*
-
----
-
-#### ❓ Pertanyaan 2: *"Mengapa massa kapal saat melaju maju berbeda dengan saat bergerak geser ke samping?"*
-> **Jawaban Kamu**:
-> *"Karena adanya fenomena **Hydrodynamic Added Mass**. Saat kapal melaju maju (Surge), moncong kapal ramping sehingga hanya menyeret massa air sebesar **5.5 kg** (massa total 17.0 kg). Namun saat kapal bergerak geser ke samping (Sway), penampang lambung kapal jauh lebih lebar dan menghalangi air lebih banyak, sehingga massa air yang terseret mencapai **12.7 kg** (massa total 24.2 kg)."*
-
----
-
-#### ❓ Pertanyaan 3: *"Bagaimana cara 4 motor sudut 45 derajat menghasilkan gerak maju dan geser murni?"*
-> **Jawaban Kamu**:
-> *"Melalui **Matriks Alokasi Thruster (TAM)**. Pada sudut 45 derajat, komponen gayanya adalah `cos(45°) = 0.7071` dan `sin(45°) = 0.7071`.
-> - Saat **Maju**: T1, T2, T3, T4 menyala positif bersamaan. Komponen gaya sumbu Y (samping) saling menghilangkan karena tanda arahnya berlawanan (+0.7071 dan -0.7071), sehingga tersisa gaya murni ke sumbu X.
-> - Saat **Geser Kanan**: T2 dan T3 dorong maju, T1 dan T4 dorong mundur. Komponen sumbu X saling meniadakan, menyisakan gaya dorong murni ke sumbu Y."*
-
----
-
-#### ❓ Pertanyaan 4: *"Bagaimana perhitungan gaya apung yang membuktikan kapal tidak akan tenggelam saat mati daya?"*
-> **Jawaban Kamu**:
-> *"Berdasarkan hukum Archimedes, volume benaman kapal adalah `0.01225 m³`, menghasilkan gaya apung air ke atas sebesar `B = 998.2 * 9.807 * 0.01225 = 119.91 Newton`. Sedangkan berat total kapal di udara adalah `W = 11.5 * 9.807 = 112.78 Newton`. Karena gaya apung lebih besar daripada gaya berat, terdapat selisih gaya angkat positif sebesar `Delta F = +7.14 Newton` (setara +728 gram). Ketika sistem mati listrik, motor vertikal berhenti dan kapal otomatis mengapung naik sendiri ke permukaan air."*
-
----
-
-## 14. 📋 Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi
+## 13. 📋 Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi
 
 | Nama Parameter | Notasi Simbol | Nilai Numerik Terkalibrasi | Satuan SI | Keterangan & Sumber |
 | :--- | :--- | :--- | :--- | :--- |
@@ -547,7 +519,7 @@ Integrasi posisi:
 
 ---
 
-## 15. 🚀 Panduan Menjalankan Sistem
+## 14. 🚀 Panduan Menjalankan Sistem
 
 1. **Aplikasi Desktop Utama (Windows Native Digital Twin)**:
    - Double-click file: **`Launch_Desktop_App.bat`** (Membuka antarmuka 3D real-time dengan akselerasi GPU RTX 4050).
