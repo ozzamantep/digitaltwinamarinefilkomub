@@ -1,5 +1,5 @@
 # 📘 Buku Panduan Teknis & Formulasi Lengkap Matematika Digital Twin AUV 6-DOF
-## Untuk Sidang Skripsi / Tugas Akhir, Jurnal Ilmiah, dan Dokumentasi Arsitektur
+##  Dokumentasi Arsitektur
 **Autonomous Underwater Vehicle (AUV) Amarine — FILKOM Universitas Brawijaya**
 
 ---
