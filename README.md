@@ -10,7 +10,7 @@
 [![GPU](https://img.shields.io/badge/GPU-RTX%204050%20Accelerated-76B900?logo=nvidia)](https://www.nvidia.com/)
 [![License](https://img.shields.io/badge/License-Academic%20Research-green)]()
 
-> **Official repository** for the 6-DOF AUV Digital Twin developed for **Tim Amarine FILKOM UB (Universitas Brawijaya)**. Features full nonlinear Fossen hydrodynamics, hardware-in-the-loop (HIL) and software-in-the-loop (SITL) subsea simulation, closed-loop PID control, online system identification (ARMAX with Recursive Least Squares), and real-time 3D subsea visualization.
+> **Official repository** for the 6-DOF AUV Digital Twin developed for **Tim Amarine FILKOM UB (Universitas Brawijaya)**. Features full nonlinear Fossen hydrodynamics, hardware-in-the-loop (HIL) and software-in-the-loop (SITL) subsea simulation, closed-loop PID control, online system identification (Box-Jenkins with pseudo-linear Recursive Least Squares), and real-time 3D subsea visualization.
 
 ---
 
@@ -22,7 +22,7 @@
 │       (Jetson Nano / WSL2 Gazebo)            │                │         (Electron + React Three.js)    │
 ├──────────────────────────────────────────────┤  WebSocket     ├────────────────────────────────────────┤
 │ • ROS 2 Humble / Jazzy Nodes                 │ ────────────►  │ • 3D CAD AUV Viewport & Thruster Viz  │
-│ • Sensor IMU, Depth (MS5837), DVL, Battery   │  (Port 9090)   │ • ARMAX / RLS Online Adaptive SysID   │
+│ • Sensor IMU, Depth (MS5837), DVL, Battery   │  (Port 9090)   │ • BJ / RLS Online Adaptive SysID      │
 │ • Subsea Camera Feed (/camera/image_raw)     │                │ • Closed-Loop PID Flight Tuning       │
 │ • 6-Thruster Allocation Matrix (TAM)         │ ◄────────────  │ • 15-State EKF Sensor Fusion          │
 └──────────────────────────────────────────────┘   /cmd_vel     └────────────────────────────────────────┘
@@ -124,7 +124,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | **6-DOF Fossen Hydrodynamics** | Full nonlinear M, C, D, g matrices with RK4 integration | `src/dt-core/HydrodynamicsEngine.js` |
 | **Vehicle Configuration** | Single source of truth for all 50+ physical parameters | `src/dt-core/VehicleConfig.js` |
 | **15-State EKF** | Multi-rate sensor fusion (IMU 100Hz, Depth 20Hz, DVL 10Hz) with Mahalanobis outlier gating | `src/dt-core/StateEstimator.js` |
-| **ARMAX System Identification** | Online RLS (λ=0.985) adapting 4-model polynomial structures | `src/services/SystemIdentificationEngine.js` |
+| **Box-Jenkins System Identification** | Online pseudo-linear RLS (λ=0.985) adapting 6 plant/noise parameters | `src/services/SystemIdentificationEngine.js` |
 | **PID Flight Controller** | Depth hold, heading lock, attitude stabilization with anti-windup | `src/services/AUVMotionController.js` |
 | **Thruster Dynamics** | T200 lookup table, motor lag (τ=0.35s), voltage sag, PWM deadband | `src/services/ThrusterDynamicsModel.js` |
 | **PINN Residual** | Physics-Informed Neural Network for unmodeled dynamics compensation | `src/dt-core/PINNResidual.js` |
@@ -196,7 +196,7 @@ digitaltwin/
 │   │   └── ...
 │   ├── services/                   ← Controllers & bridges (12 modules)
 │   │   ├── AUVMotionController.js  ← PID flight controller
-│   │   ├── SystemIdentificationEngine.js ← ARMAX/RLS
+│   │   ├── SystemIdentificationEngine.js ← Box-Jenkins/RLS
 │   │   ├── ThrusterDynamicsModel.js ← T200 motor model
 │   │   ├── MockRosConnection.js    ← SITL ROS2 simulator
 │   │   └── ...

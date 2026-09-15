@@ -297,7 +297,7 @@ export default function ControlPanel() {
   }, []);
 
   // System Identification Model Selection
-  const [selectedSysIdModel, setSelectedSysIdModel] = useState('ARMAX');
+  const [selectedSysIdModel, setSelectedSysIdModel] = useState('BJ');
 
   const handleSelectSysIdModel = (model) => {
     setSelectedSysIdModel(model);

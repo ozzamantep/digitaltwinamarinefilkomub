@@ -14,7 +14,7 @@
 7. [Perhitungan Hidrostatis, Gaya Apung Archimedes & Momen Penegak g(eta)](#7-️-perhitungan-hidrostatis-gaya-apung-archimedes--momen-penegak-geta)
 8. [Perhitungan Matriks Alokasi Thruster (TAM 6x6) & Inversi Pseudo-Inverse](#8--perhitungan-matriks-alokasi-thruster-tam-6x6--inversi-pseudo-inverse)
 9. [Perhitungan Fusi Sensor Multi-Rate: 15-State Extended Kalman Filter (EKF)](#9-️-perhitungan-fusi-sensor-multi-rate-15-state-extended-kalman-filter-ekf)
-10. [Perhitungan Identifikasi Sistem Daring ARMAX & Adaptasi RLS](#10--perhitungan-identifikasi-sistem-daring-armax--adaptasi-rls)
+10. [Perhitungan Identifikasi Sistem Daring Box-Jenkins & Adaptasi RLS](#10--perhitungan-identifikasi-sistem-daring-box-jenkins--adaptasi-rls)
 11. [Perhitungan Pengendali Closed-Loop PID + Kompensasi Feedforward](#11--perhitungan-pengendali-closed-loop-pid--kompensasi-feedforward)
 12. [Perhitungan Integrasi Numerik Runge-Kutta Orde ke-4 (RK4)](#12-️-perhitungan-integrasi-numerik-runge-kutta-orde-ke-4-rk4)
 13. [Model Lingkungan Bawah Air & Gangguan Arus](#13--model-lingkungan-bawah-air--gangguan-arus)
@@ -46,7 +46,7 @@ Digital Twin ini menghubungkan wahana fisik nyata (*Physical Twin*) dengan lingk
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │ 1. 6-DOF Fossen Hydrodynamics Physics Engine (RK4)     │  │
 │  │ 2. 15-State Multi-Rate Extended Kalman Filter (EKF)   │  │
-│  │ 3. Online RLS System Identification (ARMAX Model)     │  │
+│  │ 3. Online RLS System Identification (BJ Model)        │  │
 │  │ 4. Closed-Loop PID + TAM Thruster Allocator           │  │
 │  │ 5. PINN (Physics-Informed Neural Network) Residual    │  │
 │  │ 6. Deteksi Outlier Sensor Mahalanobis Gating          │  │
@@ -743,33 +743,47 @@ P_updated = (I - K×H) × P × (I - K×H)^T + K × R × K^T
 
 ---
 
-## 10. 🧠 Perhitungan Identifikasi Sistem Daring ARMAX & Adaptasi RLS
+## 10. 🧠 Perhitungan Identifikasi Sistem Daring Box-Jenkins & Adaptasi RLS
 
 ### A. Model Polinomial Diskrit Input-Output:
 
-Model ARMAX (*AutoRegressive Moving Average with eXogenous input*):
+Model Box-Jenkins memisahkan dinamika plant dan dinamika gangguan:
 ```
-A(q⁻¹) × y(t) = B(q⁻¹) × u(t-d) + C(q⁻¹) × e(t)
+y(t) = [B(q⁻¹) / F(q⁻¹)] × u(t) + [C(q⁻¹) / D(q⁻¹)] × e(t)
 ```
 
 Di mana:
 - `y(t)` = output terukur (kecepatan wahana, m/s)
 - `u(t)` = input perintah thruster (normalized -1 to +1)
-- `e(t)` = gangguan white noise
-- `d = 1` = delay transport (1 langkah waktu)
+- `w(t) = B/F × u(t)` = keluaran dinamika plant
+- `v(t) = C/D × e(t)` = keluaran model gangguan
+- `e(t)` = inovasi atau residual prediksi
+- `nk = 1` = delay transport satu sampel
 
-Bentuk regresi linier:
+Struktur yang digunakan adalah `BJ(2, 1, 1, 2, 1)`:
 ```
-y(t) = phi(t)^T × theta + e(t)
+B(q⁻¹) = b0 q⁻¹ + b1 q⁻²
+F(q⁻¹) = 1 + f1 q⁻¹ + f2 q⁻²
+C(q⁻¹) = 1 + c1 q⁻¹
+D(q⁻¹) = 1 + d1 q⁻¹
 ```
 
-- **Vektor Regresor (4×1):**
+Persamaan rekursifnya:
+```
+w(t) = -f1 w(t-1) - f2 w(t-2) + b0 u(t-1) + b1 u(t-2)
+v(t) = -d1 v(t-1) + c1 e(t-1) + e(t)
+y(t) = w(t) + v(t)
+```
+
+Karena `w`, `v`, dan `e` merupakan state terestimasi, implementasi daring memakai **pseudo-linear RLS**. Ini bukan RLS linier ARX dengan mengganti nama model.
+
+- **Vektor Regresor (6×1):**
   ```
-  phi(t) = [ -y(t-1),  -y(t-2),  u(t-1),  u(t-2) ]^T
+  phi(t) = [-w(t-1), -w(t-2), u(t-1), u(t-2), e(t-1), -v(t-1)]^T
   ```
-- **Vektor Parameter yang Diestimasi (4×1):**
+- **Vektor Parameter yang Diestimasi (6×1):**
   ```
-  theta(t) = [ a1, a2, b0, b1 ]^T
+  theta(t) = [f1, f2, b0, b1, c1, d1]^T
   ```
 
 ### B. Parameter Awal dari Data Bollard Test T200 @ 16V:
@@ -785,7 +799,9 @@ Pole diskrit: `z = e^(-Ts/tau_m) = e^(-0.05/0.42) = 0.888`
 | **OE** | f1=-0.78, f2=0.04, b0=0.16, b1=0.08 | Dari bollard test | 92.4% |
 | **Box-Jenkins** | f1=-0.78, f2=0.04, b0=0.16, b1=0.08, c1=0.06, d1=-0.40 | Dari bollard test | 96.8% |
 
-### C. Persamaan Komputasi RLS dengan Forgetting Factor:
+Model ARX, ARMAX, dan OE tetap tersedia pada dashboard sebagai pembanding, sedangkan metode utama Digital Twin dan target adaptasi daring adalah **Box-Jenkins**.
+
+### C. Persamaan Komputasi Pseudo-Linear RLS dengan Forgetting Factor:
 
 Forgetting factor: `lambda = 0.985` (adapts over ~67 samples = 3.35 detik @ 20Hz)
 
@@ -804,45 +820,57 @@ epsilon(t) = y(t) - phi(t)^T × theta(t-1)
 theta(t) = theta(t-1) + K(t) × epsilon(t)
 ```
 
-**4. Pembaruan Matriks Kovarians P(t) (4×4):**
+**4. Pembaruan Matriks Kovarians P(t) (6×6):**
 ```
-P(t) = (1 / lambda) × (I_4 - K(t) × phi(t)^T) × P(t-1)
+P(t) = (1 / lambda) × (I_6 - K(t) × phi(t)^T) × P(t-1)
 ```
+
+Residual saat ini disimpan sebagai `e(t)` dan digunakan pada regresor sampel berikutnya. Dengan cara ini, polinomial noise `C/D` benar-benar ikut diestimasi.
 
 ### D. Constraint Stabilitas (Pole Bounding):
 
 Setelah setiap update RLS, parameter dibatasi agar sistem tetap stabil:
 ```
-a1 ∈ [-0.98, 0.00]     ← pole kausal negatif untuk respons stabil
-a2 ∈ [0.00, 0.20]      ← damping orde-2 kecil positif
+f1 ∈ [-0.98, 0.00]     ← dinamika plant orde pertama
+f2 ∈ [0.00, 0.20]      ← damping plant orde kedua
 b0 ∈ [0.02, 0.40]      ← gain fisik harus positif
 b1 ∈ [0.01, 0.30]      ← gain fisik harus positif
+c1 ∈ [-0.90, 0.90]     ← zero model noise
+d1 ∈ [-0.90, 0.90]     ← pole model noise
 ```
 
 ### E. Contoh Hitungan Numerik RLS:
 
 **State awal:**
 ```
-theta = [-0.80, 0.05, 0.15, 0.08]
-P = 1000 × I_4 (high initial uncertainty)
+theta = [-0.78, 0.04, 0.16, 0.08, 0.06, -0.40]
+P = 1000 × I_6 (high initial uncertainty)
 lambda = 0.985
 ```
 
-**Pengukuran masuk:** `y_real = 0.65 m/s`, histori: `y(t-1) = 0.5`, `y(t-2) = 0.3`, `u(t-1) = 0.8`, `u(t-2) = 0.6`
+**Pengukuran masuk:** `y_real = 0.78 m/s`, sehingga `y_norm = 0.78 / 1.3 = 0.60`. Histori state: `w(t-1)=0.50`, `w(t-2)=0.30`, `u(t-1)=0.80`, `u(t-2)=0.60`, `e(t-1)=0.02`, dan `v(t-1)=0.04`.
 
 ```
-phi = [-0.5, -0.3, 0.8, 0.6]
+phi = [-0.50, -0.30, 0.80, 0.60, 0.02, -0.04]
 
-Prediksi: phi^T × theta = (-0.5)×(-0.80) + (-0.3)×0.05 + 0.8×0.15 + 0.6×0.08
-                         = 0.40 - 0.015 + 0.12 + 0.048
-                         = 0.553
+Prediksi = phi^T × theta
+         = (-0.50)(-0.78) + (-0.30)(0.04) + (0.80)(0.16)
+           + (0.60)(0.08) + (0.02)(0.06) + (-0.04)(-0.40)
+         = 0.5712
 
-y_norm = 0.65 / 1.3 = 0.50 (normalized)
+Error = 0.6000 - 0.5712 = 0.0288
 
-Error: epsilon = 0.50 - 0.553 = -0.053
+phi^T P phi = 1000 × (0.50² + 0.30² + 0.80² + 0.60² + 0.02² + 0.04²)
+            = 1342
 
-→ K(t) dihitung → theta di-update → P di-update → model bertambah akurat
+K = 1000 phi / (0.985 + 1342)
+  = [-0.3723, -0.2234, 0.5957, 0.4468, 0.0149, -0.0298]^T
+
+theta_baru = theta_lama + K × 0.0288
+            = [-0.79072, 0.03357, 0.17716, 0.09287, 0.06043, -0.40086]^T
 ```
+
+Hasil tersebut menunjukkan bahwa parameter plant `B/F` dan parameter gangguan `C/D` sama-sama diperbarui. Inilah perbedaan utama terhadap implementasi lama yang hanya meng-update empat parameter ARX.
 
 > **Referensi Implementasi:** File `src/services/SystemIdentificationEngine.js`, metode `rlsUpdate()` baris 215-324.
 
@@ -1179,7 +1207,7 @@ digitaltwin/
 │   ├── services/                         ← SERVICE LAYER & CONTROLLERS
 │   │   ├── AUVMotionController.js        ← Closed-loop PID flight controller
 │   │   ├── HydrodynamicsEngine.js        ← Simplified hydro (compatibility layer)
-│   │   ├── SystemIdentificationEngine.js ← ARMAX/RLS online system identification
+│   │   ├── SystemIdentificationEngine.js ← Box-Jenkins/RLS online system identification
 │   │   ├── ThrusterDynamicsModel.js      ← T200 motor dynamics, voltage sag, lag
 │   │   ├── PidController.js              ← Generic PID controller implementation
 │   │   ├── MockRosConnection.js          ← ROS2 simulator (SITL mode)

@@ -15,7 +15,7 @@
 
 export class SystemIdentificationEngine {
   constructor() {
-    this.selectedModel = 'ARMAX';
+    this.selectedModel = 'BJ';
 
     // =========================================================================
     // Blue Robotics T200 Thruster Physical Lookup Tables (16V / 4S LiPo)
@@ -130,7 +130,7 @@ export class SystemIdentificationEngine {
       enabled: false,          // Activated when real Jetson data is available
       lambda: 0.985,           // Forgetting factor (0.985 = adapts over ~67 samples)
       P: null,                 // Covariance matrix (initialized on first real data)
-      theta: null,             // Parameter vector [a1, a2, b0, b1]
+      theta: null,             // BJ parameter vector [f1, f2, b0, b1, c1, d1]
       sampleCount: 0,          // Number of real-world samples processed
       totalAdaptation: 0,      // Cumulative parameter change magnitude
       convergenceError: 1.0,   // Current convergence metric (1.0 = no data, 0 = perfect)
@@ -140,8 +140,8 @@ export class SystemIdentificationEngine {
     this.telemetry = {
       predictedSpeed: 0,
       residualError: 0,
-      fitRate: 94.5,
-      activeModel: 'ARMAX',
+      fitRate: 96.8,
+      activeModel: 'BJ',
       rlsEnabled: false,
       rlsSampleCount: 0,
       rlsConvergence: 1.0,
@@ -154,6 +154,7 @@ export class SystemIdentificationEngine {
       this.selectedModel = modelType;
       this.telemetry.activeModel = modelType;
       this.telemetry.fitRate = this.models[modelType].fitRate;
+      if (this.rls.enabled && modelType === 'BJ') this.initializeBJRLS();
       this.reset();
     }
   }
@@ -191,18 +192,18 @@ export class SystemIdentificationEngine {
     this.rls.enabled = enabled;
     this.telemetry.rlsEnabled = enabled;
 
-    if (enabled && !this.rls.P) {
-      // Initialize RLS covariance matrix P = δ·I (large δ = high initial uncertainty)
-      const dim = 4; // [a1, a2, b0, b1] for ARX/ARMAX
-      const delta = 1000; // High initial uncertainty
-      this.rls.P = Array.from({ length: dim }, (_, i) =>
-        Array.from({ length: dim }, (_, j) => (i === j ? delta : 0))
-      );
+    if (enabled && !this.rls.P) this.initializeBJRLS();
+  }
 
-      // Initialize theta from current ARMAX model parameters
-      const m = this.models.ARMAX;
-      this.rls.theta = [m.a1, m.a2, m.b0, m.b1];
-    }
+  initializeBJRLS() {
+    const dim = 6;
+    const delta = 1000;
+    this.rls.P = Array.from({ length: dim }, (_, i) =>
+      Array.from({ length: dim }, (_, j) => (i === j ? delta : 0))
+    );
+
+    const m = this.models.BJ;
+    this.rls.theta = [m.f1, m.f2, m.b0, m.b1, m.c1, m.d1];
   }
 
   /**
@@ -210,17 +211,18 @@ export class SystemIdentificationEngine {
    * Called when real-world measured velocity is available from Jetson sensors
    *
    * @param {number} yReal - Measured velocity from DVL/IMU (real robot)
-   * @param {number} yPredicted - Model predicted velocity
    */
-  rlsUpdate(yReal, yPredicted) {
+  rlsUpdate(yReal) {
     if (!this.rls.enabled || !this.rls.P || !this.rls.theta) return;
 
-    // Regression vector φ = [-y(t-1), -y(t-2), u(t-1), u(t-2)]
-    const y1 = this.y_hist[0] || 0;
-    const y2 = this.y_hist[1] || 0;
+    // BJ pseudo-linear regression for y(t) = B/F u(t) + C/D e(t).
+    const w1 = this.w_hist[1] || 0;
+    const w2 = this.w_hist[2] || 0;
     const u1 = this.u_hist[1] || 0;
     const u2 = this.u_hist[2] || 0;
-    const phi = [-y1, -y2, u1, u2];
+    const e1 = this.e_hist[1] || 0;
+    const v1 = this.v_hist[1] || 0;
+    const phi = [-w1, -w2, u1, u2, e1, -v1];
 
     const dim = phi.length;
     const P = this.rls.P;
@@ -258,14 +260,13 @@ export class SystemIdentificationEngine {
       theta[i] += K[i] * predError;
     }
 
-    // Enforce stability constraints (poles inside unit circle |z| < 0.95)
-    // a1 must be in [-0.98, 0] (negative for stable causal pole)
+    // Bound plant and disturbance polynomials to the identified operating range.
     theta[0] = Math.max(-0.98, Math.min(0, theta[0]));
-    // a2 must be in [0, 0.20] (small positive for 2nd-order damping)
     theta[1] = Math.max(0, Math.min(0.20, theta[1]));
-    // b0, b1 must be positive (physical gain cannot be negative)
     theta[2] = Math.max(0.02, Math.min(0.40, theta[2]));
     theta[3] = Math.max(0.01, Math.min(0.30, theta[3]));
+    theta[4] = Math.max(-0.90, Math.min(0.90, theta[4]));
+    theta[5] = Math.max(-0.90, Math.min(0.90, theta[5]));
 
     // Update covariance matrix: P(t) = (1/λ)·[P(t-1) - K·φᵀ·P(t-1)]
     for (let i = 0; i < dim; i++) {
@@ -274,34 +275,36 @@ export class SystemIdentificationEngine {
       }
     }
 
-    // Apply adapted parameters back to model
-    const m = this.models.ARMAX;
-    m.a1 = theta[0];
-    m.a2 = theta[1];
+    // Apply all adapted parameters to the Box-Jenkins model.
+    const m = this.models.BJ;
+    m.f1 = theta[0];
+    m.f2 = theta[1];
     m.b0 = theta[2];
     m.b1 = theta[3];
+    m.c1 = theta[4];
+    m.d1 = theta[5];
 
-    // Also adapt ARX (same structure for a1, a2, b0, b1)
-    this.models.ARX.a1 = theta[0] * 1.025; // Slight offset (ARX has no noise model)
-    this.models.ARX.a2 = theta[1] * 1.2;
-    this.models.ARX.b0 = theta[2] * 0.93;
-    this.models.ARX.b1 = theta[3];
+    // The current innovation becomes e(t) for the next BJ update.
+    this.e_hist[0] = predError;
+    this.v_hist[0] = Math.max(-0.2, Math.min(0.2, yNorm - (this.w_hist[0] || 0)));
 
     // Track adaptation metrics
     this.rls.sampleCount++;
     let drift = 0;
-    const orig = this.originalParams.ARMAX;
-    drift += Math.abs(theta[0] - orig.a1) / Math.abs(orig.a1);
-    drift += Math.abs(theta[1] - orig.a2) / Math.max(0.01, Math.abs(orig.a2));
+    const orig = this.originalParams.BJ;
+    drift += Math.abs(theta[0] - orig.f1) / Math.abs(orig.f1);
+    drift += Math.abs(theta[1] - orig.f2) / Math.max(0.01, Math.abs(orig.f2));
     drift += Math.abs(theta[2] - orig.b0) / Math.abs(orig.b0);
     drift += Math.abs(theta[3] - orig.b1) / Math.abs(orig.b1);
+    drift += Math.abs(theta[4] - orig.c1) / Math.abs(orig.c1);
+    drift += Math.abs(theta[5] - orig.d1) / Math.abs(orig.d1);
     this.rls.totalAdaptation = drift;
 
     // Convergence metric: exponential moving average of |prediction error|
     this.rls.convergenceError = 0.95 * this.rls.convergenceError + 0.05 * Math.abs(predError);
 
     // Update fit rate based on convergence
-    const adaptedFitRate = Math.min(99.5, 94.5 + (1 - this.rls.convergenceError) * 5.0);
+    const adaptedFitRate = Math.min(99.5, 96.8 + (1 - this.rls.convergenceError) * 2.7);
     m.fitRate = adaptedFitRate;
 
     // Log significant adaptations (for analysis/debugging)
@@ -311,7 +314,7 @@ export class SystemIdentificationEngine {
         theta: [...theta],
         convergence: this.rls.convergenceError,
         fitRate: adaptedFitRate,
-        drift: (drift / 4 * 100).toFixed(1) + '%',
+        drift: (drift / 6 * 100).toFixed(1) + '%',
       });
       // Keep log manageable
       if (this.rls.adaptationLog.length > 50) this.rls.adaptationLog.shift();
@@ -320,7 +323,7 @@ export class SystemIdentificationEngine {
     // Update telemetry
     this.telemetry.rlsSampleCount = this.rls.sampleCount;
     this.telemetry.rlsConvergence = this.rls.convergenceError;
-    this.telemetry.paramDrift = (drift / 4 * 100); // Average % drift across params
+    this.telemetry.paramDrift = (drift / 6 * 100); // Average % drift across BJ params
   }
 
   /**
@@ -443,8 +446,8 @@ export class SystemIdentificationEngine {
     this.telemetry.residualError = isNaN(residual) ? 0 : residual;
 
     // Run RLS adaptation if enabled (real Jetson data is flowing in)
-    if (this.rls.enabled && Math.abs(measuredVelocity) > 0.01) {
-      this.rlsUpdate(measuredVelocity, velocityOutput);
+    if (this.rls.enabled && this.selectedModel === 'BJ' && Math.abs(measuredVelocity) > 0.01) {
+      this.rlsUpdate(measuredVelocity);
     }
 
     return {

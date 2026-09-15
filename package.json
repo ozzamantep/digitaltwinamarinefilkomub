@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test:bj-rls": "node tests/test_bj_rls.js",
     "preview": "vite preview",
     "desktop": "electron .",
     "start": "vite --port 5173"
