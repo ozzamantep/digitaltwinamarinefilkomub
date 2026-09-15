@@ -276,7 +276,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 1.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ea580c') : 'rgba(255,255,255,0.2)'}`,
@@ -348,7 +348,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 1.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#0284c7') : 'rgba(255,255,255,0.2)'}`,
@@ -420,7 +420,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 1.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ef4444') : 'rgba(255,255,255,0.2)'}`,
@@ -492,7 +492,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 1.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#eab308') : 'rgba(255,255,255,0.2)'}`,
@@ -553,7 +553,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 1.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#f59e0b') : 'rgba(255,255,255,0.2)'}`,
@@ -636,7 +636,7 @@ export default function PoolEnvironment() {
           if (idx === -1) return null;
           return (
             <Html position={[0, 0.85, 0]} center distanceFactor={14}>
-              <div
+              <div className="mission-priority-marker"
                 style={{
                   background: isEnabled ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.4)',
                   border: `1px solid ${isEnabled ? (idx === 0 ? '#00ff88' : '#ef4444') : 'rgba(255,255,255,0.2)'}`,

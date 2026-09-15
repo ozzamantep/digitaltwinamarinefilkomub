@@ -1,60 +1,58 @@
 /* =====================================================
-   DIGITAL TWIN - DESIGN SYSTEM
-   Premium Dark Mode with Glassmorphism & Neon Accents
-   ===================================================== */
+  AMARINE DIGITAL TWIN - OPERATIONS DESIGN SYSTEM
+  ===================================================== */
 
 /* ---- Design Tokens ---- */
 :root {
-  /* Colors - Dark Mode Palette */
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-tertiary: #1a2035;
-  --bg-card: rgba(17, 24, 39, 0.7);
-  --bg-glass: rgba(17, 24, 39, 0.45);
-  --bg-glass-hover: rgba(26, 32, 53, 0.6);
+  --bg-primary: #101315;
+  --bg-secondary: #171b1e;
+  --bg-tertiary: #202529;
+  --bg-card: #1a1f22;
+  --bg-glass: #181d20;
+  --bg-glass-hover: #202629;
 
   /* Accent Colors */
-  --accent-cyan: #00f0ff;
-  --accent-cyan-dim: rgba(0, 240, 255, 0.15);
-  --accent-cyan-glow: rgba(0, 240, 255, 0.4);
-  --accent-green: #00ff88;
-  --accent-green-dim: rgba(0, 255, 136, 0.15);
-  --accent-orange: #ff8c00;
-  --accent-orange-dim: rgba(255, 140, 0, 0.15);
-  --accent-red: #ff3b5c;
-  --accent-red-dim: rgba(255, 59, 92, 0.15);
-  --accent-purple: #a855f7;
-  --accent-purple-dim: rgba(168, 85, 247, 0.15);
-  --accent-blue: #3b82f6;
-  --accent-blue-dim: rgba(59, 130, 246, 0.15);
+  --accent-cyan: #5bb8b0;
+  --accent-cyan-dim: rgba(91, 184, 176, 0.12);
+  --accent-cyan-glow: rgba(91, 184, 176, 0.18);
+  --accent-green: #71b985;
+  --accent-green-dim: rgba(113, 185, 133, 0.12);
+  --accent-orange: #d4a657;
+  --accent-orange-dim: rgba(212, 166, 87, 0.12);
+  --accent-red: #d66d70;
+  --accent-red-dim: rgba(214, 109, 112, 0.12);
+  --accent-purple: #9a8db3;
+  --accent-purple-dim: rgba(154, 141, 179, 0.12);
+  --accent-blue: #6f9fbd;
+  --accent-blue-dim: rgba(111, 159, 189, 0.12);
 
   /* Text */
-  --text-primary: #f0f4f8;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
+  --text-primary: #e5e8e7;
+  --text-secondary: #a7afad;
+  --text-tertiary: #737d7b;
   --text-accent: var(--accent-cyan);
 
   /* Borders */
-  --border-subtle: rgba(148, 163, 184, 0.08);
-  --border-glass: rgba(148, 163, 184, 0.12);
-  --border-accent: rgba(0, 240, 255, 0.25);
+  --border-subtle: #282f32;
+  --border-glass: #31393c;
+  --border-accent: #477f7a;
 
   /* Gradients */
-  --gradient-cyan: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%);
-  --gradient-green: linear-gradient(135deg, #00ff88 0%, #00b4d8 100%);
-  --gradient-header: linear-gradient(90deg, rgba(0, 240, 255, 0.08) 0%, transparent 50%, rgba(0, 255, 136, 0.08) 100%);
+  --gradient-cyan: #5bb8b0;
+  --gradient-green: #71b985;
+  --gradient-header: #15191c;
 
   /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow-cyan: 0 0 20px rgba(0, 240, 255, 0.15), 0 0 60px rgba(0, 240, 255, 0.05);
-  --shadow-glow-green: 0 0 20px rgba(0, 255, 136, 0.15);
-  --shadow-glow-red: 0 0 20px rgba(255, 59, 92, 0.3);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-glow-cyan: none;
+  --shadow-glow-green: none;
+  --shadow-glow-red: none;
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Bahnschrift', 'Arial Narrow', sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', monospace;
 
   /* Spacing */
   --space-xs: 4px;
@@ -65,11 +63,11 @@
   --space-2xl: 32px;
 
   /* Radii */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-full: 4px;
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -77,9 +75,9 @@
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Layout */
-  --header-height: 56px;
-  --sidebar-width: 320px;
-  --panel-gap: 12px;
+  --header-height: 52px;
+  --sidebar-width: 300px;
+  --panel-gap: 8px;
 }
 
 /* ---- Reset & Base ---- */
@@ -99,7 +97,11 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 24px 24px;
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
@@ -1160,6 +1162,342 @@ body {
 
   .header-center {
     display: none;
+  }
+}
+
+/* =====================================================
+   OPERATIONS CONSOLE OVERRIDES
+   ===================================================== */
+.app-body {
+  background: transparent;
+}
+
+.glass-panel {
+  background: var(--bg-glass);
+  border-color: var(--border-glass);
+  border-radius: 4px;
+  padding: 12px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+.glass-panel:hover {
+  border-color: #3b4649;
+  box-shadow: none;
+}
+
+.glass-panel-header {
+  min-height: 28px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+}
+
+.glass-panel-title {
+  color: #c1c7c5;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.glass-panel-title .icon {
+  display: none;
+}
+
+.header {
+  padding: 0 16px;
+  background: #15191c;
+  border-bottom: 1px solid #343c3f;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.header-left,
+.header-center,
+.header-right {
+  gap: 12px;
+}
+
+.header-logo-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #477f7a;
+  border-radius: 2px;
+  background: #1d2929;
+  color: #71c6bd;
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.header-logo-text {
+  background: none;
+  color: #e5e8e7;
+  -webkit-text-fill-color: currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+}
+
+.header-logo-sub {
+  color: #77817f;
+  border-left-color: #343c3f;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+
+.header-left > div:nth-child(2) {
+  background: #111517 !important;
+  border-color: #343c3f !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+.header-left > div:nth-child(2) button {
+  border-radius: 2px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #8d9895 !important;
+  letter-spacing: 0.03em;
+}
+
+.header-left > div:nth-child(2) button:hover {
+  color: #d8dddb !important;
+}
+
+.header-left > div:nth-child(2) button[style*="0.25"] {
+  background: #263336 !important;
+  color: #79c1bb !important;
+}
+
+.header-center > div:first-child {
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+.mode-toggle {
+  gap: 2px;
+  padding: 2px;
+  background: #101416;
+  border-radius: 3px;
+}
+
+.mode-toggle-btn {
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+
+.mode-toggle-btn.active {
+  background: #31494a;
+  color: #d9edeb;
+  box-shadow: none;
+}
+
+.connection-status {
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+.status-dot {
+  box-shadow: none !important;
+  animation: none;
+}
+
+.viewport-3d,
+.camera-container,
+.sensor-item,
+.imu-axis,
+.control-btn,
+.joystick-area,
+.proximity-radar-panel {
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.sensor-item {
+  padding: 9px;
+  background: #151a1d;
+}
+
+.sensor-item:hover,
+.control-btn:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.control-btn {
+  background: #202629;
+  border-color: #394245;
+}
+
+.control-btn:hover {
+  background: #273033;
+  border-color: #58716f;
+}
+
+.control-btn.active {
+  background: #293b34;
+  border-color: #527963;
+}
+
+.viewport-badge,
+.viewport-fps,
+.viewport-controls-hint {
+  border-radius: 3px;
+  background: rgba(14, 17, 19, 0.88);
+  backdrop-filter: none;
+}
+
+.proximity-radar-panel {
+  background: #07100d;
+  border-color: #31564b;
+}
+
+button,
+input,
+select {
+  letter-spacing: 0;
+}
+
+.header button,
+.right-sidebar button,
+.left-sidebar button,
+.viewport-3d button,
+.viewport-3d div {
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+.header button,
+.right-sidebar button,
+.left-sidebar button,
+.viewport-3d button {
+  border-radius: 3px !important;
+}
+
+.viewport-3d div[style*="font-size: 10px"] {
+  padding: 2px 4px !important;
+  border-color: #6d7775 !important;
+  border-radius: 2px !important;
+  background: rgba(18, 22, 24, 0.9) !important;
+  color: #d5d9d8 !important;
+  font-size: 8px !important;
+  font-weight: 600 !important;
+}
+
+.mission-priority-marker {
+  padding: 2px 4px !important;
+  border: 1px solid #66716f !important;
+  border-radius: 2px !important;
+  background: rgba(18, 22, 24, 0.92) !important;
+  color: #d5d9d8 !important;
+  font-family: var(--font-mono) !important;
+  font-size: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.mission-priority-marker span:first-child {
+  color: #d4a657 !important;
+}
+
+.battery-fill::after {
+  display: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #5bb8b0;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 800px) {
+  :root {
+    --header-height: 84px;
+    --sidebar-width: 100%;
+  }
+
+  body,
+  #root,
+  .app-layout {
+    overflow: hidden;
+  }
+
+  .header {
+    height: var(--header-height);
+    min-height: var(--header-height);
+    padding: 8px 10px;
+    align-content: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .header-left {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  .header-logo-sub {
+    display: none;
+  }
+
+  .header-left > div:nth-child(2) {
+    margin-left: 0 !important;
+    flex-shrink: 0;
+  }
+
+  .header-left > div:nth-child(2) button {
+    padding: 3px 7px !important;
+    font-size: 0.62rem !important;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .connection-status,
+  .header-time {
+    font-size: 0.62rem;
+  }
+
+  .app-body {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 6px;
+  }
+
+  .left-sidebar,
+  .center-area,
+  .right-sidebar {
+    width: 100%;
+    min-width: 0;
+    flex: none;
+    overflow: visible;
+  }
+
+  .viewport-3d {
+    height: 420px;
+    min-height: 420px;
+    flex: none;
+  }
+
+  .bottom-charts {
+    height: 190px;
+    min-height: 190px;
   }
 }
 

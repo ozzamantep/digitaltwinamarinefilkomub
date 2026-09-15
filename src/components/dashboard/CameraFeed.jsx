@@ -22,7 +22,7 @@ export default function CameraFeed() {
       <div className="glass-panel-header">
         <div className="glass-panel-title">
           <span className="icon">📷</span>
-          Subsea Forward Camera (Real Pool View)
+          Forward Camera
         </div>
         <div
           style={{

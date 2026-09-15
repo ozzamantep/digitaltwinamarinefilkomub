@@ -225,9 +225,9 @@ function SubseaBattery() {
   const level = battery.level;
 
   let color;
-  if (level > 50) color = 'linear-gradient(90deg, #00ff88, #00f0ff)';
-  else if (level > 25) color = 'linear-gradient(90deg, #ff8c00, #ffb347)';
-  else color = 'linear-gradient(90deg, #ff3b5c, #ff6b8a)';
+  if (level > 50) color = 'var(--accent-green)';
+  else if (level > 25) color = 'var(--accent-orange)';
+  else color = 'var(--accent-red)';
 
   return (
     <div>
@@ -274,7 +274,7 @@ export default function SensorPanel() {
       <div className="glass-panel-header">
         <div className="glass-panel-title">
           <span className="icon">🌊</span>
-          AUV Subsea Telemetry
+          Vehicle Telemetry
         </div>
         <div
           style={{

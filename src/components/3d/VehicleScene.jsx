@@ -214,7 +214,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🎯 TPP (Belakang)
+            Rear Follow
           </button>
           <button
             id="btn-cam-chase"
@@ -238,7 +238,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🚁 Chase (Orbit)
+            Chase
           </button>
           <button
             id="btn-cam-fpv"
@@ -258,7 +258,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🎥 FPV (Depan)
+            Forward FPV
           </button>
           <button
             id="btn-cam-orbit"
@@ -278,7 +278,7 @@ export default function VehicleScene() {
               transition: 'all 0.2s ease',
             }}
           >
-            🌐 Orbit (Bebas)
+            Free Orbit
           </button>
 
           {(cameraViewMode === 'chase' || cameraViewMode === 'orbit') && (

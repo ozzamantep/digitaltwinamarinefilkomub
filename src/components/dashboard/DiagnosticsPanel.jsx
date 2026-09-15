@@ -108,7 +108,7 @@ export default function DiagnosticsPanel() {
       <div className="glass-panel-header">
         <div className="glass-panel-title">
           <span className="icon">⚙️</span>
-          Subsea & Compute Health
+          System Health
         </div>
         <div
           style={{

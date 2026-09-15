@@ -452,7 +452,7 @@ export default function ControlPanel() {
       <div className="glass-panel-header">
         <div className="glass-panel-title">
           <span className="icon">🎮</span>
-          AUV Pilot & System ID Engine
+          Flight Control
         </div>
         <button
           onClick={() => setArmed(!armed)}

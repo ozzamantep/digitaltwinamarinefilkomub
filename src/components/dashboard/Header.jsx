@@ -68,15 +68,15 @@ export default function Header() {
   return (
     <motion.header
       className="header"
-      initial={{ opacity: 0, y: -20 }}
+      initial={{ opacity: 0 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.2 }}
     >
       <div className="header-left">
         <div className="header-logo">
-          <div className="header-logo-icon">🌊</div>
-          <span className="header-logo-text">BLUEROV2 TWIN</span>
-          <span className="header-logo-sub">SAUVC 2026 Competition</span>
+          <div className="header-logo-icon">A</div>
+          <span className="header-logo-text">AMARINE DT</span>
+          <span className="header-logo-sub">AUV OPERATIONS</span>
         </div>
 
         {/* View Switcher Tabs */}
@@ -112,8 +112,7 @@ export default function Header() {
               transition: 'all 0.2s ease',
             }}
           >
-            <span>🌊</span>
-            <span>AUV Mission 6-DOF</span>
+            <span>Mission Control</span>
           </button>
 
           <button
@@ -137,8 +136,7 @@ export default function Header() {
               transition: 'all 0.2s ease',
             }}
           >
-            <span>⚡</span>
-            <span>1x Thruster HIL Testbed</span>
+            <span>Thruster HIL</span>
           </button>
         </div>
       </div>
@@ -163,7 +161,7 @@ export default function Header() {
           }}
           title="Click to toggle Motor Arm/Disarm"
         >
-          <span>{armed ? '⚡ MOTORS ARMED' : '⛔ DISARMED'}</span>
+          <span>{armed ? 'MOTORS ARMED' : 'DISARMED'}</span>
         </div>
 
         {/* Flight Mode Tag */}
@@ -188,13 +186,13 @@ export default function Header() {
             className={`mode-toggle-btn ${mode === 'demo' ? 'active' : ''}`}
             onClick={() => handleSwitchMode('demo')}
           >
-            Demo
+            SIM
           </button>
           <button
             className={`mode-toggle-btn ${mode === 'live' ? 'active' : ''}`}
             onClick={() => handleSwitchMode('live')}
           >
-            Live ROS2
+            ROS 2
           </button>
         </div>
 
@@ -220,7 +218,7 @@ export default function Header() {
                 topicPublisher.init(ros);
               }}
             >
-              🖥️ Local Sim
+              Local
             </button>
             <input
               type="text"
