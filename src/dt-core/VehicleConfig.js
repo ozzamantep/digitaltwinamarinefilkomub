@@ -84,10 +84,9 @@ const defaultConfig = {
     length: param(0.54, 'm', 'Overall length (x-axis)',  [0.3, 1.0], 'measured'),
     width:  param(0.28, 'm', 'Overall width (y-axis)',   [0.2, 0.6], 'measured'),
     height: param(0.24, 'm', 'Overall height (z-axis)',  [0.1, 0.5], 'measured'),
-    // Displaced volume (approximation: rectangular block × fill factor)
-    // V ≈ L × W × H × fill_factor
-    displacedVolume: param(0.01225, 'm³', 'Displaced water volume',
-      [0.005, 0.025], 'estimated'),
+    // Displaced volume (neutrally trimmed with ballast weights for 11.5 kg mass in pool)
+    displacedVolume: param(0.01151, 'm³', 'Displaced water volume (neutrally trimmed with ballast)',
+      [0.005, 0.025], 'measured'),
     // fill_factor ≈ 0.34 for frame-type ROV
   },
 

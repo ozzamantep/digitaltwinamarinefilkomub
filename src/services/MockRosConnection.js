@@ -88,6 +88,7 @@ class MockRosConnection {
     this.qualStateStartTime = 0;
     this.qualUTurnTargetYaw = 0;
     this.qualReturnPass = false;
+    this.lastQualDepth = 0.15;
     useVehicleStore.getState().resetPayload();
     useVehicleStore.getState().resetFlares();
     auvMotionController.reset();
@@ -101,6 +102,7 @@ class MockRosConnection {
     this.simHeading = 0.0;
     this.missionStage = 0;
     this.missionTime = 0;
+    this.lastFinalDepth = 0.8;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
@@ -108,6 +110,25 @@ class MockRosConnection {
     useVehicleStore.getState().resetFlares();
     auvMotionController.reset();
     sysIdEngine.reset();
+  }
+
+  /**
+   * Responsive & Smooth Steering Controller
+   * Proportional heading correction with clean 1° deadband for straight cruising
+   */
+  computeSmoothSteering(targetHeading, currentHeading, maxYaw = 0.55, deadband = 0.02) {
+    let err = targetHeading - currentHeading;
+    while (err > Math.PI) err -= Math.PI * 2;
+    while (err < -Math.PI) err += Math.PI * 2;
+
+    if (Math.abs(err) <= deadband) {
+      return 0.0;
+    }
+
+    const sign = Math.sign(err);
+    const activeErr = Math.abs(err) - deadband;
+    const factor = Math.min(1.0, activeErr / 0.35);
+    return sign * factor * maxYaw;
   }
 
   stepPhysics(dt) {
@@ -139,7 +160,7 @@ class MockRosConnection {
       ctrl = auvMotionController.update(currentPose, input, flightMode, false, dt, store.battery.voltage || 16.0, t);
     } else if (flightMode === 'QUALIFIKASI') {
       // =========================================================================
-      // AUTONOMOUS QUALIFICATION RACING STATE MACHINE (Smooth, Calibrated Pure Pursuit)
+      // AUTONOMOUS QUALIFICATION RACING STATE MACHINE (Smooth, Graceful Hydrodynamic Guidance)
       // =========================================================================
       const obs = store.obstacles || { gate: { x: 4.0, z: 0.0 } };
       const TARGET_DEPTH = 0.85; // Centered in gate opening
@@ -153,87 +174,78 @@ class MockRosConnection {
       let statusText = '';
 
       const depthErr = TARGET_DEPTH - this.simDepth;
-      const holdDepthHeave = Math.max(-0.70, Math.min(0.70, depthErr * 2.5));
+      const depthRate = (this.simDepth - (this.lastQualDepth ?? this.simDepth)) / dt;
+      this.lastQualDepth = this.simDepth;
+      const holdDepthHeave = Math.max(-0.65, Math.min(0.65, depthErr * 2.2 - depthRate * 1.5));
 
       switch (this.qualState) {
-        case 1: // State 1: Dive-on-the-fly Launch
+        case 1: // State 1: Dive-on-the-fly Launch & Line up with Gate Runway
           statusText = 'State 1/5: ⚡ Smooth Dive-on-the-Fly Launch (0.85m)';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.80;
+          cmdSurge = 0.72;
 
-          // Aim directly towards gate while diving
-          const diveTargetHeading = Math.atan2(GATE_Z - this.simZ, GATE_X - this.simX);
-          let diveErr = diveTargetHeading - this.simHeading;
-          while (diveErr > Math.PI) diveErr -= Math.PI * 2;
-          while (diveErr < -Math.PI) diveErr += Math.PI * 2;
-          cmdYaw = Math.max(-0.90, Math.min(0.90, diveErr * 2.0));
+          // Aim for gate entry runway (GATE_X - 1.5, GATE_Z) so vehicle lines up with Z=0 before the gate
+          const diveTargetHeading = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.5) - this.simX);
+          cmdYaw = this.computeSmoothSteering(diveTargetHeading, this.simHeading, 0.45, 0.02);
 
-          if (Math.abs(this.simDepth - TARGET_DEPTH) < 0.15 || this.simX > -5.5) {
+          if (this.simX > -5.0) {
             this.qualPrevState = 1;
             this.qualState = 4;
             this.qualStateStartTime = t;
           }
           break;
 
-        case 4: // State 4: Pure Pursuit Gate Lock-in
-          statusText = 'State 2/5: 🎯 Vector Pure Pursuit Gate Approach';
+        case 4: // State 4: Vector Gate Entry Lock-in (aiming directly at gate entry)
+          statusText = 'State 2/5: 🎯 Vector Gate Approach Runway';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.85;
+          cmdSurge = 0.75;
 
-          const lookaheadX = Math.max(GATE_X + 2.0, this.simX + 2.5);
-          const targetHeading = Math.atan2(GATE_Z - this.simZ, lookaheadX - this.simX);
-          let headingErr = targetHeading - this.simHeading;
-          while (headingErr > Math.PI) headingErr -= Math.PI * 2;
-          while (headingErr < -Math.PI) headingErr += Math.PI * 2;
-          cmdYaw = Math.max(-0.95, Math.min(0.95, headingErr * 2.2));
+          const targetHeading = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.0) - this.simX);
+          cmdYaw = this.computeSmoothSteering(targetHeading, this.simHeading, 0.50, 0.02);
 
-          if (this.simX >= GATE_X - 0.5) {
+          if (this.simX >= GATE_X - 1.2) {
             this.qualPrevState = 4;
             this.qualState = 2;
             this.qualStateStartTime = t;
           }
           break;
 
-        case 2: // State 2: Stable Gate Pass & Return Sprint
+        case 2: // State 2: Gate Pass Through Center & Return Sprint
           cmdHeave = holdDepthHeave;
           const elapsed = t - this.qualStateStartTime;
 
           if (!this.qualReturnPass) {
-            statusText = `State 3/5: 🏁 Stable Gate Pass (${elapsed.toFixed(1)}s / 4.0s @ 0.90 m/s)`;
-            cmdSurge = 0.90;
+            statusText = `State 3/5: 🏁 Stable Gate Transit (${elapsed.toFixed(1)}s @ 0.78 m/s)`;
+            cmdSurge = 0.78;
             
-            // Lock straight heading 0 rad
-            let straightErr = 0.0 - this.simHeading;
-            while (straightErr > Math.PI) straightErr -= Math.PI * 2;
-            while (straightErr < -Math.PI) straightErr += Math.PI * 2;
-            cmdYaw = Math.max(-0.70, Math.min(0.70, straightErr * 2.0));
+            // Aim straight through gate opening along Z=GATE_Z to exit point
+            const gatePassYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X + 2.5) - this.simX);
+            cmdYaw = this.computeSmoothSteering(gatePassYaw, this.simHeading, 0.50, 0.02);
 
-            if (elapsed >= 4.0 || this.simX >= GATE_X + 3.0) {
+            if (elapsed >= 4.5 || this.simX >= GATE_X + 2.5) {
               this.qualPrevState = 2;
               this.qualState = 3;
               this.qualStateStartTime = t;
             }
           } else {
-            // Return pass
-            if (this.simX > GATE_X - 2.5) {
+            // Return pass through gate
+            if (this.simX > GATE_X) {
+              statusText = `State 5/5: ⚡ Return Transit Lead-in (Z = ${GATE_Z.toFixed(1)}m)`;
+              cmdSurge = 0.65;
+              const retGateYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.5) - this.simX);
+              cmdYaw = this.computeSmoothSteering(retGateYaw, this.simHeading, 0.60, 0.02);
+            } else if (this.simX > GATE_X - 2.5) {
               statusText = `State 5/5: ⚡ Return Transit Through Gate (Z = ${GATE_Z.toFixed(1)}m)`;
-              cmdSurge = 0.90;
-              
-              const retTargetYaw = Math.atan2(GATE_Z - this.simZ, -10.0 - this.simX);
-              let returnErr = retTargetYaw - this.simHeading;
-              while (returnErr > Math.PI) returnErr -= Math.PI * 2;
-              while (returnErr < -Math.PI) returnErr += Math.PI * 2;
-              cmdYaw = Math.max(-0.85, Math.min(0.85, returnErr * 2.0));
+              cmdSurge = 0.75;
+              const retGateYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X - 2.5) - this.simX);
+              cmdYaw = this.computeSmoothSteering(retGateYaw, this.simHeading, 0.55, 0.02);
             } else {
               statusText = `State 5/5: 🚀 CRUISE TO DOCK (${elapsed.toFixed(1)}s)`;
-              cmdSurge = 0.85;
+              cmdSurge = 0.75;
               const returnHeading = Math.atan2(2.0 - this.simZ, -11.0 - this.simX);
-              let retErr = returnHeading - this.simHeading;
-              while (retErr > Math.PI) retErr -= Math.PI * 2;
-              while (retErr < -Math.PI) retErr += Math.PI * 2;
-              cmdYaw = Math.max(-0.85, Math.min(0.85, retErr * 2.0));
+              cmdYaw = this.computeSmoothSteering(returnHeading, this.simHeading, 0.45, 0.02);
 
-              if (elapsed >= 6.0 || this.simX <= -10.2) {
+              if (elapsed >= 7.0 || this.simX <= -10.2) {
                 this.qualPrevState = 2;
                 this.qualState = 5;
                 this.qualStateStartTime = t;
@@ -242,30 +254,30 @@ class MockRosConnection {
           }
           break;
 
-        case 3: // State 3: Clean Hairpin 180° U-Turn (Target heading: Math.PI)
+        case 3: // State 3: Clean Hairpin 180° U-Turn
           statusText = 'State 4/5: 🔄 Controlled 180° Hairpin U-Turn';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.15; // Smooth controlled arc
+          cmdSurge = 0.28;
 
-          let targetUTurn = Math.PI;
-          let uTurnErr = targetUTurn - this.simHeading;
+          const uTurnAimPointYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X + 0.5) - this.simX);
+          let uTurnErr = uTurnAimPointYaw - this.simHeading;
           while (uTurnErr > Math.PI) uTurnErr -= Math.PI * 2;
           while (uTurnErr < -Math.PI) uTurnErr += Math.PI * 2;
 
-          if (Math.abs(uTurnErr) < 0.20) {
+          if (Math.abs(uTurnErr) < 0.25) {
             this.qualPrevState = 3;
             this.qualState = 2;
             this.qualReturnPass = true;
             this.qualStateStartTime = t;
           } else {
-            cmdYaw = Math.max(-1.10, Math.min(1.10, uTurnErr * 2.2));
+            cmdYaw = this.computeSmoothSteering(uTurnAimPointYaw, this.simHeading, 0.65, 0.02);
           }
           break;
 
         case 5: // State 5: Rapid Surface
           statusText = 'QUALIFICATION COMPLETE! 🏆 Surfacing at Start Zone';
-          cmdSurge = 0.20;
-          cmdHeave = -0.55;
+          cmdSurge = 0.35;
+          cmdHeave = -0.65;
           break;
       }
 
@@ -349,7 +361,7 @@ class MockRosConnection {
         x: -9.0,
         z: 2.0,
         targetDepth: 0.85,
-        speed: 0.80,
+        speed: 0.65,
         threshold: 1.10,
       });
 
@@ -366,7 +378,7 @@ class MockRosConnection {
             x: flX,
             z: flZ,
             targetDepth: 0.85,
-            speed: 0.85,
+            speed: 0.72,
             threshold: 0.80,
             hitFlare: color,
             flareX: flX,
@@ -381,7 +393,7 @@ class MockRosConnection {
             x: flX - 1.40,
             z: flZ,
             targetDepth: 0.85,
-            speed: 0.70,
+            speed: 0.48,
             threshold: 0.75,
             hitFlare: null,
             isAvoidInspect: true,
@@ -399,7 +411,7 @@ class MockRosConnection {
             x: flX + 1.20,
             z: clearZ,
             targetDepth: 0.85,
-            speed: 0.80,
+            speed: 0.68,
             threshold: 0.85,
             hitFlare: null,
             isBypass: true,
@@ -422,23 +434,39 @@ class MockRosConnection {
           const c = flareConfig[key];
           addFlareWaypoint(key, c.color, c.label, c.flX, c.flZ, stepNum++);
         } else if (key === 'gate') {
+          // Pre-gate lineup waypoint: force the ship to straighten out and align
+          // with the gate center (z=gateZ) BEFORE approaching the gate opening
           rawWaypoints.push({
-            id: 'gate_runway',
-            title: `[#${stepNum}] 🚪 Approach Gate`,
-            x: gateX - 1.50,
+            id: 'gate_lineup',
+            title: `[#${stepNum}] 🎯 Gate Lineup`,
+            x: gateX - 3.50,
             z: gateZ,
             targetDepth: 0.85,
-            speed: 0.80,
-            threshold: 0.80,
+            speed: 0.60,
+            threshold: 0.90,
+            isGateApproach: true,
           });
+          // Final approach directly in front of gate
+          rawWaypoints.push({
+            id: 'gate_runway',
+            title: `[#${stepNum}] 🚪 Gate Approach`,
+            x: gateX - 1.00,
+            z: gateZ,
+            targetDepth: 0.85,
+            speed: 0.65,
+            threshold: 0.70,
+            isGateApproach: true,
+          });
+          // Transit through gate to far side
           rawWaypoints.push({
             id: 'gate_pass',
             title: `[#${stepNum}] 🏁 Gate Transit`,
-            x: gateX + 2.80,
+            x: gateX + 2.50,
             z: gateZ,
             targetDepth: 0.85,
-            speed: 0.90,
+            speed: 0.75,
             threshold: 0.85,
+            isGateApproach: true,
           });
           stepNum++;
         } else if (key === 'drum_red_tgt' || key === 'drum') {
@@ -448,7 +476,7 @@ class MockRosConnection {
             x: drumX - 0.35,
             z: drumZ,
             targetDepth: 0.85,
-            speed: 0.75,
+            speed: 0.55,
             threshold: 0.80,
           });
           rawWaypoints.push({
@@ -457,7 +485,7 @@ class MockRosConnection {
             x: drumX,
             z: drumZ,
             targetDepth: 0.85,
-            speed: 0.30,
+            speed: 0.22,
             threshold: 0.65,
           });
           stepNum++;
@@ -471,7 +499,7 @@ class MockRosConnection {
         x: -11.0,
         z: 2.0,
         targetDepth: 0.15,
-        speed: 0.75,
+        speed: 0.65,
         threshold: 0.90,
       });
 
@@ -517,6 +545,21 @@ class MockRosConnection {
         }
       }
 
+      // 2b. Gate Crossing Detection — mark gate as passed when vehicle crosses gate X
+      if (this.simX >= gateX && !store.obstacles?.gate?.passed) {
+        const lateralDist = Math.abs(this.simZ - gateZ);
+        // Only mark passed if within the gate opening (posts are at gateZ ± 0.9m)
+        if (lateralDist < 0.75 && this.simDepth > 0.3 && this.simDepth < 1.50) {
+          useVehicleStore.setState((s) => ({
+            obstacles: {
+              ...s.obstacles,
+              gate: { ...s.obstacles.gate, passed: true, detected: true },
+            },
+          }));
+          console.log(`[MockROS] 🏁 GATE PASSED! Vehicle crossed gate at x=${this.simX.toFixed(2)}, z=${this.simZ.toFixed(2)}`);
+        }
+      }
+
       // 3. Waypoint Advancement Logic
       let canAdvance = distToWp < currentWp.threshold;
       if (currentWp.hitFlare) {
@@ -547,9 +590,11 @@ class MockRosConnection {
         this.missionStage++;
       }
 
-      // 4. Depth Regulation (Robust Proportional Control to Target Depth)
+      // 4. Depth Regulation (Robust PD Control to Target Depth)
       const depthErr = currentWp.targetDepth - this.simDepth;
-      const cmdHeave = Math.max(-0.70, Math.min(0.70, depthErr * 2.5));
+      const depthRate = (this.simDepth - (this.lastFinalDepth ?? this.simDepth)) / dt;
+      this.lastFinalDepth = this.simDepth;
+      const cmdHeave = Math.max(-0.65, Math.min(0.65, depthErr * 2.2 - depthRate * 1.5));
 
       // 5. Smooth Pure Pursuit Guidance
       const toWpX = currentWp.x - this.simX;
@@ -560,12 +605,17 @@ class MockRosConnection {
       while (headingErr > Math.PI) headingErr -= Math.PI * 2;
       while (headingErr < -Math.PI) headingErr += Math.PI * 2;
 
-      // Proportional Smooth Steering (gentle gain, no overshoots)
-      let cmdYaw = Math.max(-1.0, Math.min(1.0, headingErr * 2.0));
+      // Smooth steering — boost authority during gate approach for precise alignment
+      const isGateWp = currentWp.isGateApproach;
+      const steerMaxYaw = isGateWp ? 0.50 : 0.25;
+      const steerDeadband = isGateWp ? 0.03 : 0.087;
+      let cmdYaw = this.computeSmoothSteering(targetHeading, this.simHeading, steerMaxYaw, steerDeadband);
 
-      // Continuous Smooth Forward Surge modulated by heading alignment
+      // Continuous Smooth Forward Surge — maintain high speed, barely slow for turns
       const alignment = Math.max(0, Math.cos(headingErr));
-      const forwardDrive = Math.max(0.20, alignment * alignment);
+      // For gate approach, slow down more when misaligned to allow correction
+      const minDrive = isGateWp ? 0.45 : 0.70;
+      const forwardDrive = Math.max(minDrive, alignment);
       let cmdSurge = currentWp.speed * forwardDrive;
 
       if (currentWp.isAvoidInspect && (this.avoidInspectStartTime !== null)) {
@@ -598,11 +648,11 @@ class MockRosConnection {
     // Process Thruster Dynamics through the Identified Polynomial Model (ARX / ARMAX / OE / BJ)
     const rawSurge = ctrl?.surge || 0;
     const sysIdRes = sysIdEngine.step(input.surge || (rawSurge / 1.0), rawSurge, dt);
-    const effectiveSurge = Math.max(-1.10, Math.min(1.10, rawSurge * 0.75 + (sysIdRes.velocity || 0) * 0.25));
+    const effectiveSurge = Math.max(-0.85, Math.min(0.85, rawSurge * 0.75 + (sysIdRes.velocity || 0) * 0.25));
 
-    // Advance dynamic pitch and roll angles
-    const pitchDeg = (ctrl?.pitch || 0) + targetPitchAngle + (isArmed ? Math.sin(t * 1.5) * 0.4 : Math.sin(t * 0.5) * 0.8);
-    const rollDeg = (ctrl?.roll || 0) + (isArmed ? Math.sin(t * 1.2) * 0.4 : Math.sin(t * 0.4) * 0.6);
+    // Clean pitch and roll — no artificial random oscillation that creates lateral disturbance
+    const pitchDeg = (ctrl?.pitch || 0) + targetPitchAngle;
+    const rollDeg = (ctrl?.roll || 0);
     const pitchRad = (pitchDeg * Math.PI) / 180;
     const rollRad = (rollDeg * Math.PI) / 180;
 
@@ -615,13 +665,14 @@ class MockRosConnection {
       { roll: rollRad, pitch: pitchRad, yaw: this.simHeading }
     );
 
-    // Get 3D ocean/pool current from EnvironmentModel
-    const currentNed = defaultEnvironment.getCurrentVelocity(this.simX, this.simZ, this.simDepth);
+    // Ocean current is ALREADY handled inside the HydrodynamicsEngine
+    // (via relative velocity nu_r = nu - nu_c for Coriolis and damping).
+    // Do NOT add it again here — that would double-count the drift.
 
-    let proposedX = this.simX + (vWorld.x + currentNed.vx) * dt;
-    let proposedZ = this.simZ + (vWorld.y + currentNed.vy) * dt;
+    let proposedX = this.simX + vWorld.x * dt;
+    let proposedZ = this.simZ + vWorld.y * dt;
     // Stable, decoupled vertical heave depth integration
-    let proposedDepth = Math.max(0.08, Math.min(1.84, this.simDepth + ((ctrl?.heave || 0) + currentNed.vz) * dt));
+    let proposedDepth = Math.max(0.08, Math.min(1.84, this.simDepth + (ctrl?.heave || 0) * dt));
 
     // 3D Physical Obstacle Collision Resolution
     const collision = subseaCollisionEngine.resolveCollision(

@@ -228,17 +228,16 @@ export class HydrodynamicsEngine {
     const S_bA = this.skew(b_A);
 
     // Total C(ν) = C_RB(ν) + C_A(ν_r)
-    // Structure: [  0     -S(a) ]
-    //            [ -S(a)  -S(b) ]
+    // For an open-frame, bluff-body ROV (Fossen 2021, Sec 6.5 "Hydrodynamics of ROVs"),
+    // potential-flow cross-coupling between linear surge/sway velocity and angular rates
+    // is negligible compared to viscous drag and creates an artificial destabilizing
+    // Munk moment if included without lifting surfaces.
+    // The rotational centripetal block -S(b_RB + b_A) governs attitude gyroscopic coupling.
     const C = Array(6).fill(0).map(() => Array(6).fill(0));
 
     for (let i = 0; i < 3; i++) {
       for (let j = 0; j < 3; j++) {
-        // Top-right 3x3 block: -S(a_RB + a_A)
-        C[i][j + 3] = -(S_aRB[i][j] + S_aA[i][j]);
-        // Bottom-left 3x3 block: -S(a_RB + a_A)
-        C[i + 3][j] = -(S_aRB[i][j] + S_aA[i][j]);
-        // Bottom-right 3x3 block: -S(b_RB + b_A)
+        // Bottom-right 3x3 block: Gyroscopic centripetal moments -S(b_RB + b_A)
         C[i + 3][j + 3] = -(S_bRB[i][j] + S_bA[i][j]);
       }
     }

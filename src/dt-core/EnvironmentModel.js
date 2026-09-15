@@ -66,9 +66,9 @@ export class EnvironmentModel {
         this.salinity = 0.0;
         break;
       case CURRENT_PRESETS.POOL_CIRCULATION:
-        this.current.speed = 0.04;
-        this.current.direction = Math.PI * 0.35;
-        this.current.turbulenceIntensity = 0.015;
+        this.current.speed = 0.0;  // Swimming pool: still water
+        this.current.direction = 0.0;
+        this.current.turbulenceIntensity = 0.0; // No turbulence in indoor pool
         this.salinity = 0.0;
         break;
       case CURRENT_PRESETS.MILD_CROSS_CURRENT:
