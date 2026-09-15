@@ -5,6 +5,7 @@ class TopicPublisher {
     this.cmdVelTopic = null;
     this.thrusterCmdTopic = null;
     this.obstacleOrderTopic = null;
+    this.gripperCommandTopic = null;
   }
 
   init(ros) {
@@ -28,6 +29,12 @@ class TopicPublisher {
     this.obstacleOrderTopic = new Topic({
       ros,
       name: '/mission_obstacle_order',
+      messageType: 'std_msgs/msg/String',
+    });
+
+    this.gripperCommandTopic = new Topic({
+      ros,
+      name: '/gripper/command',
       messageType: 'std_msgs/msg/String',
     });
 
@@ -81,6 +88,11 @@ class TopicPublisher {
     console.log('[TopicPublisher] 📡 Published updated obstacle execution order:', orderList);
   }
 
+  publishGripperCommand(command) {
+    if (!this.gripperCommandTopic) return;
+    this.gripperCommandTopic.publish({ data: command });
+  }
+
   emergencyStop() {
     this.publishVelocity(0, 0, 0, 0);
     this.publishThrusters([0, 0, 0, 0, 0, 0]);
@@ -99,6 +111,10 @@ class TopicPublisher {
     if (this.obstacleOrderTopic) {
       this.obstacleOrderTopic.unadvertise();
       this.obstacleOrderTopic = null;
+    }
+    if (this.gripperCommandTopic) {
+      this.gripperCommandTopic.unadvertise();
+      this.gripperCommandTopic = null;
     }
   }
 }

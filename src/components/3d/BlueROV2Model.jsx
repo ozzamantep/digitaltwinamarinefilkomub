@@ -120,11 +120,7 @@ export default function BlueROV2Model({ onFrame }) {
     useRef(), // 5: Rear-Vertical Ducted
   ];
 
-  const position = useVehicleStore((s) => s.position);
-  const orientation = useVehicleStore((s) => s.orientation);
   const lightsIntensity = useVehicleStore((s) => s.lightsIntensity);
-  const speed = useVehicleStore((s) => s.speed);
-  const thrusters = useVehicleStore((s) => s.thrusters);
   const armed = useVehicleStore((s) => s.armed);
   const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
   const payloadState = useVehicleStore((s) => s.payloadState);
@@ -203,6 +199,11 @@ export default function BlueROV2Model({ onFrame }) {
   }, []);
 
   useFrame((state, delta) => {
+    const liveState = useVehicleStore.getState();
+    const position = liveState.position;
+    const orientation = liveState.orientation;
+    const speed = liveState.speed;
+    const thrusters = liveState.thrusters;
     if (onFrame) onFrame();
 
     const t = state.clock.elapsedTime;
@@ -300,7 +301,7 @@ export default function BlueROV2Model({ onFrame }) {
   const lightPower = lightsIntensity / 100;
 
   return (
-    <group ref={groupRef} position={[position.x, position.y, position.z]}>
+    <group ref={groupRef} position={[-6, 1.1, 0]}>
       {/* ================================================================= */}
       {/* 1. CENTRAL MAIN PRESSURE HULL & INTERNAL ELECTRONICS BOX         */}
       {/* ================================================================= */}
@@ -463,19 +464,6 @@ export default function BlueROV2Model({ onFrame }) {
           <meshStandardMaterial color="#0f172a" roughness={0.2} metalness={0.8} />
         </mesh>
 
-        {/* Front Acrylic Dome Lens at Nose Tip */}
-        <mesh position={[0.054, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
-          <sphereGeometry args={[0.016, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
-          <meshPhysicalMaterial
-            color="#bae6fd"
-            transparent
-            opacity={0.85}
-            roughness={0.05}
-            transmission={0.9}
-            ior={1.49}
-          />
-        </mesh>
-
         {/* 5. FRONT VERTICAL HEAVE THRUSTER (Inside vertical duct facing UPWARDS) */}
         <group position={[0.005, 0, 0]}>
           <T200ThrusterUnit propRef={propRefs[4]} color="#0284c7" isVertical={true} />
@@ -627,27 +615,70 @@ export default function BlueROV2Model({ onFrame }) {
       <pointLight position={[-0.22, 0, 0]} color="#facc15" intensity={0.4} distance={1.5} />
 
       {/* ================================================================= */}
-      {/* 7. ARTICULATED SUBSEA ROBOTIC GRIPPER & MANIPULATOR ARM          */}
+      {/* 7. LOWER CENTERLINE: FRONT IMU, LOWER CAMERA, REAR GRIPPER       */}
       {/* ================================================================= */}
-      <group position={[0.22, -0.095, 0]}>
-        {/* Heavy-Duty Mounting Bracket attached to Lower Chassis */}
-        <mesh position={[-0.04, 0.015, 0]}>
-          <boxGeometry args={[0.06, 0.02, 0.045]} />
+      <group position={[0.15, -0.09, 0]}>
+        {/* Sealed IMU housing */}
+        <mesh>
+          <boxGeometry args={[0.05, 0.018, 0.045]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.3} metalness={0.75} />
+        </mesh>
+        <mesh position={[0, -0.01, 0]}>
+          <boxGeometry args={[0.038, 0.004, 0.033]} />
+          <meshStandardMaterial color="#22c55e" emissive="#16a34a" emissiveIntensity={0.65} />
+        </mesh>
+
+        {/* Four sonar transducers: front, rear, port, and starboard */}
+        <mesh position={[0.029, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.009, 0.009, 0.009, 16]} />
+          <meshStandardMaterial color="#38bdf8" metalness={0.55} roughness={0.2} />
+        </mesh>
+        <mesh position={[-0.029, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.009, 0.009, 0.009, 16]} />
+          <meshStandardMaterial color="#38bdf8" metalness={0.55} roughness={0.2} />
+        </mesh>
+        <mesh position={[0, 0, 0.026]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.009, 0.009, 0.009, 16]} />
+          <meshStandardMaterial color="#38bdf8" metalness={0.55} roughness={0.2} />
+        </mesh>
+        <mesh position={[0, 0, -0.026]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.009, 0.009, 0.009, 16]} />
+          <meshStandardMaterial color="#38bdf8" metalness={0.55} roughness={0.2} />
+        </mesh>
+
+      </group>
+
+      {/* Camera sits behind and below the IMU so its forward view stays clear */}
+      <group position={[0.07, -0.135, 0]}>
+        <mesh>
+          <boxGeometry args={[0.042, 0.022, 0.04]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.25} metalness={0.75} />
+        </mesh>
+        <mesh position={[0.024, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+          <sphereGeometry args={[0.014, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+          <meshPhysicalMaterial color="#bae6fd" transparent opacity={0.88} roughness={0.05} transmission={0.9} ior={1.49} />
+        </mesh>
+      </group>
+
+      <group position={[-0.04, -0.105, 0]}>
+        {/* Rigid vertical pylon connecting the gripper to the lower chassis */}
+        <mesh position={[0, 0.02, 0]}>
+          <boxGeometry args={[0.045, 0.08, 0.05]} />
           <meshStandardMaterial color="#0f172a" roughness={0.4} metalness={0.7} />
         </mesh>
 
         {/* Waterproof Rotary Servo Housing & Gold Ring */}
-        <mesh rotation={[0, 0, Math.PI / 2]}>
+        <mesh position={[0, -0.015, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.022, 0.022, 0.055, 18]} />
           <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.8} />
         </mesh>
-        <mesh position={[0.028, 0, 0]}>
-          <boxGeometry args={[0.01, 0.028, 0.035]} />
+        <mesh position={[0, -0.045, 0]}>
+          <boxGeometry args={[0.032, 0.01, 0.035]} />
           <meshStandardMaterial color="#00f0ff" emissive="#00f0ff" emissiveIntensity={0.6} />
         </mesh>
 
-        {/* Articulated Wrist Joint */}
-        <group position={[0.035, -0.005, 0]}>
+        {/* Articulated wrist rotates the jaws vertically downward */}
+        <group position={[0, -0.05, 0]} rotation={[0, 0, -Math.PI / 2]}>
           {/* Central Claw Base */}
           <mesh>
             <boxGeometry args={[0.025, 0.018, 0.04]} />

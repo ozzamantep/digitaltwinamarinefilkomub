@@ -300,6 +300,16 @@ class ThrusterDynamicsModel {
     this.actualCurrent.fill(0.5);
     this.commandedThrust.fill(0);
   }
+
+  forceStop(indices) {
+    for (const index of indices) {
+      if (index < 0 || index >= this.numThrusters) continue;
+      this.actualThrust[index] = 0;
+      this.actualRPM[index] = 0;
+      this.actualCurrent[index] = 0.5;
+      this.commandedThrust[index] = 0;
+    }
+  }
 }
 
 const thrusterDynamics = new ThrusterDynamicsModel();

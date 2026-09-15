@@ -141,6 +141,7 @@ export default function ControlPanel() {
   const payloadState = useVehicleStore((s) => s.payloadState);
   const gripperState = useVehicleStore((s) => s.gripperState || 'CLOSED');
   const connectionStatus = useVehicleStore((s) => s.connectionStatus);
+  const safetyInterlocks = useVehicleStore((s) => s.safetyInterlocks);
 
   const [activeTab, setActiveTab] = useState('pilot'); // 'pilot' | 'pid' | 'sysid' | 'sync'
   const [selectedLayoutPreset, setSelectedLayoutPreset] = useState('standard');
@@ -148,6 +149,31 @@ export default function ControlPanel() {
   const [gamepadConnected, setGamepadConnected] = useState(false);
   const [gamepadName, setGamepadName] = useState('');
   const gamepadPrevButtons = useRef({});
+
+  const handleToggleGripper = useCallback(() => {
+    const current = useVehicleStore.getState();
+    if (current.gripperState === 'OPEN') {
+      current.setGripperState('CLOSED');
+      topicPublisher.publishGripperCommand('CLOSE');
+    } else if (current.payloadState.grasped) {
+      current.releaseBall();
+      topicPublisher.publishGripperCommand('RELEASE');
+    } else {
+      current.setGripperState('OPEN');
+      topicPublisher.publishGripperCommand('OPEN');
+    }
+  }, []);
+
+  const handleReleaseOrGrasp = useCallback(() => {
+    const current = useVehicleStore.getState();
+    if (current.payloadState.grasped) {
+      current.releaseBall();
+      topicPublisher.publishGripperCommand('RELEASE');
+    } else {
+      current.graspBallWithGripper();
+      topicPublisher.publishGripperCommand('GRASP');
+    }
+  }, []);
 
   // =========================================================================
   // GAMEPAD / CONTROLLER SUPPORT (PS4 / Xbox / Generic HID)
@@ -157,6 +183,7 @@ export default function ControlPanel() {
   // R1/RB       → Arm
   // Triangle/Y  → Cycle flight mode
   // Circle/B    → Toggle Subsea Gripper (Open/Close)
+  // Cross/A     → Release Ball / Grasp Ball
   // =========================================================================
   useEffect(() => {
     const handleGamepadConnected = (e) => {
@@ -229,7 +256,11 @@ export default function ControlPanel() {
         }
         // Circle/B (button 1) → Toggle Subsea Robotic Gripper (Open/Close)
         if (gp.buttons[1]?.pressed && !prevBtns[1]) {
-          store.toggleGripper();
+          handleToggleGripper();
+        }
+        // Cross/A (button 0) → Release payload, or grasp again in simulation
+        if (gp.buttons[0]?.pressed && !prevBtns[0]) {
+          handleReleaseOrGrasp();
         }
 
         // =====================================================================
@@ -294,7 +325,7 @@ export default function ControlPanel() {
       window.removeEventListener('gamepadconnected', handleGamepadConnected);
       window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected);
     };
-  }, []);
+  }, [gamepadConnected, handleReleaseOrGrasp, handleToggleGripper]);
 
   // System Identification Model Selection
   const [selectedSysIdModel, setSelectedSysIdModel] = useState('BJ');
@@ -379,7 +410,7 @@ export default function ControlPanel() {
       if (keysPressed.current['KeyD']) sway += 1;
       if (keysPressed.current['KeyA']) sway -= 1;
       if (keysPressed.current['KeyE']) yaw += 1;
-      if (keysPressed.current['KeyQ']) yaw += 1;
+      if (keysPressed.current['KeyQ']) yaw -= 1;
       if (keysPressed.current['Space']) heave -= 1;
       if (keysPressed.current['ShiftLeft']) heave += 1;
 
@@ -637,7 +668,7 @@ export default function ControlPanel() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
               <button
                 id="btn-toggle-gripper"
-                onClick={() => store.toggleGripper()}
+                onClick={handleToggleGripper}
                 style={{
                   padding: '5px 4px',
                   fontSize: '0.62rem',
@@ -653,13 +684,7 @@ export default function ControlPanel() {
               </button>
               <button
                 id="btn-test-grasp"
-                onClick={() => {
-                  if (payloadState?.grasped) {
-                    store.dropBallIntoDrum();
-                  } else {
-                    store.graspBallWithGripper();
-                  }
-                }}
+                onClick={handleReleaseOrGrasp}
                 style={{
                   padding: '5px 4px',
                   fontSize: '0.62rem',
@@ -671,7 +696,7 @@ export default function ControlPanel() {
                   color: '#f87171',
                 }}
               >
-                {payloadState?.grasped ? '🎯 Lepas ke Drum' : '🗜️ Capit Bola'}
+                {payloadState?.grasped ? 'Lepas Bola (✕/A)' : 'Capit Bola (✕/A)'}
               </button>
             </div>
           </div>
@@ -752,13 +777,14 @@ export default function ControlPanel() {
                 </button>
                 <button
                   className="control-btn"
-                  onMouseDown={() => { if (armed) setControlInput({ heave: 1 }); }}
+                  disabled={safetyInterlocks.floor}
+                  onMouseDown={() => { if (armed && !safetyInterlocks.floor) setControlInput({ heave: 1 }); }}
                   onMouseUp={() => { if (armed) setControlInput({ heave: 0 }); }}
-                  onTouchStart={() => { if (armed) setControlInput({ heave: 1 }); }}
+                  onTouchStart={() => { if (armed && !safetyInterlocks.floor) setControlInput({ heave: 1 }); }}
                   onTouchEnd={() => { if (armed) setControlInput({ heave: 0 }); }}
-                  style={{ padding: '6px 2px', fontSize: '0.65rem' }}
+                  style={{ padding: '6px 2px', fontSize: '0.65rem', opacity: safetyInterlocks.floor ? 0.45 : 1 }}
                 >
-                  ⬇️ Dive (Shift)
+                  {safetyInterlocks.floor ? 'FLOOR LOCK' : '⬇️ Dive (Shift)'}
                 </button>
               </div>
 

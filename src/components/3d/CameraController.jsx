@@ -12,8 +12,6 @@ import useVehicleStore from '../../store/vehicleStore';
  */
 export default function CameraController({ controlsRef }) {
   const { camera } = useThree();
-  const position = useVehicleStore((s) => s.position);
-  const headingRad = useVehicleStore((s) => s.headingRad);
   const cameraViewMode = useVehicleStore((s) => s.cameraViewMode);
   const cameraResetTrigger = useVehicleStore((s) => s.cameraResetTrigger);
 
@@ -52,6 +50,9 @@ export default function CameraController({ controlsRef }) {
   };
 
   useFrame((_, delta) => {
+    const liveState = useVehicleStore.getState();
+    const position = liveState.position;
+    const headingRad = liveState.headingRad;
     const pos = position || { x: -11, y: 1.2, z: 2 };
     const hRad = headingRad || 0;
     const controls = controlsRef.current;

@@ -33,12 +33,12 @@ const THRUSTER_CONFIG = [
   },
   { // 2: Rear-Left Horizontal (135°)
     offset: [-0.20, 0, 0.105],
-    direction: new THREE.Vector3(0.707, 0, 0.707),
+    direction: new THREE.Vector3(-0.707, 0, -0.707),
     isVertical: false,
   },
   { // 3: Rear-Right Horizontal (-135°)
     offset: [-0.20, 0, -0.105],
-    direction: new THREE.Vector3(0.707, 0, -0.707),
+    direction: new THREE.Vector3(-0.707, 0, 0.707),
     isVertical: false,
   },
   { // 4: Front Vertical
@@ -53,15 +53,29 @@ const THRUSTER_CONFIG = [
   },
 ];
 
-const PARTICLES_PER_THRUSTER = 24;
+const PARTICLES_PER_THRUSTER = 42;
 const TOTAL_PARTICLES = PARTICLES_PER_THRUSTER * 6;
+
+function mixControlInput(controlInput) {
+  const surge = (controlInput?.surge || 0) * 78;
+  const sway = (controlInput?.sway || 0) * 30;
+  const yaw = (controlInput?.yaw || 0) * 28;
+  const heave = (controlInput?.heave || 0) * 75;
+  const mixed = [
+    surge + yaw - sway,
+    surge - yaw + sway,
+    surge + yaw + sway,
+    surge - yaw - sway,
+    heave,
+    heave,
+  ];
+  const peak = Math.max(...mixed.map(Math.abs), 100);
+  return mixed.map((effort) => (effort / peak) * 100);
+}
 
 export default function ThrusterBubbles() {
   const pointsRef = useRef();
-  const position = useVehicleStore((s) => s.position);
-  const orientation = useVehicleStore((s) => s.orientation);
   const armed = useVehicleStore((s) => s.armed);
-  const thrusters = useVehicleStore((s) => s.thrusters);
 
   const [posArr, velArr, lifeArr, sizeArr, thrusterIdx] = useMemo(() => {
     const pos = new Float32Array(TOTAL_PARTICLES * 3);
@@ -84,6 +98,12 @@ export default function ThrusterBubbles() {
 
   useFrame((state, delta) => {
     if (!pointsRef.current) return;
+    const liveState = useVehicleStore.getState();
+    const position = liveState.position;
+    const orientation = liveState.orientation;
+    const thrusters = liveState.thrusters;
+    const controlInput = liveState.controlInput;
+    const safetyInterlocks = liveState.safetyInterlocks;
     const posAttr = pointsRef.current.geometry.attributes.position;
     const sizeAttr = pointsRef.current.geometry.attributes.size;
     const arr = posAttr.array;
@@ -103,14 +123,31 @@ export default function ThrusterBubbles() {
 
     // Reusable vectors
     const localOffset = new THREE.Vector3();
+    const localExhaustDir = new THREE.Vector3();
     const exhaustDir = new THREE.Vector3();
+    const hasThrusterTelemetry = thrusters.some((effort) => Math.abs(effort || 0) > 2);
+    const safeControlInput = {
+      ...controlInput,
+      surge: (controlInput.surge > 0 && safetyInterlocks.front) || (controlInput.surge < 0 && safetyInterlocks.rear) ? 0 : controlInput.surge,
+      sway: (controlInput.sway < 0 && safetyInterlocks.left) || (controlInput.sway > 0 && safetyInterlocks.right) ? 0 : controlInput.sway,
+      heave: controlInput.heave > 0 && safetyInterlocks.floor ? 0 : controlInput.heave,
+    };
+    const activeThrusters = hasThrusterTelemetry ? thrusters : mixControlInput(safeControlInput);
 
     for (let i = 0; i < TOTAL_PARTICLES; i++) {
       const tIdx_i = thrusterIdx[i];
-      const effort = Math.abs(thrusters[tIdx_i] || 0);
-      const effortSign = Math.sign(thrusters[tIdx_i] || 0);
+      const signedEffort = activeThrusters[tIdx_i] || 0;
+      const effort = Math.abs(signedEffort);
+      const effortSign = Math.sign(signedEffort);
       const config = THRUSTER_CONFIG[tIdx_i];
-      const isActive = armed && effort > 5;
+      const isActive = armed && effort > 2;
+
+      if (config.isVertical && safetyInterlocks.floor) {
+        arr[i * 3 + 1] = -20;
+        sizeArr[i] = 0;
+        lifeArr[i] = 1;
+        continue;
+      }
 
       // Advance life
       // Faster decay for higher effort (more rapid cycling = denser stream)
@@ -122,11 +159,19 @@ export default function ThrusterBubbles() {
         if (isActive && Math.random() < 0.3 + (effort / 100) * 0.5) {
           lifeArr[i] = 0;
 
-          // Spawn at thruster nozzle position (in local vehicle space)
+          if (config.isVertical) {
+            // Body/NED heave is positive downward. Exhaust is always opposite
+            // the generated vehicle force: dive blows up, surface blows down.
+            localExhaustDir.set(0, effortSign > 0 ? 1 : -1, 0);
+          } else {
+            localExhaustDir.copy(config.direction).multiplyScalar(effortSign);
+          }
+
+          // Start outside the duct so the hull cannot hide the entire stream.
           localOffset.set(
-            config.offset[0] + (Math.random() - 0.5) * 0.025,
-            config.offset[1] + (Math.random() - 0.5) * 0.025,
-            config.offset[2] + (Math.random() - 0.5) * 0.025
+            config.offset[0] + localExhaustDir.x * 0.055 + (Math.random() - 0.5) * 0.025,
+            config.offset[1] + localExhaustDir.y * 0.055 + (Math.random() - 0.5) * 0.025,
+            config.offset[2] + localExhaustDir.z * 0.055 + (Math.random() - 0.5) * 0.025
           );
           localOffset.applyQuaternion(quat);
 
@@ -135,17 +180,11 @@ export default function ThrusterBubbles() {
           arr[i * 3 + 2] = vPos.z + localOffset.z;
 
           // Exhaust direction (in world frame) — flipped for reverse thrust
-          if (config.isVertical) {
-            // Vertical thrusters: positive effort = upward thrust = exhaust downward
-            // Negative effort = downward thrust = exhaust upward
-            exhaustDir.set(0, effortSign > 0 ? -1 : 1, 0);
-          } else {
-            exhaustDir.copy(config.direction);
-          }
+          exhaustDir.copy(localExhaustDir);
           exhaustDir.applyQuaternion(quat);
 
           // Bubble velocity scales with effort (faster thrust = faster bubbles)
-          const speed = 0.08 + (effort / 100) * 0.35;
+          const speed = 0.12 + (effort / 100) * 0.48;
           velArr[i].set(
             exhaustDir.x * speed + (Math.random() - 0.5) * 0.04,
             exhaustDir.y * speed + Math.random() * 0.06 + 0.02, // natural buoyancy
@@ -153,7 +192,7 @@ export default function ThrusterBubbles() {
           );
 
           // Bubble size scales with effort
-          sizeArr[i] = 0.015 + (effort / 100) * 0.035 + Math.random() * 0.01;
+          sizeArr[i] = 0.02 + (effort / 100) * 0.04 + Math.random() * 0.012;
         } else {
           // Hide inactive particles
           arr[i * 3 + 1] = -20;
@@ -190,7 +229,7 @@ export default function ThrusterBubbles() {
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={pointsRef} frustumCulled={false} renderOrder={5}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -206,12 +245,13 @@ export default function ThrusterBubbles() {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.04}
+        size={0.055}
         color="#e0f2fe"
         transparent
-        opacity={0.8}
+        opacity={0.9}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
+        depthTest={false}
         sizeAttenuation={true}
       />
     </points>

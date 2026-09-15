@@ -79,6 +79,147 @@ function Inclinometer() {
   );
 }
 
+function ProximityRadar() {
+  const sonarRanges = useVehicleStore((s) => s.sonarRanges);
+  const sonarDetections = useVehicleStore((s) => s.sonarDetections);
+  const detection = useVehicleStore((s) => s.imuDetection);
+  const maxRange = 8;
+  const center = 100;
+  const radarRadius = 78;
+  const entries = [
+    { direction: 'front', label: 'F', x: 0, y: -1, bearing: 0 },
+    { direction: 'right', label: 'R', x: 1, y: 0, bearing: Math.PI / 2 },
+    { direction: 'rear', label: 'B', x: 0, y: 1, bearing: Math.PI },
+    { direction: 'left', label: 'L', x: -1, y: 0, bearing: -Math.PI / 2 },
+  ];
+  const sweepDelay = (bearing) => {
+    const normalized = ((bearing % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    return `${(normalized / (Math.PI * 2)) * 3.2}s`;
+  };
+  const nearest = Math.min(...Object.values(sonarRanges));
+  const imuColor = detection.impactDetected ? '#ff3b5c' : detection.motionDetected ? '#ffb347' : '#00ff88';
+  const rangeColor = (range) => range <= 0.55 ? '#ff3b5c' : range < 1.2 ? '#ffb347' : '#7cff6b';
+
+  return (
+    <div className="proximity-radar-panel">
+      <div className="proximity-radar-heading">
+        <span>SONAR PROXIMITY</span>
+        <span style={{ color: rangeColor(nearest) }}>{nearest.toFixed(2)} m</span>
+      </div>
+      <svg className="proximity-radar" viewBox="0 0 200 200" role="img" aria-label="Four direction sonar proximity radar">
+        <defs>
+          <radialGradient id="radarGlow">
+            <stop offset="0%" stopColor="#063d2a" />
+            <stop offset="100%" stopColor="#010b08" />
+          </radialGradient>
+          <linearGradient id="radarSweep" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor="#00ff88" stopOpacity="0" />
+            <stop offset="100%" stopColor="#00ff88" stopOpacity="0.55" />
+          </linearGradient>
+        </defs>
+        <circle cx={center} cy={center} r="88" fill="url(#radarGlow)" stroke="#00ff88" strokeWidth="1.5" />
+        {[22, 44, 66].map((radius) => (
+          <circle key={radius} cx={center} cy={center} r={radius} fill="none" stroke="#16a34a" strokeOpacity="0.45" />
+        ))}
+        <path d="M100 12V188M12 100H188" stroke="#16a34a" strokeOpacity="0.38" />
+        <g className="radar-sweep">
+          <path d="M100 100 L100 12 A88 88 0 0 1 162 38 Z" fill="url(#radarSweep)" />
+          <line x1="100" y1="100" x2="100" y2="12" stroke="#7cff6b" strokeWidth="1.5" />
+        </g>
+        {entries.map(({ direction, label, x, y, bearing }) => {
+          const range = Math.min(maxRange, sonarRanges[direction]);
+          const radius = (range / maxRange) * radarRadius;
+          return (
+            <g key={direction} className="radar-swept-contact" style={{ animationDelay: sweepDelay(bearing) }}>
+              <circle
+                cx={center + x * radius}
+                cy={center + y * radius}
+                r={range < 1.2 ? 5 : 3.5}
+                fill={rangeColor(range)}
+                className={range < 1.2 ? 'radar-alert-blip' : ''}
+              />
+              <text x={center + x * 91} y={center + y * 91 + 3} textAnchor="middle" fill="#8ddcab" fontSize="9">{label}</text>
+              <text x={center + x * (radius + 10)} y={center + y * (radius + 10) + 3} textAnchor="middle" fill={rangeColor(range)} fontSize="7">
+                {sonarRanges[direction].toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
+        {sonarDetections.map((detection) => {
+          const radius = (Math.min(maxRange, detection.range) / maxRange) * radarRadius;
+          const x = center + Math.sin(detection.bearing) * radius;
+          const y = center - Math.cos(detection.bearing) * radius;
+          return (
+            <g key={detection.id} className="radar-swept-contact" style={{ animationDelay: sweepDelay(detection.bearing) }}>
+              <circle cx={x} cy={y} r="4" fill={rangeColor(detection.range)} className="radar-object-blip" />
+              <circle cx={x} cy={y} r="7" fill="none" stroke={rangeColor(detection.range)} strokeOpacity="0.45" />
+              <title>{`${detection.label}: ${detection.range.toFixed(2)} m`}</title>
+            </g>
+          );
+        })}
+        <circle cx={center} cy={center} r="9" fill="#071b15" stroke={imuColor} strokeWidth="2" />
+        <path d="M100 92 L106 106 L100 103 L94 106 Z" fill={imuColor} />
+      </svg>
+      <div className="proximity-radar-footer">
+        <span>IMU {detection.status}</span>
+        <span>{sonarDetections.length} TRACK · MAX {maxRange} m</span>
+      </div>
+    </div>
+  );
+}
+
+function IMUDetection() {
+  const imu = useVehicleStore((s) => s.imu);
+  const detection = useVehicleStore((s) => s.imuDetection);
+  const altitudeDVL = useVehicleStore((s) => s.altitudeDVL);
+  const floorState = altitudeDVL <= 0.37 ? 'TERKUNCI' : altitudeDVL < 0.70 ? 'MELAMBAT' : 'AMAN';
+  const statusColor = detection.impactDetected
+    ? 'var(--accent-red)'
+    : detection.motionDetected
+      ? 'var(--accent-orange)'
+      : 'var(--accent-green)';
+  const floorColor = floorState === 'TERKUNCI'
+    ? 'var(--accent-red)'
+    : floorState === 'MELAMBAT'
+      ? 'var(--accent-orange)'
+      : 'var(--accent-green)';
+
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <div className="sensor-label">IMU Motion Detection</div>
+        <div style={{ color: statusColor, fontSize: '0.65rem', fontWeight: '700' }}>
+          {detection.status}
+        </div>
+      </div>
+      <div className="sensor-grid">
+        <div className="sensor-item">
+          <div className="sensor-label">Accel X</div>
+          <div className="sensor-value accent-cyan" style={{ fontSize: '0.9rem' }}>{imu.accelX.toFixed(2)} m/s²</div>
+        </div>
+        <div className="sensor-item">
+          <div className="sensor-label">Accel Y</div>
+          <div className="sensor-value accent-green" style={{ fontSize: '0.9rem' }}>{imu.accelY.toFixed(2)} m/s²</div>
+        </div>
+        <div className="sensor-item">
+          <div className="sensor-label">Accel Z</div>
+          <div className="sensor-value accent-blue" style={{ fontSize: '0.9rem' }}>{imu.accelZ.toFixed(2)} m/s²</div>
+        </div>
+        <div className="sensor-item">
+          <div className="sensor-label">Resultan</div>
+          <div className="sensor-value" style={{ color: statusColor, fontSize: '0.9rem' }}>
+            {detection.accelerationMagnitude.toFixed(2)} m/s²
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '7px', fontSize: '0.65rem' }}>
+        <span style={{ color: 'var(--text-tertiary)' }}>DVL Floor Guard · {altitudeDVL.toFixed(2)} m</span>
+        <span style={{ color: floorColor, fontWeight: '700' }}>{floorState}</span>
+      </div>
+    </div>
+  );
+}
+
 function SubseaBattery() {
   const battery = useVehicleStore((s) => s.battery);
   const level = battery.level;
@@ -150,6 +291,8 @@ export default function SensorPanel() {
         </div>
       </div>
 
+      <ProximityRadar />
+
       <DepthMeter />
 
       <div className="sensor-grid" style={{ marginBottom: '12px' }}>
@@ -188,6 +331,8 @@ export default function SensorPanel() {
       <div style={{ marginTop: '12px' }}>
         <Inclinometer />
       </div>
+
+      <IMUDetection />
     </motion.div>
   );
 }

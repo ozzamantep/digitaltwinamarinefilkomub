@@ -22,6 +22,7 @@
 15. [Tabel Komprehensif Seluruh Parameter & Satuan SI Terkalibrasi](#15--tabel-komprehensif-seluruh-parameter--satuan-si-terkalibrasi)
 16. [Panduan Menjalankan Sistem](#16--panduan-menjalankan-sistem)
 17. [Struktur Kode Sumber & Arsitektur Perangkat Lunak](#17--struktur-kode-sumber--arsitektur-perangkat-lunak)
+18. [Safety Supervisor, Persepsi, dan Reliabilitas Lomba](#18--safety-supervisor-persepsi-dan-reliabilitas-lomba)
 
 ---
 
@@ -1216,6 +1217,7 @@ digitaltwin/
 │   │   ├── TopicPublisher.js             ← ROS2 topic publisher
 │   │   ├── SensorNoiseModel.js           ← Realistic sensor noise profiles
 │   │   ├── SubseaCollisionEngine.js      ← Underwater collision detection
+│   │   ├── SafetySupervisor.js            ← Competition safety state machine
 │   │   └── WebSerialManager.js           ← Web Serial USB (HIL thruster test)
 │   │
 │   ├── components/                       ← UI COMPONENTS
@@ -1231,6 +1233,7 @@ digitaltwin/
 │   └── main.cjs                          ← Electron main process
 │
 ├── jetson/                               ← Jetson Nano ROS2 launch files
+│   └── sauvc26_code/collision_safety.py  ← Hardware safety latch & emergency surface
 ├── simulator/                            ← Gazebo simulation configs
 ├── tests/                                ← Unit & integration tests
 ├── public/                               ← Static assets & 3D models
@@ -1241,6 +1244,81 @@ digitaltwin/
 ├── vite.config.js                        ← Vite build configuration
 └── README.md                             ← Project overview
 ```
+
+---
+
+## 18. Safety Supervisor, Persepsi, dan Reliabilitas Lomba
+
+Bagian ini mendokumentasikan fitur operasional untuk riset dan persiapan lomba tim. Tujuannya bukan hanya membatasi posisi virtual, tetapi memastikan perintah aktuator menuju kondisi berbahaya benar-benar ditolak atau dibalik pada simulator dan wahana fisik.
+
+### A. State Machine Keselamatan
+
+| State | Kondisi | Respons |
+|:--|:--|:--|
+| `NORMAL` | Seluruh jarak aman dan sensor valid | Kendali pilot/autonomi diteruskan penuh |
+| `CAUTION` | Sonar < 1.20 m, DVL < 0.70 m, atau baterai rendah | Kecepatan perintah dibatasi 50% |
+| `LOCKED` | Dinding <= 0.55 m atau lantai <= 0.37 m | Throttle menuju bahaya ditolak dan active repulsion dijalankan |
+| `EMERGENCY_SURFACE` | Kebocoran hull atau baterai <= 8% / <= 13.0 V | Surge, sway, yaw nol; wahana diperintah naik |
+
+Interlock memakai histeresis. Lock dinding baru dilepas setelah sonar > 1.20 m dan lock lantai setelah DVL > 0.70 m. Dengan demikian noise sensor di sekitar ambang tidak membuat thruster hidup-mati dengan cepat.
+
+### B. Active Repulsion dan Hard Thruster Inhibit
+
+Safety supervisor bekerja **sebelum thruster allocation**:
+
+```
+Pilot / Mission Command
+  -> Safety Supervisor
+  -> Directional Clamp / Escape Command
+  -> Thruster Allocation
+  -> T200 Dynamics
+```
+
+- Dinding depan: minimum perintah escape surge `-0.30` pada simulator dan `-0.20 m/s` pada Jetson.
+- Dinding belakang: minimum perintah escape surge positif.
+- Dinding kiri/kanan: sway diarahkan menjauh dari dinding.
+- Lantai: heave dipaksa naik (`-0.25` simulator, `-0.20 m/s` Jetson).
+- Saat floor lock aktif, state thrust, RPM, arus, dan motor lag T5-T6 dihapus. Tombol Dive berubah menjadi `FLOOR LOCK` dan bubble vertikal lama disembunyikan.
+
+### C. Hitbox Fisik dan Kontak Flare
+
+Hitbox horizontal menggunakan oriented bounding box yang mengikuti yaw kapal, dengan footprint efektif `0.58 m x 0.32 m`. Dimensi vertikal mencakup badan dan gripper bawah. Kontak flare dihitung sebagai irisan OBB kapal dengan silinder flare serta overlap tinggi.
+
+Trigger lama berbasis jarak pusat `0.85 m` telah dihapus. Flare bertanda `TABRAK` hanya jatuh setelah hull/gripper benar-benar bersentuhan. Event `/mission_state` tetap digunakan untuk menyinkronkan kejadian kontak dari wahana fisik.
+
+### D. Sonar, Computer Vision, dan Radar UI
+
+Empat topic sonar adalah `/sonar/front/range`, `/sonar/rear/range`, `/sonar/left/range`, dan `/sonar/right/range`. DVL bawah menggunakan `/dvl/range`. Radar UI menampilkan range/bearing aktual terhadap dinding dan obstacle arena; blip hanya terlihat ketika sweep melewati bearing target.
+
+Dua ember merah non-target merupakan objek pengirim sinyal. Karena konfigurasi wahana ini tidak memiliki signal receiver, keduanya ditandai `sensorSource: vision`, dikeluarkan dari return sonar, dan hanya ditampilkan sebagai deteksi camera/YOLO dengan label `CV ONLY`. Seluruh ember tetap ada pada environment dan pipeline computer vision.
+
+> IMU tidak dapat mengukur jarak ke dinding atau lantai. IMU digunakan untuk attitude, motion detection, dan impact fallback. Pencegahan tabrakan sebelum kontak bergantung pada sonar dan DVL yang terkalibrasi.
+
+### E. Gripper dan Pelepasan Payload
+
+Susunan lower centerline dari depan ke belakang adalah IMU, kamera yang lebih rendah, lalu gripper vertikal. Perintah hardware dipublish melalui `/gripper/command` dengan nilai `OPEN`, `CLOSE`, `GRASP`, atau `RELEASE`.
+
+- `Circle/B`: buka atau tutup gripper.
+- `Cross/A`: lepas atau capit payload.
+- Bola hanya dianggap masuk drum bila jarak kapal ke drum target <= 0.55 m; selain itu bola jatuh dari posisi gripper saat ini.
+
+### F. Profil Performa Real-Time
+
+Physics, control, collision, IMU, dan EKF tetap berjalan pada 20 Hz. Radar sonar disegarkan 10 Hz, statistik validation/OOD/health 5 Hz, history telemetry 5 Hz, dan viewport computer vision sekunder 15 FPS. Main WebGL menggunakan DPR 1 dan komponen frame-driven membaca state secara imperatif di `useFrame`, sehingga React tidak membangun ulang scene graph pada setiap packet telemetry.
+
+Pengujian browser menunjukkan p95 frame time turun dari sekitar `54.6 ms` menjadi `30.5 ms`, sementara frame berat >32 ms turun dari `55/180` menjadi `13/300` pada environment pengujian yang sama.
+
+### G. Validasi Otomatis
+
+```
+npm run test:bj-rls
+npm run test:safety-supervisor
+npm run test:collision-hitbox
+npm run test:collision-safety
+npm run build
+```
+
+Sebelum pool test, lakukan pengujian dry-bench dengan thruster dilepas dari propeller atau dibatasi daya, verifikasi orientasi setiap sonar, uji DVL floor lock, leak emergency surface, battery emergency surface, dan tombol gripper hardware.
 
 ---
 

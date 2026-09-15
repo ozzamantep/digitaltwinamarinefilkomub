@@ -36,6 +36,7 @@ export default function DiagnosticsPanel() {
   const diagnostics = useVehicleStore((s) => s.diagnostics);
   const connectionStatus = useVehicleStore((s) => s.connectionStatus);
   const leakDetected = useVehicleStore((s) => s.leakDetected);
+  const safety = useVehicleStore((s) => s.safetySupervisor);
 
   const getStatusClass = (value, warnThreshold = 70, errorThreshold = 90) => {
     if (value >= errorThreshold) return 'error';
@@ -44,6 +45,11 @@ export default function DiagnosticsPanel() {
   };
 
   const items = [
+    {
+      label: 'Safety Supervisor',
+      value: safety.state,
+      status: safety.emergency ? 'error' : safety.state === 'NORMAL' ? 'ok' : 'warn',
+    },
     {
       label: '🖥️ Jetson CPU',
       value: `${diagnostics.cpuUsage.toFixed(0)}%`,

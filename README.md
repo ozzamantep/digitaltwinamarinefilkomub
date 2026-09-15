@@ -125,6 +125,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | **Vehicle Configuration** | Single source of truth for all 50+ physical parameters | `src/dt-core/VehicleConfig.js` |
 | **15-State EKF** | Multi-rate sensor fusion (IMU 100Hz, Depth 20Hz, DVL 10Hz) with Mahalanobis outlier gating | `src/dt-core/StateEstimator.js` |
 | **Box-Jenkins System Identification** | Online pseudo-linear RLS (λ=0.985) adapting 6 plant/noise parameters | `src/services/SystemIdentificationEngine.js` |
+| **Competition Safety Supervisor** | Directional latches, active wall/floor repulsion, emergency surface, sensor fail-safe | `src/services/SafetySupervisor.js` |
 | **PID Flight Controller** | Depth hold, heading lock, attitude stabilization with anti-windup | `src/services/AUVMotionController.js` |
 | **Thruster Dynamics** | T200 lookup table, motor lag (τ=0.35s), voltage sag, PWM deadband | `src/services/ThrusterDynamicsModel.js` |
 | **PINN Residual** | Physics-Informed Neural Network for unmodeled dynamics compensation | `src/dt-core/PINNResidual.js` |
@@ -141,11 +142,36 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | `/imu/data` | `sensor_msgs/Imu` | 100 Hz | Roll, pitch, yaw & 3-axis accelerations |
 | `/depth` | `sensor_msgs/FluidPressure` | 20 Hz | MS5837 barometer depth measurement |
 | `/dvl/range` | `sensor_msgs/Range` | 10 Hz | Acoustic DVL altitude (distance to bottom) |
+| `/sonar/front/range` | `sensor_msgs/Range` | ≥20 Hz | Forward collision distance |
+| `/sonar/rear/range` | `sensor_msgs/Range` | ≥20 Hz | Rear collision distance |
+| `/sonar/left/range` | `sensor_msgs/Range` | ≥20 Hz | Port-side collision distance |
+| `/sonar/right/range` | `sensor_msgs/Range` | ≥20 Hz | Starboard-side collision distance |
+| `/gripper/command` | `std_msgs/String` | Event | Gripper command: `OPEN`, `CLOSE`, `GRASP`, or `RELEASE` |
 | `/battery_state` | `sensor_msgs/BatteryState` | 1 Hz | 4S LiPo voltage, current, remaining capacity |
 | `/cmd_vel` | `geometry_msgs/Twist` | 50 Hz | 4-DOF velocity commands (surge, sway, heave, yaw) |
 | `/thruster_commands` | `std_msgs/Float64MultiArray` | 50 Hz | 6-channel thruster PWM/effort outputs |
 | `/thruster_outputs` | `std_msgs/Float64MultiArray` | 50 Hz | Real-time thruster RPM feedback |
 | `/camera/image_raw/compressed` | `sensor_msgs/CompressedImage` | 30 Hz | Front subsea camera video stream |
+
+### Physical Collision Safety
+
+The safety state machine is `NORMAL -> CAUTION -> LOCKED -> EMERGENCY_SURFACE`. Four directional sonar streams use hysteresis: a wall lock engages at `0.55 m` and releases only above `1.20 m`. A locked direction ignores continued pilot throttle and commands active escape thrust away from the wall. Stale data older than `0.50 s` fails safe.
+
+The downward DVL engages the floor lock at `0.37 m` and releases above `0.70 m`. It clears motor lag/RPM on T5-T6 and commands upward escape thrust, so holding Dive cannot keep loading the pool floor. Hull leak or critical battery (`<= 8%` or `<= 13.0 V`) latches emergency surface. IMU acceleration above `18 m/s²` or angular rate above `2.5 rad/s` triggers an all-axis emergency stop.
+
+An IMU cannot measure distance to a wall or floor. It is used for attitude, motion detection, and impact fallback; preventive collision avoidance depends on correctly mounted and calibrated waterproof sonar/DVL sensors. Bench-test every topic direction and stopping distance at low thrust before operating near a pool wall or floor.
+
+### Competition Perception & Interaction
+
+- The sonar radar uses actual wall and arena-object range/bearing data. Contacts flash only when the rotating sweep crosses their bearing.
+- Signal-only red buckets are excluded from acoustic sonar and labeled `CV ONLY`; the onboard camera/YOLO pipeline detects them because this vehicle has no signal receiver.
+- The collision model uses a heading-aware `0.58 m x 0.32 m` oriented hull footprint plus vertical overlap. A flare falls only after real geometric contact, never from a generous waypoint radius.
+- IMU, lowered forward camera, sonar housing, and vertical gripper are mounted on the lower centerline. Bubble jets show each T200 exhaust direction, including reverse and vertical thrust.
+- Controller mappings: `Circle/B` opens or closes the gripper; `Cross/A` releases or grasps the ball. Releases enter the target drum only within `0.55 m`; otherwise the ball drops from the current gripper position.
+
+### Real-Time Rendering Profile
+
+The control, collision, IMU, and EKF loops remain at `20 Hz`. Sonar visualization runs at `10 Hz`, derived validation/OOD/health telemetry at `5 Hz`, and the secondary computer-vision viewport at `15 FPS`. Three.js components read live telemetry inside `useFrame` to avoid rebuilding the scene graph on every ROS packet.
 
 ---
 

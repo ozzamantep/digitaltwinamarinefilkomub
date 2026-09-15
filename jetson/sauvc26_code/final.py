@@ -8,8 +8,10 @@ import sys
 import json
 
 from geometry_msgs.msg import PoseStamped, Point
-from std_msgs.msg import String
+from sensor_msgs.msg import BatteryState, Imu, Range
+from std_msgs.msg import Bool, String
 from mavros_msgs.msg import PositionTarget
+from sauvc26_code.collision_safety import CollisionSafety
 from sauvc26_code.pid import PID
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -91,10 +93,39 @@ class GuidedMove(Node):
             self.obstacle_order_callback,
             qos_profile
         )
+        self.collision_safety = CollisionSafety()
+        self.sonar_subs = [
+            self.create_subscription(
+                Range,
+                f'/sonar/{direction}/range',
+                lambda msg, direction=direction: self.sonar_callback(direction, msg),
+                qos_profile
+            )
+            for direction in CollisionSafety.DIRECTIONS
+        ]
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu/data',
+            self.imu_callback,
+            qos_profile
+        )
+        self.dvl_floor_sub = self.create_subscription(
+            Range,
+            '/dvl/range',
+            lambda msg: self.sonar_callback('floor', msg),
+            qos_profile
+        )
+        self.battery_safety_sub = self.create_subscription(
+            BatteryState, '/battery_state', self.battery_safety_callback, qos_profile
+        )
+        self.leak_safety_sub = self.create_subscription(
+            Bool, '/leak_detected', self.leak_safety_callback, qos_profile
+        )
+        self.last_safety_reason = None
         
         # PositionTarget
         self.cmd = PositionTarget()
-        self.cmd.coordinate_frame = PositionTarget.FRAME_LOCAL_NED # Set coordinate frame to LOCAL_NED (x=north, y=east, z=down)
+        self.cmd.coordinate_frame = PositionTarget.FRAME_BODY_NED
         self.cmd.type_mask = ( # Ignore position, acceleration, and yaw (use velocity and yaw_rate)
             PositionTarget.IGNORE_PX | 
             PositionTarget.IGNORE_PY | 
@@ -189,6 +220,28 @@ class GuidedMove(Node):
     def pose_callback(self, msg):
         """Callback for current pose"""
         self.current_pose = msg
+
+    def sonar_callback(self, direction, msg):
+        self.collision_safety.update_range(
+            direction,
+            msg.range,
+            msg.min_range,
+            msg.max_range
+        )
+
+    def imu_callback(self, msg):
+        accel = msg.linear_acceleration
+        gyro = msg.angular_velocity
+        self.collision_safety.update_imu(
+            accel.x, accel.y, accel.z,
+            gyro.x, gyro.y, gyro.z
+        )
+
+    def battery_safety_callback(self, msg):
+        self.collision_safety.update_battery(msg.voltage, msg.percentage)
+
+    def leak_safety_callback(self, msg):
+        self.collision_safety.update_leak(msg.data)
     
     def coord_callback(self, msg):
         """Callback from YOLO target coordinates - parses JSON with all detections"""
@@ -911,6 +964,14 @@ class GuidedMove(Node):
 
             
                 
+        safety_reason = self.collision_safety.apply(self.cmd)
+        if safety_reason != self.last_safety_reason:
+            if safety_reason:
+                self.get_logger().warn(f'[COLLISION SAFETY] Command limited: {safety_reason}')
+            else:
+                self.get_logger().info('[COLLISION SAFETY] Path clear')
+            self.last_safety_reason = safety_reason
+
         # Set header timestamp
         self.cmd.header.stamp = current_time.to_msg()
         self.cmd.header.frame_id = 'base_link'

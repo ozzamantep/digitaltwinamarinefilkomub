@@ -640,6 +640,72 @@ body {
   font-weight: 600;
 }
 
+/* ---- Sonar / IMU Proximity Radar ---- */
+.proximity-radar-panel {
+  width: 100%;
+  margin-bottom: var(--space-md);
+  padding: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  border-radius: var(--radius-md);
+  background: #010b08;
+  box-shadow: inset 0 0 24px rgba(0, 255, 136, 0.08);
+}
+
+.proximity-radar-heading,
+.proximity-radar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8ddcab;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.proximity-radar {
+  display: block;
+  width: min(100%, 190px);
+  aspect-ratio: 1;
+  margin: 4px auto;
+}
+
+.radar-sweep {
+  transform-origin: 100px 100px;
+  animation: radar-rotate 3.2s linear infinite;
+  will-change: transform;
+}
+
+.radar-swept-contact {
+  opacity: 0;
+  animation: radar-contact-reveal 3.2s linear infinite;
+}
+
+.radar-alert-blip {
+  animation: radar-alert 0.8s ease-in-out infinite alternate;
+}
+
+.radar-object-blip {
+  filter: drop-shadow(0 0 3px currentColor);
+  animation: radar-object-pulse 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes radar-alert {
+  to { opacity: 0.35; }
+}
+
+@keyframes radar-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes radar-contact-reveal {
+  0%, 13% { opacity: 1; }
+  20%, 100% { opacity: 0; }
+}
+
+@keyframes radar-object-pulse {
+  to { opacity: 0.55; }
+}
+
 /* ---- Camera Feed ---- */
 .camera-container {
   position: relative;

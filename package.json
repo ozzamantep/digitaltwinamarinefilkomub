@@ -8,6 +8,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test:bj-rls": "node tests/test_bj_rls.js",
+    "test:collision-safety": "python tests/test_collision_safety.py",
+    "test:collision-hitbox": "node tests/test_collision_hitbox.js",
+    "test:safety-supervisor": "node tests/test_safety_supervisor.js",
     "preview": "vite preview",
     "desktop": "electron .",
     "start": "vite --port 5173"

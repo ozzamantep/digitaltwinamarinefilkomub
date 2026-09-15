@@ -95,7 +95,7 @@ export default function CameraFeed() {
                   CAM: FWD ACRYLIC DOME (110° FOV)
                 </span>
                 <span style={{ background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '3px', color: 'var(--accent-green)' }}>
-                  REC ● 60 FPS
+                  CV ● 15 FPS
                 </span>
               </div>
 

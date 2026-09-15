@@ -672,7 +672,7 @@ export default function PoolEnvironment() {
       </group>
 
       {/* 3. Red Drum 2 (Z = -1.5m) */}
-      <group position={[10.5, 0.18, -1.5]}>
+      <group position={[obstacles.drum_red_2?.x ?? 10.5, 0.18, obstacles.drum_red_2?.z ?? -1.5]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.35, 0.3, 0.45, 24, 1, true]} />
           <meshStandardMaterial color="#ef4444" side={THREE.DoubleSide} roughness={0.4} />
@@ -684,7 +684,7 @@ export default function PoolEnvironment() {
       </group>
 
       {/* 4. Red Drum 3 (Z = -4.5m) */}
-      <group position={[10.5, 0.18, -4.5]}>
+      <group position={[obstacles.drum_red_3?.x ?? 10.5, 0.18, obstacles.drum_red_3?.z ?? -4.5]}>
         <mesh castShadow>
           <cylinderGeometry args={[0.35, 0.3, 0.45, 24, 1, true]} />
           <meshStandardMaterial color="#ef4444" side={THREE.DoubleSide} roughness={0.4} />

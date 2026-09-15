@@ -42,8 +42,20 @@ const useVehicleStore = create((set, get) => ({
 
   // Subsea Sensors
   imu: { roll: 0, pitch: 0, yaw: 0, accelX: 0, accelY: 0, accelZ: -9.81 },
+  imuDetection: {
+    status: 'STABIL',
+    accelerationMagnitude: 9.81,
+    horizontalAcceleration: 0,
+    gravityDeviation: 0,
+    motionDetected: false,
+    impactDetected: false,
+  },
   depthSensor: { depth: 0.9, pressure: 110.1, temperature: 26.4 },
   altitudeDVL: 1.1,
+  sonarRanges: { front: 8, rear: 8, left: 8, right: 8 },
+  sonarDetections: [],
+  safetyInterlocks: { front: false, rear: false, left: false, right: false, floor: false },
+  safetySupervisor: { state: 'NORMAL', reasons: [], blocked: { front: false, rear: false, left: false, right: false, floor: false }, emergency: false },
   leakDetected: false,
   battery: { level: 92, voltage: 16.2, current: 4.2, temperature: 28.5 },
   lightsIntensity: 80, // % 0-100
@@ -133,6 +145,36 @@ const useVehicleStore = create((set, get) => ({
       ball_red_floor: undefined,
     },
   })),
+  releaseBall: () => set((s) => {
+    if (!s.payloadState.grasped) return s;
+    const drum = s.obstacles.drum_red_tgt;
+    const distanceToDrum = drum
+      ? Math.sqrt((s.position.x - drum.x) ** 2 + (s.position.z - drum.z) ** 2)
+      : Infinity;
+    const inDrum = distanceToDrum <= 0.55;
+    const targetX = inDrum ? drum.x : s.position.x;
+    const targetZ = inDrum ? drum.z : s.position.z;
+
+    return {
+      gripperState: 'OPEN',
+      payloadState: {
+        ...s.payloadState,
+        loaded: false,
+        grasped: false,
+        dropped: true,
+        inDrum,
+        onFloor: !inDrum,
+        retrievalActive: !inDrum,
+        x: targetX,
+        y: inDrum ? 0.20 : 0.08,
+        z: targetZ,
+      },
+      obstacles: {
+        ...s.obstacles,
+        drum_red_tgt: inDrum && drum ? { ...drum, dropped: true } : drum,
+      },
+    };
+  }),
   dropBallIntoDrum: (x = 10.5, z = 1.5) => set((s) => ({
     gripperState: 'OPEN',
     payloadState: {
@@ -293,6 +335,8 @@ const useVehicleStore = create((set, get) => ({
     yellow_flare: { id: 'flare_yellow', name: 'FLARE_YEL', x: -0.5, z: -4.5, y: 0.75, width: 0.35, height: 1.5, color: '#eab308', detected: false, fallen: false },
     gate:         { id: 'gate',         name: 'SAUVC_GATE',x: 4.0,  z: 0.0, y: 0.85, width: 1.9,  height: 1.6, color: '#f59e0b', detected: false, passed: false },
     drum_red_tgt: { id: 'drum_red_1',   name: 'DRUM_RED_TGT', x: 10.5, z: 1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, dropped: false },
+    drum_red_2:   { id: 'drum_red_2',   name: 'DRUM_RED_SIGNAL_2', x: 10.5, z: -1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, signalOnly: true, sensorSource: 'vision' },
+    drum_red_3:   { id: 'drum_red_3',   name: 'DRUM_RED_SIGNAL_3', x: 10.5, z: -4.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, signalOnly: true, sensorSource: 'vision' },
     drum_blue:    { id: 'drum_blue',    name: 'DRUM_BLU',  x: 10.5, z: 4.5, y: 0.25, width: 0.7, height: 0.5, color: '#0284c7', detected: false },
   },
 
@@ -327,6 +371,8 @@ const useVehicleStore = create((set, get) => ({
       yellow_flare: { id: 'flare_yellow', name: 'FLARE_YEL', x: -0.5, z: -4.5, y: 0.75, width: 0.35, height: 1.5, color: '#eab308', detected: false, fallen: false },
       gate:         { id: 'gate',         name: 'SAUVC_GATE',x: 4.0,  z: 0.0, y: 0.85, width: 1.9,  height: 1.6, color: '#f59e0b', detected: false, passed: false },
       drum_red_tgt: { id: 'drum_red_1',   name: 'DRUM_RED_TGT', x: 10.5, z: 1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, dropped: false },
+      drum_red_2:   { id: 'drum_red_2',   name: 'DRUM_RED_SIGNAL_2', x: 10.5, z: -1.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, signalOnly: true, sensorSource: 'vision' },
+      drum_red_3:   { id: 'drum_red_3',   name: 'DRUM_RED_SIGNAL_3', x: 10.5, z: -4.5, y: 0.25, width: 0.7, height: 0.5, color: '#ef4444', detected: false, signalOnly: true, sensorSource: 'vision' },
       drum_blue:    { id: 'drum_blue',    name: 'DRUM_BLU',  x: 10.5, z: 4.5, y: 0.25, width: 0.7, height: 0.5, color: '#0284c7', detected: false },
     },
     flaresFallen: { red: false, blue: false, yellow: false, orange: false },
@@ -416,17 +462,30 @@ const useVehicleStore = create((set, get) => ({
   },
 
   updatePose: ({ position, orientation, euler, depth, speed, headingRad }) => {
+    const now = Date.now();
     const history = get().positionHistory;
-    const newHistory = [...history, { ...position, timestamp: Date.now() }];
-    if (newHistory.length > 500) newHistory.shift();
+    const lastPositionSample = history[history.length - 1];
+    const shouldSamplePosition = position && (
+      !lastPositionSample ||
+      now - lastPositionSample.timestamp >= 200
+    );
+    const newHistory = shouldSamplePosition
+      ? [...history.slice(-499), { ...position, timestamp: now }]
+      : history;
 
     const dHistory = get().depthHistory;
-    const newDHistory = [...dHistory, { depth: depth ?? get().depth, timestamp: Date.now() }];
-    if (newDHistory.length > 100) newDHistory.shift();
+    const lastDepthSample = dHistory[dHistory.length - 1];
+    const shouldSampleDepth = !lastDepthSample || now - lastDepthSample.timestamp >= 200;
+    const newDHistory = shouldSampleDepth
+      ? [...dHistory.slice(-99), { depth: depth ?? get().depth, timestamp: now }]
+      : dHistory;
 
     const sHistory = get().speedHistory;
-    const newSHistory = [...sHistory, { ...(speed ?? get().speed), timestamp: Date.now() }];
-    if (newSHistory.length > 100) newSHistory.shift();
+    const lastSpeedSample = sHistory[sHistory.length - 1];
+    const shouldSampleSpeed = !lastSpeedSample || now - lastSpeedSample.timestamp >= 200;
+    const newSHistory = shouldSampleSpeed
+      ? [...sHistory.slice(-99), { ...(speed ?? get().speed), timestamp: now }]
+      : sHistory;
 
     set({
       position: position ?? get().position,
@@ -442,9 +501,40 @@ const useVehicleStore = create((set, get) => ({
   },
 
   updateThrusters: (thrusters) => set({ thrusters }),
-  updateIMU: (imu) => set({ imu, euler: { roll: imu.roll, pitch: imu.pitch, yaw: imu.yaw } }),
+  updateIMU: (imu) => {
+    const accelX = Number(imu.accelX) || 0;
+    const accelY = Number(imu.accelY) || 0;
+    const accelZ = Number(imu.accelZ) || 0;
+    const accelerationMagnitude = Math.sqrt(accelX ** 2 + accelY ** 2 + accelZ ** 2);
+    const horizontalAcceleration = Math.sqrt(accelX ** 2 + accelY ** 2);
+    const gravityDeviation = Math.abs(accelerationMagnitude - 9.81);
+    const impactDetected = accelerationMagnitude > 18.0 || gravityDeviation > 6.0;
+    const motionDetected = impactDetected || horizontalAcceleration > 0.08 || gravityDeviation > 0.12;
+
+    set({
+      imu,
+      imuDetection: {
+        status: impactDetected ? 'IMPACT' : motionDetected ? 'GERAK' : 'STABIL',
+        accelerationMagnitude,
+        horizontalAcceleration,
+        gravityDeviation,
+        motionDetected,
+        impactDetected,
+      },
+      euler: { roll: imu.roll, pitch: imu.pitch, yaw: imu.yaw },
+    });
+  },
   updateDepthSensor: (depthSensor) => set({ depthSensor, depth: depthSensor.depth }),
   updateDVL: (altitudeDVL) => set({ altitudeDVL }),
+  updateSonarRange: (direction, range) => set((state) => ({
+    sonarRanges: { ...state.sonarRanges, [direction]: Math.max(0, Number(range) || 0) },
+  })),
+  updateSonarRanges: (sonarRanges) => set((state) => ({
+    sonarRanges: { ...state.sonarRanges, ...sonarRanges },
+  })),
+  updateSonarDetections: (sonarDetections) => set({ sonarDetections }),
+  updateSafetyInterlocks: (safetyInterlocks) => set({ safetyInterlocks }),
+  setSafetySupervisor: (safetySupervisor) => set({ safetySupervisor }),
   setLeakDetected: (leakDetected) => set({ leakDetected }),
 
   updateBattery: (bat) => {

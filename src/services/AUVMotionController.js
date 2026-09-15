@@ -91,6 +91,12 @@ class AUVMotionController {
     thrusterDynamics.reset();
   }
 
+  inhibitVerticalThrusters() {
+    this.velHeave = 0;
+    this.depthPid.reset();
+    thrusterDynamics.forceStop([4, 5]);
+  }
+
   /**
    * Continuous 6-DOF Hydrodynamic integration with full physics model
    */

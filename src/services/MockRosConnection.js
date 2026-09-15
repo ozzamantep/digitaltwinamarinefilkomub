@@ -13,11 +13,14 @@ import defaultUncertaintyEstimator from '../dt-core/UncertaintyEstimator.js';
 import defaultOODDetector from '../dt-core/OODDetector.js';
 import defaultValidationEngine from '../dt-core/ValidationEngine.js';
 import DTHealthScore from '../dt-core/DTHealthScore.js';
+import safetySupervisor from './SafetySupervisor.js';
 
 class MockRosConnection {
   constructor() {
     this.interval = null;
     this.time = 0;
+    this.sonarAccumulator = 0;
+    this.derivedTelemetryAccumulator = 0;
 
     this.simX = -11.0;
     this.simZ = 2.0;
@@ -39,6 +42,7 @@ class MockRosConnection {
     this.orangeInspectStartTime = 0;
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
+    this.lastSafetyStatus = null;
   }
 
   start() {
@@ -48,6 +52,8 @@ class MockRosConnection {
     store.setMode('demo');
 
     this.time = 0;
+    this.sonarAccumulator = 0;
+    this.derivedTelemetryAccumulator = 0;
     this.simX = store.position?.x ?? -11.0;
     this.simZ = store.position?.z ?? 2.0;
     this.simDepth = store.depth ?? 0.8;
@@ -76,6 +82,75 @@ class MockRosConnection {
       this.interval = null;
     }
     useVehicleStore.getState().setConnectionStatus('disconnected');
+  }
+
+  distanceToPoolWall(directionX, directionZ) {
+    const xLimit = 12.0 - subseaCollisionEngine.subRadius;
+    const zLimit = 7.5 - subseaCollisionEngine.subRadius;
+    const distances = [];
+
+    if (directionX > 1e-6) distances.push((xLimit - this.simX) / directionX);
+    if (directionX < -1e-6) distances.push((-xLimit - this.simX) / directionX);
+    if (directionZ > 1e-6) distances.push((zLimit - this.simZ) / directionZ);
+    if (directionZ < -1e-6) distances.push((-zLimit - this.simZ) / directionZ);
+
+    return Math.min(...distances.filter((distance) => distance >= 0));
+  }
+
+  detectObstacles(store, maxRange = 12) {
+    const cosHeading = Math.cos(this.simHeading);
+    const sinHeading = Math.sin(this.simHeading);
+    const enabled = store.obstacleEnabled || {};
+
+    return Object.entries(store.obstacles || {}).flatMap(([key, obstacle]) => {
+      if (!obstacle || enabled[key] === false || obstacle.fallen || obstacle.sensorSource === 'vision') return [];
+      const deltaX = obstacle.x - this.simX;
+      const deltaZ = obstacle.z - this.simZ;
+      const centerDistance = Math.sqrt(deltaX ** 2 + deltaZ ** 2);
+      const radius = Math.max(0.12, (obstacle.width || 0.3) * 0.5);
+      const range = Math.max(0, centerDistance - radius - subseaCollisionEngine.subRadius);
+      if (range > maxRange) return [];
+
+      const forward = deltaX * cosHeading + deltaZ * sinHeading;
+      const right = -deltaX * sinHeading + deltaZ * cosHeading;
+      return [{
+        id: obstacle.id || key,
+        label: obstacle.name || key,
+        range,
+        bearing: Math.atan2(right, forward),
+        radius,
+      }];
+    });
+  }
+
+  nearestBeamReturn(wallDistance, detections, bearingCenter, beamHalfAngle = Math.PI / 9) {
+    let nearest = wallDistance;
+    for (const detection of detections) {
+      let delta = detection.bearing - bearingCenter;
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      const angularRadius = Math.atan2(detection.radius, Math.max(detection.range, 0.01));
+      if (Math.abs(delta) <= beamHalfAngle + angularRadius) {
+        nearest = Math.min(nearest, detection.range);
+      }
+    }
+    return nearest;
+  }
+
+  updateSimulatedSonar(store) {
+    const cosHeading = Math.cos(this.simHeading);
+    const sinHeading = Math.sin(this.simHeading);
+    const forward = [cosHeading, sinHeading];
+    const right = [-sinHeading, cosHeading];
+    const detections = this.detectObstacles(store);
+
+    store.updateSonarRanges({
+      front: this.nearestBeamReturn(this.distanceToPoolWall(forward[0], forward[1]), detections, 0),
+      rear: this.nearestBeamReturn(this.distanceToPoolWall(-forward[0], -forward[1]), detections, Math.PI),
+      left: this.nearestBeamReturn(this.distanceToPoolWall(-right[0], -right[1]), detections, -Math.PI / 2),
+      right: this.nearestBeamReturn(this.distanceToPoolWall(right[0], right[1]), detections, Math.PI / 2),
+    });
+    store.updateSonarDetections(detections);
   }
 
   resetQualification() {
@@ -154,6 +229,25 @@ class MockRosConnection {
       roll: ((store.euler?.roll || 0) * Math.PI) / 180,
       pitch: ((store.euler?.pitch || 0) * Math.PI) / 180,
     };
+    const cosSafetyHeading = Math.cos(this.simHeading);
+    const sinSafetyHeading = Math.sin(this.simHeading);
+    const safetyStatus = safetySupervisor.evaluate({
+      sonarRanges: {
+        front: this.distanceToPoolWall(cosSafetyHeading, sinSafetyHeading),
+        rear: this.distanceToPoolWall(-cosSafetyHeading, -sinSafetyHeading),
+        left: this.distanceToPoolWall(sinSafetyHeading, -cosSafetyHeading),
+        right: this.distanceToPoolWall(-sinSafetyHeading, cosSafetyHeading),
+      },
+      floorAltitude: subseaCollisionEngine.poolDepth - this.simDepth,
+      leakDetected: store.leakDetected,
+      battery: store.battery,
+      imuDetection: store.imuDetection,
+      oodStatus: store.oodStatus,
+    });
+    this.lastSafetyStatus = safetyStatus;
+    store.setSafetySupervisor(safetyStatus);
+    store.updateSafetyInterlocks(safetyStatus.blocked);
+    const applySafety = (command) => safetySupervisor.applyCommand(command, safetyStatus);
 
     let ctrl;
     if (!isArmed) {
@@ -288,7 +382,7 @@ class MockRosConnection {
 
       ctrl = auvMotionController.update(
         currentPose,
-        { surge: cmdSurge, sway: cmdSway, yaw: cmdYaw, heave: cmdHeave },
+        applySafety({ surge: cmdSurge, sway: cmdSway, yaw: cmdYaw, heave: cmdHeave }),
         'MANUAL',
         true,
         dt,
@@ -511,20 +605,9 @@ class MockRosConnection {
       const currentWp = waypoints[this.missionStage] || waypoints[waypoints.length - 1];
       const distToWp = Math.sqrt((currentWp.x - this.simX) ** 2 + (currentWp.z - this.simZ) ** 2);
 
-      // 1. Direct Physical Flare Contact & Knockdown
-      if (currentWp.hitFlare && !flaresFallen[currentWp.hitFlare]) {
-        const flX = currentWp.flareX ?? currentWp.x;
-        const flZ = currentWp.flareZ ?? currentWp.z;
-        const contactDist = Math.sqrt((flX - this.simX) ** 2 + (flZ - this.simZ) ** 2);
+      // Flare knockdown is handled only by oriented 3D contact in SubseaCollisionEngine.
 
-        if (contactDist <= 0.85) {
-          store.knockdownFlare(currentWp.hitFlare);
-          this.lastFlareHitTime = t;
-          console.log(`[MockROS] 💥 DIRECT HIT! Knocked down ${currentWp.hitFlare} flare!`);
-        }
-      }
-
-      // 2. Drum Approach & Instant Ball Drop
+      // Drum Approach & Instant Ball Drop
       if (currentWp.id === 'drum_search' || currentWp.id === 'drum_drop') {
         if (distToWp < 2.0) {
           const tiltFactor = Math.min(1.0, (2.0 - distToWp) / 1.0);
@@ -634,7 +717,7 @@ class MockRosConnection {
 
       ctrl = auvMotionController.update(
         currentPose,
-        { surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave },
+        applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave }),
         'MANUAL',
         true,
         dt,
@@ -642,7 +725,18 @@ class MockRosConnection {
         t
       );
     } else {
-      ctrl = auvMotionController.update(currentPose, input, flightMode, true, dt, store.battery.voltage || 16.0, t);
+      ctrl = auvMotionController.update(currentPose, applySafety(input), flightMode, true, dt, store.battery.voltage || 16.0, t);
+    }
+
+    const floorAltitude = subseaCollisionEngine.poolDepth - this.simDepth;
+    const floorGuardActive = floorAltitude <= subseaCollisionEngine.minFloorClearance + 0.02;
+    if (floorGuardActive && (ctrl?.heave || 0) > 0) {
+      const safeThrusters = [...(ctrl?.thrusters || [0, 0, 0, 0, 0, 0])];
+      safeThrusters[4] = 0;
+      safeThrusters[5] = 0;
+      auvMotionController.inhibitVerticalThrusters();
+      if ((store.controlInput?.heave || 0) > 0) store.setControlInput({ heave: 0 });
+      ctrl = { ...ctrl, heave: 0, thrusters: safeThrusters };
     }
 
     // Process Thruster Dynamics through the Identified Polynomial Model (ARX / ARMAX / OE / BJ)
@@ -672,7 +766,10 @@ class MockRosConnection {
     let proposedX = this.simX + vWorld.x * dt;
     let proposedZ = this.simZ + vWorld.y * dt;
     // Stable, decoupled vertical heave depth integration
-    let proposedDepth = Math.max(0.08, Math.min(1.84, this.simDepth + (ctrl?.heave || 0) * dt));
+    let proposedDepth = Math.max(
+      0.08,
+      Math.min(subseaCollisionEngine.maxSafeDepth, this.simDepth + (ctrl?.heave || 0) * dt)
+    );
 
     // 3D Physical Obstacle Collision Resolution
     const collision = subseaCollisionEngine.resolveCollision(
@@ -680,7 +777,8 @@ class MockRosConnection {
       proposedZ,
       proposedDepth,
       effectiveSurge,
-      ctrl?.sway || 0
+      ctrl?.sway || 0,
+      this.simHeading
     );
 
     this.simX = isFinite(collision.x) ? collision.x : -11.0;
@@ -725,6 +823,12 @@ class MockRosConnection {
         angular: Math.abs(ctrl?.yaw || 0),
       },
     });
+
+    this.sonarAccumulator += dt;
+    if (this.sonarAccumulator >= 0.1) {
+      this.updateSimulatedSonar(store);
+      this.sonarAccumulator = 0;
+    }
 
     store.updateThrusters(ctrl?.thrusters || [0, 0, 0, 0, 0, 0]);
 
@@ -772,18 +876,24 @@ class MockRosConnection {
       ? 1.4 + totalThrusterLoad * 16.5
       : 0.65;
     const voltageSag = totalThrusterLoad * 0.65;
-    const currentBatLevel = Math.max(5, bat.level - (isArmed ? 0.00015 : 0.00003));
+    this.derivedTelemetryAccumulator += dt;
+    const updateDerivedTelemetry = this.derivedTelemetryAccumulator >= 0.2;
+    const telemetryElapsed = this.derivedTelemetryAccumulator;
+    const batteryDrainPerSecond = isArmed ? 0.003 : 0.0006;
+    const currentBatLevel = Math.max(5, bat.level - batteryDrainPerSecond * telemetryElapsed);
     const rawVoltage = Math.max(13.8, 14.6 + (currentBatLevel / 100) * 2.2 - voltageSag);
 
     // === SENSOR NOISE MODEL: Battery ADC (12-bit + switching ripple) ===
     const batNoisy = sensorNoiseModel.applyBatteryNoise(rawVoltage, rawCurrentDraw, t);
     
-    store.updateBattery({
-      level: currentBatLevel,
-      voltage: batNoisy.voltage,
-      current: Math.max(0.4, batNoisy.current),
-      temperature: 27.5 + totalThrusterLoad * 6.5 + sensorNoiseModel.gaussian(0, 0.15),
-    });
+    if (updateDerivedTelemetry) {
+      store.updateBattery({
+        level: currentBatLevel,
+        voltage: batNoisy.voltage,
+        current: Math.max(0.4, batNoisy.current),
+        temperature: 27.5 + totalThrusterLoad * 6.5 + sensorNoiseModel.gaussian(0, 0.15),
+      });
+    }
 
     // =========================================================================
     // DIGITAL TWIN CORE REAL-TIME PIPELINE
@@ -804,8 +914,6 @@ class MockRosConnection {
     // 2. Synchronization & Latency Tracking
     defaultSyncManager.recordPacket(Date.now());
     defaultSyncManager.recordCompute(0.8, 1.4);
-    const syncMetrics = defaultSyncManager.getMetrics();
-    store.setSyncMetrics(syncMetrics);
 
     // 3. Uncertainty & OOD Evaluation
     defaultUncertaintyEstimator.updateResidual(
@@ -813,14 +921,6 @@ class MockRosConnection {
       estimated
     );
     const uncertaintyInfo = defaultUncertaintyEstimator.isControlSafe();
-    store.setUncertainty({
-      score: uncertaintyInfo.uncertainty,
-      level: uncertaintyInfo.level,
-      confidence: uncertaintyInfo.confidence,
-    });
-
-    const oodResult = defaultOODDetector.evaluate(store);
-    store.setOODStatus(oodResult);
 
     // 4. Real-time Validation Engine & Multi-Pillar DT Health Score
     defaultValidationEngine.addSample(
@@ -828,17 +928,29 @@ class MockRosConnection {
       estimated,
       1
     );
-    const validationMetrics = defaultValidationEngine.computeMetrics();
-    store.setValidationMetrics(validationMetrics);
+    if (updateDerivedTelemetry) {
+      const syncMetrics = defaultSyncManager.getMetrics();
+      const oodResult = defaultOODDetector.evaluate(store);
+      const validationMetrics = defaultValidationEngine.computeMetrics();
+      const dtHealth = DTHealthScore.evaluate({
+        sync: syncMetrics,
+        estimator: estimated,
+        uncertainty: uncertaintyInfo,
+        ood: oodResult,
+        battery: batNoisy,
+      });
 
-    const dtHealth = DTHealthScore.evaluate({
-      sync: syncMetrics,
-      estimator: estimated,
-      uncertainty: uncertaintyInfo,
-      ood: oodResult,
-      battery: batNoisy,
-    });
-    store.setDtHealth(dtHealth);
+      store.setSyncMetrics(syncMetrics);
+      store.setUncertainty({
+        score: uncertaintyInfo.uncertainty,
+        level: uncertaintyInfo.level,
+        confidence: uncertaintyInfo.confidence,
+      });
+      store.setOODStatus(oodResult);
+      store.setValidationMetrics(validationMetrics);
+      store.setDtHealth(dtHealth);
+      this.derivedTelemetryAccumulator = 0;
+    }
   }
 }
 

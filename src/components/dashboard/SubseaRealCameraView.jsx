@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Suspense, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import PoolEnvironment from '../3d/PoolEnvironment';
@@ -19,11 +19,22 @@ const MISSION_TARGETS = [
   { id: 'drum_red_3', name: 'DRUM_RED_3', classColor: '#ef4444', pos: [10.5, 0.25, -4.5], width: 0.7, height: 0.5, baseConf: 90.8 },
 ];
 
-function RealOnboardCameraRig({ onRenderFrame }) {
-  const position = useVehicleStore((s) => s.position);
-  const orientation = useVehicleStore((s) => s.orientation);
+function CameraRenderScheduler({ fps = 20 }) {
+  const invalidate = useThree((state) => state.invalidate);
 
+  useEffect(() => {
+    const interval = setInterval(invalidate, 1000 / fps);
+    return () => clearInterval(interval);
+  }, [fps, invalidate]);
+
+  return null;
+}
+
+function RealOnboardCameraRig({ onRenderFrame }) {
   useFrame(({ camera }) => {
+    const liveState = useVehicleStore.getState();
+    const position = liveState.position;
+    const orientation = liveState.orientation;
     const pos = position || { x: -11, y: 1.1, z: 2.0 };
     const quat = new THREE.Quaternion(
       orientation.x || 0,
@@ -87,6 +98,7 @@ export default function SubseaRealCameraView() {
         height: obs.height || 1.5,
         baseConf: obs.detected ? 98.5 : 94.0,
         fallen: obs.id.includes('flare_') ? flaresFallen[obs.id.replace('flare_', '')] : false,
+        signalOnly: obs.signalOnly === true,
       }));
 
     // Mathematically project all SAUVC mission targets through the actual onboard 3D camera lens
@@ -135,7 +147,7 @@ export default function SubseaRealCameraView() {
 
           // Label Tag with Distance & Confidence
           const conf = Math.max(78, (target.baseConf - dist * 1.2)).toFixed(1);
-          const statusTag = target.fallen ? ' [FALLEN]' : '';
+          const statusTag = target.fallen ? ' [FALLEN]' : target.signalOnly ? ' [CV ONLY]' : '';
           const labelText = `${target.name} ${conf}% ${dist.toFixed(1)}m${statusTag}`;
 
           ctx.font = 'bold 9px monospace';
@@ -154,6 +166,8 @@ export default function SubseaRealCameraView() {
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <Canvas
         camera={{ fov: 72, near: 0.05, far: 60 }}
+        dpr={1}
+        frameloop="demand"
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
           gl.setClearColor('#022033');
@@ -167,9 +181,10 @@ export default function SubseaRealCameraView() {
         <Suspense fallback={null}>
           <PoolEnvironment />
           <PayloadBallDropper />
-          <UnderwaterParticles count={80} />
+          <UnderwaterParticles count={40} />
         </Suspense>
 
+        <CameraRenderScheduler fps={15} />
         <RealOnboardCameraRig onRenderFrame={handleCameraUpdate} />
       </Canvas>
 

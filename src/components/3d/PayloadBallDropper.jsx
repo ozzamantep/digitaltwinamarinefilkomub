@@ -7,8 +7,6 @@ export default function PayloadBallDropper() {
   const ballGroupRef = useRef();
   const ballMeshRef = useRef();
 
-  const position = useVehicleStore((s) => s.position);
-  const rotation = useVehicleStore((s) => s.rotation);
   const payloadState = useVehicleStore(
     (s) => s.payloadState || { loaded: true, dropped: false, onFloor: false, grasped: true, inDrum: false, x: 10.5, y: 0.20, z: 1.5 }
   );
@@ -31,6 +29,9 @@ export default function PayloadBallDropper() {
 
   useFrame((state, rawDelta) => {
     if (!ballGroupRef.current) return;
+    const liveState = useVehicleStore.getState();
+    const position = liveState.position;
+    const headingRad = liveState.headingRad;
     const delta = Math.min(rawDelta, 0.045); // Clamp to prevent physics step spikes
     const time = state.clock.getElapsedTime();
     const s = sim.current;
@@ -51,12 +52,12 @@ export default function PayloadBallDropper() {
       const subX = position?.x ?? 10.5;
       const subY = position?.y ?? 1.1;
       const subZ = position?.z ?? 1.5;
-      const yaw = rotation?.yaw ?? (typeof rotation?.y === 'number' ? rotation.y : 0);
+      const yaw = headingRad || 0;
 
-      // Gripper jaws are mounted at front (+0.32m forward, -0.10m lower)
-      const releaseX = subX + Math.cos(yaw) * 0.32;
-      const releaseY = Math.max(0.35, subY - 0.10);
-      const releaseZ = subZ + Math.sin(yaw) * 0.32;
+      // Vertical gripper is mounted slightly aft and 0.22m below vehicle center.
+      const releaseX = subX - Math.cos(yaw) * 0.04;
+      const releaseY = Math.max(0.08, subY - 0.22);
+      const releaseZ = subZ - Math.sin(yaw) * 0.04;
 
       s.startPos.set(releaseX, releaseY, releaseZ);
       s.currPos.copy(s.startPos);
@@ -97,11 +98,11 @@ export default function PayloadBallDropper() {
       const subX = position?.x ?? -10;
       const subY = position?.y ?? 1.1;
       const subZ = position?.z ?? 0;
-      const yaw = rotation?.yaw ?? (typeof rotation?.y === 'number' ? rotation.y : 0);
+      const yaw = headingRad || 0;
       s.currPos.set(
-        subX + Math.cos(yaw) * 0.32,
-        subY - 0.10,
-        subZ + Math.sin(yaw) * 0.32
+        subX - Math.cos(yaw) * 0.04,
+        subY - 0.22,
+        subZ - Math.sin(yaw) * 0.04
       );
       ballGroupRef.current.position.copy(s.currPos);
       return;

@@ -88,6 +88,12 @@ class TopicSubscriber {
       useVehicleStore.getState().updateDVL(msg.range);
     });
 
+    for (const direction of ['front', 'rear', 'left', 'right']) {
+      this.subscribe(ros, `/sonar/${direction}/range`, 'sensor_msgs/msg/Range', (msg) => {
+        useVehicleStore.getState().updateSonarRange(direction, msg.range);
+      });
+    }
+
     // 5. 4S LiPo Battery State
     this.subscribe(ros, '/battery_state', 'sensor_msgs/msg/BatteryState', (msg) => {
       useVehicleStore.getState().updateBattery({
@@ -141,6 +147,11 @@ class TopicSubscriber {
               'flare_yellow': 'yellow_flare',
               'gate': 'gate',
               'drum_red': 'drum_red_tgt',
+              'drum_red_1': 'drum_red_tgt',
+              'drum_red_2': 'drum_red_2',
+              'drum_red_3': 'drum_red_3',
+              'red_bucket_2': 'drum_red_2',
+              'red_bucket_3': 'drum_red_3',
               'drum_blue': 'drum_blue',
             };
             const storeKey = keyMap[data.target] || data.target;

@@ -53,8 +53,7 @@ export default function VehicleScene() {
     <div className="viewport-3d" style={{ position: 'relative' }}>
       <Canvas
         camera={{ position: [-11, 6.5, 9.5], fov: 48, near: 0.05, far: 200 }}
-        shadows
-        dpr={[1, 2]}
+        dpr={1}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
           gl.setClearColor('#031926');
@@ -65,13 +64,6 @@ export default function VehicleScene() {
         <directionalLight
           position={[6, 14, 6]}
           intensity={1.6}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-far={40}
-          shadow-camera-left={-15}
-          shadow-camera-right={15}
-          shadow-camera-top={15}
-          shadow-camera-bottom={-15}
           color="#f0f9ff"
         />
         {/* Pool Subsea Halogen Floodlights */}
@@ -88,7 +80,7 @@ export default function VehicleScene() {
           <BlueROV2Model onFrame={() => { frameCount.current++; }} />
           <PayloadBallDropper />
           <ThrusterBubbles />
-          <UnderwaterParticles count={160} />
+          <UnderwaterParticles count={100} />
           <TrajectoryPath />
         </Suspense>
 
