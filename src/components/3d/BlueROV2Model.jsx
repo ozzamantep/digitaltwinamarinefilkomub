@@ -109,6 +109,8 @@ function T200ThrusterUnit({ propRef, color = '#0284c7', isVertical = false }) {
  */
 export default function BlueROV2Model({ onFrame }) {
   const groupRef = useRef();
+  const targetPositionRef = useRef(new THREE.Vector3());
+  const targetQuaternionRef = useRef(new THREE.Quaternion());
 
   // 6 Thruster Propeller Refs (4 Horizontal + 2 Vertical)
   const propRefs = [
@@ -210,18 +212,21 @@ export default function BlueROV2Model({ onFrame }) {
     const bobY = Math.sin(t * 1.5) * 0.006;
 
     if (groupRef.current) {
-      groupRef.current.position.lerp(
-        new THREE.Vector3(position.x, position.y + bobY, position.z),
-        0.18
-      );
+      const positionAlpha = 1 - Math.exp(-12 * delta);
+      targetPositionRef.current.set(position.x, position.y + bobY, position.z);
+      if (groupRef.current.position.distanceToSquared(targetPositionRef.current) > 25) {
+        groupRef.current.position.copy(targetPositionRef.current);
+      } else {
+        groupRef.current.position.lerp(targetPositionRef.current, positionAlpha);
+      }
 
-      const targetQuat = new THREE.Quaternion(
+      targetQuaternionRef.current.set(
         orientation.x,
         orientation.y,
         orientation.z,
         orientation.w
       );
-      groupRef.current.quaternion.slerp(targetQuat, 0.18);
+      groupRef.current.quaternion.slerp(targetQuaternionRef.current, positionAlpha);
     }
 
     // Dynamic Propeller Spins — speed-coupled realistic T200 thruster simulation

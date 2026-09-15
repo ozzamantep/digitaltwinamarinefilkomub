@@ -19,6 +19,10 @@ export default function CameraController({ controlsRef }) {
   const prevTrigger = useRef(cameraResetTrigger);
   const lastSubPos = useRef(new THREE.Vector3(-11, 1.2, 2));
   const initializedChase = useRef(false);
+  const visualVehiclePos = useRef(new THREE.Vector3(-11, 1.2, 2));
+  const targetVehiclePos = useRef(new THREE.Vector3());
+  const visualHeading = useRef(0);
+  const visualPoseInitialized = useRef(false);
 
   // FPV Smooth Lerp tracking vectors
   const currentFpvPos = useRef(new THREE.Vector3(-11, 1.2, 2));
@@ -53,8 +57,25 @@ export default function CameraController({ controlsRef }) {
     const liveState = useVehicleStore.getState();
     const position = liveState.position;
     const headingRad = liveState.headingRad;
-    const pos = position || { x: -11, y: 1.2, z: 2 };
-    const hRad = headingRad || 0;
+    const rawPos = position || { x: -11, y: 1.2, z: 2 };
+    const rawHeading = headingRad || 0;
+    targetVehiclePos.current.set(rawPos.x, rawPos.y, rawPos.z);
+
+    if (!visualPoseInitialized.current || visualVehiclePos.current.distanceToSquared(targetVehiclePos.current) > 25) {
+      visualVehiclePos.current.copy(targetVehiclePos.current);
+      visualHeading.current = rawHeading;
+      visualPoseInitialized.current = true;
+    } else {
+      const poseAlpha = 1 - Math.exp(-12 * delta);
+      visualVehiclePos.current.lerp(targetVehiclePos.current, poseAlpha);
+      let headingDelta = rawHeading - visualHeading.current;
+      while (headingDelta > Math.PI) headingDelta -= Math.PI * 2;
+      while (headingDelta < -Math.PI) headingDelta += Math.PI * 2;
+      visualHeading.current += headingDelta * poseAlpha;
+    }
+
+    const pos = visualVehiclePos.current;
+    const hRad = visualHeading.current;
     const controls = controlsRef.current;
 
     const modeChanged = prevMode.current !== cameraViewMode;
