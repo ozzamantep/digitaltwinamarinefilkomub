@@ -3,6 +3,7 @@ import hydrodynamicsEngine from './HydrodynamicsEngine';
 import thrusterDynamics from './ThrusterDynamicsModel';
 import vehicleConfig from '../dt-core/VehicleConfig';
 import Kinematics from '../dt-core/Kinematics';
+import depthHeadingMPC from './DepthHeadingMPC.js';
 
 /**
  * 6-DOF Hydrodynamic Flight & PID Motion Controller for BlueROV2 AUV
@@ -165,7 +166,7 @@ class AUVMotionController {
     let targetHeave = 0;
 
     // 1. Closed-loop Depth PID Regulation
-    if (flightMode === 'ALT_HOLD' || flightMode === 'STABILIZE' || flightMode === 'AUTO') {
+    if (flightMode === 'ALT_HOLD' || flightMode === 'STABILIZE' || flightMode === 'AUTO' || flightMode === 'MPC') {
       if (Math.abs(userCmd.heave) > 0.05) {
         this.targetDepth = Math.max(0.15, Math.min(1.85, currentPose.depth + userCmd.heave * dt * 0.45));
         this.depthPid.setSetpoint(this.targetDepth);
@@ -196,6 +197,21 @@ class AUVMotionController {
       targetYawRate = yawRes.output * 0.55;
       this.pidTelemetry.yawError = headingErr;
       this.pidTelemetry.yawEffort = yawRes.output;
+    }
+
+    if (flightMode === 'MPC') {
+      const mpc = depthHeadingMPC.solve({
+        depth: currentPose.depth,
+        depthRate: this.velHeave,
+        heading: currentPose.heading,
+        yawRate: this.velYaw,
+        targetDepth: this.targetDepth,
+        targetHeading: this.targetHeading,
+      });
+      targetHeave = mpc.heave * 0.45;
+      targetYawRate = mpc.yaw * 0.55;
+      this.pidTelemetry.depthEffort = mpc.heave;
+      this.pidTelemetry.yawEffort = mpc.yaw;
     }
 
     // 3. CLEAN THRUSTER ALLOCATION — Straight-line priority

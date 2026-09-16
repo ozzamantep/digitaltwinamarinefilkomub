@@ -56,6 +56,8 @@ const useVehicleStore = create((set, get) => ({
   sonarDetections: [],
   safetyInterlocks: { front: false, rear: false, left: false, right: false, floor: false },
   safetySupervisor: { state: 'NORMAL', reasons: [], blocked: { front: false, rear: false, left: false, right: false, floor: false }, emergency: false },
+  advancedAutonomy: { floorBrake: false, stoppingDistance: 0, brakingAltitude: 0, depthSensorFault: false, dvlFault: false, thrusterFaults: [], currentEstimate: { x: 0, y: 0, z: 0 }, events: [], autonomyRestricted: false },
+  competitionScore: null,
   leakDetected: false,
   battery: { level: 92, voltage: 16.2, current: 4.2, temperature: 28.5 },
   lightsIntensity: 80, // % 0-100
@@ -535,6 +537,8 @@ const useVehicleStore = create((set, get) => ({
   updateSonarDetections: (sonarDetections) => set({ sonarDetections }),
   updateSafetyInterlocks: (safetyInterlocks) => set({ safetyInterlocks }),
   setSafetySupervisor: (safetySupervisor) => set({ safetySupervisor }),
+  setAdvancedAutonomy: (advancedAutonomy) => set({ advancedAutonomy }),
+  setCompetitionScore: (competitionScore) => set({ competitionScore }),
   setLeakDetected: (leakDetected) => set({ leakDetected }),
 
   updateBattery: (bat) => {

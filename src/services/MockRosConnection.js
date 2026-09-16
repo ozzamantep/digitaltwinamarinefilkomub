@@ -13,7 +13,12 @@ import defaultUncertaintyEstimator from '../dt-core/UncertaintyEstimator.js';
 import defaultOODDetector from '../dt-core/OODDetector.js';
 import defaultValidationEngine from '../dt-core/ValidationEngine.js';
 import DTHealthScore from '../dt-core/DTHealthScore.js';
+import defaultDataLogger from '../dt-core/DataLogger.js';
+import competitionScoringEngine from '../dt-core/CompetitionScoringEngine.js';
 import safetySupervisor from './SafetySupervisor.js';
+import advancedAutonomyEngine from './AdvancedAutonomyEngine.js';
+import { createSafetyRecoveryTree } from './BehaviorTree.js';
+import thrusterDynamics from './ThrusterDynamicsModel.js';
 
 class MockRosConnection {
   constructor() {
@@ -43,6 +48,8 @@ class MockRosConnection {
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
     this.lastSafetyStatus = null;
+    this.autonomyTree = createSafetyRecoveryTree();
+    this.lastAutonomyAssessment = null;
   }
 
   start() {
@@ -68,6 +75,8 @@ class MockRosConnection {
     this.avoidInspectStartTime = null;
     auvMotionController.reset();
     sysIdEngine.reset();
+    advancedAutonomyEngine.reset();
+    defaultDataLogger.startRecording();
 
     // 20 Hz simulation loop (50ms)
     this.interval = setInterval(() => {
@@ -81,7 +90,10 @@ class MockRosConnection {
       clearInterval(this.interval);
       this.interval = null;
     }
-    useVehicleStore.getState().setConnectionStatus('disconnected');
+    const store = useVehicleStore.getState();
+    store.setCompetitionScore(competitionScoringEngine.scoreMission(defaultDataLogger.logs));
+    defaultDataLogger.stopRecording();
+    store.setConnectionStatus('disconnected');
   }
 
   distanceToPoolWall(directionX, directionZ) {
@@ -245,9 +257,24 @@ class MockRosConnection {
       oodStatus: store.oodStatus,
     });
     this.lastSafetyStatus = safetyStatus;
+    const autonomyAssessment = advancedAutonomyEngine.evaluate({
+      floorAltitude: subseaCollisionEngine.poolDepth - this.simDepth,
+      depthRate: store.speed?.heave || 0,
+      estimated: store.estimatedState,
+      dvlVelocity: [store.speed?.surge || 0, store.speed?.sway || 0, store.speed?.heave || 0],
+      thrusters: store.thrusters,
+      measuredCurrents: thrusterDynamics.actualCurrent,
+    });
+    this.lastAutonomyAssessment = autonomyAssessment;
+    thrusterDynamics.setFailedThrusters(autonomyAssessment.thrusterFaults);
+    store.setAdvancedAutonomy(autonomyAssessment);
     store.setSafetySupervisor(safetyStatus);
     store.updateSafetyInterlocks(safetyStatus.blocked);
-    const applySafety = (command) => safetySupervisor.applyCommand(command, safetyStatus);
+    const applySafety = (command) => {
+      const safeCommand = advancedAutonomyEngine.apply(command, autonomyAssessment);
+      this.autonomyTree.tick({ command: safeCommand, safety: autonomyAssessment, autonomy: advancedAutonomyEngine });
+      return safetySupervisor.applyCommand(safeCommand, safetyStatus);
+    };
 
     let ctrl;
     if (!isArmed) {
@@ -732,11 +759,11 @@ class MockRosConnection {
     const floorGuardActive = floorAltitude <= subseaCollisionEngine.minFloorClearance + 0.02;
     if (floorGuardActive && (ctrl?.heave || 0) > 0) {
       const safeThrusters = [...(ctrl?.thrusters || [0, 0, 0, 0, 0, 0])];
-      safeThrusters[4] = 0;
-      safeThrusters[5] = 0;
-      auvMotionController.inhibitVerticalThrusters();
+      const brakingHeave = -Math.max(0.30, Math.min(0.65, Math.abs(ctrl.heave) + 0.20));
+      safeThrusters[4] = -80;
+      safeThrusters[5] = -80;
       if ((store.controlInput?.heave || 0) > 0) store.setControlInput({ heave: 0 });
-      ctrl = { ...ctrl, heave: 0, thrusters: safeThrusters };
+      ctrl = { ...ctrl, heave: brakingHeave, thrusters: safeThrusters };
     }
 
     // Process Thruster Dynamics through the Identified Polynomial Model (ARX / ARMAX / OE / BJ)
@@ -905,9 +932,9 @@ class MockRosConnection {
       [ctrl?.rollRate || 0, ctrl?.pitchRate || 0, ctrl?.yaw || 0],
       dt
     );
-    defaultStateEstimator.updateDepth(depthNoisy.depth);
+    if (!autonomyAssessment.depthSensorFault) defaultStateEstimator.updateDepth(depthNoisy.depth);
     defaultStateEstimator.updateCompass(this.simHeading);
-    defaultStateEstimator.updateDVL([effectiveSurge, ctrl?.sway || 0, ctrl?.heave || 0]);
+    if (!autonomyAssessment.dvlFault) defaultStateEstimator.updateDVL([effectiveSurge, ctrl?.sway || 0, ctrl?.heave || 0]);
     const estimated = defaultStateEstimator.getEstimatedState();
     store.setEstimatedState(estimated);
 
@@ -951,6 +978,18 @@ class MockRosConnection {
       store.setDtHealth(dtHealth);
       this.derivedTelemetryAccumulator = 0;
     }
+
+    const replayEvents = [...autonomyAssessment.events];
+    if (collision.collided) replayEvents.push('COLLISION');
+    defaultDataLogger.logStep({
+      input,
+      thrusters: ctrl?.thrusters,
+      sensors: { depth: depthNoisy.depth, dvlAltitude: dvlNoisy },
+      estimated,
+      predicted: { depth: this.simDepth, current: autonomyAssessment.currentEstimate },
+      uncertainty: uncertaintyInfo.uncertainty,
+      events: replayEvents,
+    });
   }
 }
 

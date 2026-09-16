@@ -78,6 +78,7 @@ class ThrusterDynamicsModel {
 
     // Commanded values (target that actual ramps toward)
     this.commandedThrust = new Array(this.numThrusters).fill(0);
+    this.failedThrusters = new Set();
   }
 
   /**
@@ -196,7 +197,7 @@ class ThrusterDynamicsModel {
 
     // First pass: compute target thrust for each thruster
     for (let i = 0; i < this.numThrusters; i++) {
-      const cmd = commands[i] || 0;
+      const cmd = this.failedThrusters.has(i) ? 0 : commands[i] || 0;
       const pwm = this.commandToPWM(cmd);
       const lookup = this.lookupT200(pwm);
       this.commandedThrust[i] = lookup.thrust;
@@ -205,7 +206,7 @@ class ThrusterDynamicsModel {
     // Compute total current for voltage sag
     let totalCurrentEstimate = 0;
     for (let i = 0; i < this.numThrusters; i++) {
-      const pwm = this.commandToPWM(commands[i] || 0);
+      const pwm = this.commandToPWM(this.failedThrusters.has(i) ? 0 : commands[i] || 0);
       const lookup = this.lookupT200(pwm);
       totalCurrentEstimate += Math.abs(lookup.current);
     }
@@ -299,6 +300,11 @@ class ThrusterDynamicsModel {
     this.actualRPM.fill(0);
     this.actualCurrent.fill(0.5);
     this.commandedThrust.fill(0);
+    this.failedThrusters.clear();
+  }
+
+  setFailedThrusters(indices = []) {
+    this.failedThrusters = new Set(indices.filter((index) => Number.isInteger(index) && index >= 0 && index < this.numThrusters));
   }
 
   forceStop(indices) {
