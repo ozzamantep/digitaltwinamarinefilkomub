@@ -66,7 +66,7 @@ const defaultConfig = {
   // Source: URDF (auv_model.urdf) and physical measurement
   // ═══════════════════════════════════════════════════════════════════════════
   rigidBody: {
-    mass:   param(11.5, 'kg', 'Total dry mass', [8.0, 20.0], 'measured'),
+    mass:   param(22.5, 'kg', 'Total dry mass', [20.0, 25.0], 'measured'),
     // Moments of inertia about CG (from URDF)
     Ixx:    param(0.12, 'kg·m²', 'Roll moment of inertia',  [0.05, 0.50], 'URDF'),
     Iyy:    param(0.22, 'kg·m²', 'Pitch moment of inertia', [0.10, 0.60], 'URDF'),
@@ -84,9 +84,9 @@ const defaultConfig = {
     length: param(0.54, 'm', 'Overall length (x-axis)',  [0.3, 1.0], 'measured'),
     width:  param(0.28, 'm', 'Overall width (y-axis)',   [0.2, 0.6], 'measured'),
     height: param(0.24, 'm', 'Overall height (z-axis)',  [0.1, 0.5], 'measured'),
-    // Displaced volume (neutrally trimmed with ballast weights for 11.5 kg mass in pool)
-    displacedVolume: param(0.01151, 'm³', 'Displaced water volume (neutrally trimmed with ballast)',
-      [0.005, 0.025], 'measured'),
+    // Displaced volume trimmed for a 22.5 kg vehicle in a 26°C freshwater pool.
+    displacedVolume: param(0.02254345, 'm³', 'Displaced water volume (neutrally trimmed with ballast)',
+      [0.020, 0.030], 'measured'),
     // fill_factor ≈ 0.34 for frame-type ROV
   },
 

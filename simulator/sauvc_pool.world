@@ -201,7 +201,7 @@
 
       <link name="base_link">
         <inertial>
-          <mass>11.5</mass>
+          <mass>22.5</mass>
           <inertia>
             <ixx>0.12</ixx>
             <iyy>0.22</iyy>

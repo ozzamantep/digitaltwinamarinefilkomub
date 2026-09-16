@@ -208,7 +208,7 @@ nu_dot = M^(-1) * [tau_thruster + tau_pinn - C(nu)*nu - D(nu_r)*nu_r - g(eta)]
 
 ### A. Matriks Massa Bodi Kaku (M_RB):
 Diketahui parameter robot (dari `VehicleConfig.js`):
-- Massa kering kapal: `m = 11.5 kg`
+- Massa kering kapal: `m = 22.5 kg` (nominal; rentang konfigurasi 20--25 kg)
 - Pusat gravitasi: `CG = [xG, yG, zG] = [0.0, 0.0, 0.0] m` (asal kerangka bodi)
 - Momen Inersia Roll: `Ixx = 0.12 kg·m²`
 - Momen Inersia Pitch: `Iyy = 0.22 kg·m²`
@@ -219,9 +219,9 @@ Formulasi Fossen (2021, Pers. 3.42) — karena CG berada di asal {b}, maka eleme
 
 ```
 M_RB = [
-  [ 11.5,  0.0,   0.0,   0.0,   0.0,   0.0  ],
-  [  0.0, 11.5,   0.0,   0.0,   0.0,   0.0  ],
-  [  0.0,  0.0,  11.5,   0.0,   0.0,   0.0  ],
+  [ 22.5,  0.0,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0, 22.5,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0,  0.0,  22.5,   0.0,   0.0,   0.0  ],
   [  0.0,  0.0,   0.0,   0.12,  0.0,   0.0  ],
   [  0.0,  0.0,   0.0,   0.0,   0.22,  0.0  ],
   [  0.0,  0.0,   0.0,   0.0,   0.0,   0.24 ]
@@ -257,25 +257,25 @@ M_A = [
 ### C. Matriks Massa Inersia Efektif Total (M = M_RB + M_A):
 
 Perhitungan elemen per elemen:
-- `M[0][0] = 11.5 + 5.5  = 17.0 kg` (efektif massa surge)
-- `M[1][1] = 11.5 + 12.7 = 24.2 kg` (efektif massa sway)
-- `M[2][2] = 11.5 + 14.6 = 26.1 kg` (efektif massa heave)
+- `M[0][0] = 22.5 + 5.5  = 28.0 kg` (efektif massa surge)
+- `M[1][1] = 22.5 + 12.7 = 35.2 kg` (efektif massa sway)
+- `M[2][2] = 22.5 + 14.6 = 37.1 kg` (efektif massa heave)
 - `M[3][3] = 0.12 + 0.12 = 0.24 kg·m²` (efektif inersia roll)
 - `M[4][4] = 0.22 + 0.12 = 0.34 kg·m²` (efektif inersia pitch)
 - `M[5][5] = 0.24 + 0.12 = 0.36 kg·m²` (efektif inersia yaw)
 
 ```
 M = [
-  [ 17.0,  0.0,   0.0,   0.0,   0.0,   0.0  ],
-  [  0.0, 24.2,   0.0,   0.0,   0.0,   0.0  ],
-  [  0.0,  0.0,  26.1,   0.0,   0.0,   0.0  ],
+  [ 28.0,  0.0,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0, 35.2,   0.0,   0.0,   0.0,   0.0  ],
+  [ 0.0,  0.0,  37.1,   0.0,   0.0,   0.0  ],
   [  0.0,  0.0,   0.0,   0.24,  0.0,   0.0  ],
   [  0.0,  0.0,   0.0,   0.0,   0.34,  0.0  ],
   [  0.0,  0.0,   0.0,   0.0,   0.0,   0.36 ]
 ]
 ```
 
-**Interpretasi Fisik:** Kapal terasa 1.48× lebih berat saat bergerak maju (surge), tetapi 2.27× lebih berat saat bergerak menyelam (heave) karena added mass vertikal sangat besar akibat profil datar badan wahana.
+**Interpretasi Fisik:** Kapal terasa 1.24× lebih berat saat bergerak maju (surge), tetapi 1.65× lebih berat saat bergerak menyelam (heave) karena added mass vertikal sangat besar akibat profil datar badan wahana.
 
 ---
 
@@ -284,9 +284,9 @@ Karena M diagonal, inversnya adalah reciprocal tiap elemen diagonal:
 
 ```
 Perhitungan invers:
-  M_inv[0][0] = 1 / 17.0  = 0.05882 (1/kg → percepatan surge per Newton)
-  M_inv[1][1] = 1 / 24.2  = 0.04132 (1/kg → percepatan sway per Newton)
-  M_inv[2][2] = 1 / 26.1  = 0.03831 (1/kg → percepatan heave per Newton)
+  M_inv[0][0] = 1 / 28.0  = 0.03571 (1/kg → percepatan surge per Newton)
+  M_inv[1][1] = 1 / 35.2  = 0.02841 (1/kg → percepatan sway per Newton)
+  M_inv[2][2] = 1 / 37.1  = 0.02695 (1/kg → percepatan heave per Newton)
   M_inv[3][3] = 1 / 0.24  = 4.16667 (1/(kg·m²) → percepatan putar roll per N·m)
   M_inv[4][4] = 1 / 0.34  = 2.94118 (1/(kg·m²) → percepatan putar pitch per N·m)
   M_inv[5][5] = 1 / 0.36  = 2.77778 (1/(kg·m²) → percepatan putar yaw per N·m)
@@ -294,16 +294,16 @@ Perhitungan invers:
 
 ```
 M^-1 = [
-  [ 0.05882,  0.00000,  0.00000,  0.00000,  0.00000,  0.00000 ],
-  [ 0.00000,  0.04132,  0.00000,  0.00000,  0.00000,  0.00000 ],
-  [ 0.00000,  0.00000,  0.03831,  0.00000,  0.00000,  0.00000 ],
+  [ 0.03571,  0.00000,  0.00000,  0.00000,  0.00000,  0.00000 ],
+  [ 0.00000,  0.02841,  0.00000,  0.00000,  0.00000,  0.00000 ],
+  [ 0.00000,  0.00000,  0.02695,  0.00000,  0.00000,  0.00000 ],
   [ 0.00000,  0.00000,  0.00000,  4.16667,  0.00000,  0.00000 ],
   [ 0.00000,  0.00000,  0.00000,  0.00000,  2.94118,  0.00000 ],
   [ 0.00000,  0.00000,  0.00000,  0.00000,  0.00000,  2.77778 ]
 ]
 ```
 
-**Interpretasi:** Gaya 1 Newton pada arah surge menghasilkan percepatan 0.059 m/s², sedangkan momen 1 N·m pada sumbu roll menghasilkan percepatan sudut 4.167 rad/s² — wahana sangat sensitif terhadap momen putar.
+**Interpretasi:** Gaya 1 Newton pada arah surge menghasilkan percepatan 0.036 m/s², sedangkan momen 1 N·m pada sumbu roll menghasilkan percepatan sudut 4.167 rad/s² — wahana sangat sensitif terhadap momen putar.
 
 > **Referensi Implementasi:** File `src/dt-core/HydrodynamicsEngine.js`, metode `computeMassMatrix()` baris 145-180, dan `invert6x6()` baris 96-140 (Gauss-Jordan elimination dengan partial pivoting).
 
@@ -330,7 +330,7 @@ C(nu) = C_RB(nu) + C_A(nu_r)
 Di mana vektor momentumnya adalah:
 - **Momentum linier bodi kaku:**
   ```
-  a_RB = m * [u, v, w] = [11.5*u, 11.5*v, 11.5*w]
+  a_RB = m * [u, v, w] = [22.5*u, 22.5*v, 22.5*w]
   ```
 - **Momentum sudut bodi kaku:**
   ```
@@ -445,9 +445,9 @@ Pada kecepatan terminal, gaya hambatan total sama dengan gaya pendorong. Untuk m
 
 | Parameter | Simbol | Nilai | Satuan | Sumber |
 |:----------|:-------|:------|:-------|:-------|
-| Massa kering kapal | m | 11.5 | kg | Penimbangan digital darat |
+| Massa kering kapal | m | 22.5 | kg | Nominal; verifikasi dengan penimbangan digital darat |
 | Percepatan gravitasi | g | 9.80665 | m/s² | Konstanta standar |
-| Volume benaman air | V | 0.01151 | m³ (11.51 L) | Uji benaman dengan ballast netral |
+| Volume benaman air | V | 0.02254345 | m³ (22.54 L) | Target uji benaman dengan ballast netral |
 | Densitas air kolam (26°C) | ρ | 996.78 | kg/m³ | UNESCO 1980 (T=26°C, S=0 PSU) |
 | Pusat gravitasi (CG) | [xG, yG, zG] | [0, 0, 0] | m | Asal kerangka bodi {b} |
 | Pusat apung (CB) | [xB, yB, zB] | [0, 0, -0.025] | m | 25mm di atas CG (NED) |
@@ -457,16 +457,16 @@ Pada kecepatan terminal, gaya hambatan total sama dengan gaya pendorong. Untuk m
 **1. Berat Total Kapal (W):**
 ```
 W = m × g
-  = 11.5 kg × 9.80665 m/s²
-  = 112.7765 Newton
+  = 22.5 kg × 9.80665 m/s²
+  = 220.6496 Newton
 ```
 
 **2. Gaya Apung Fluida (B):**
 ```
 B = ρ × g × V
-  = 996.78 kg/m³ × 9.80665 m/s² × 0.01151 m³
-  = 996.78 × 9.80665 × 0.01151
-  = 112.4908 Newton
+  = 996.78 kg/m³ × 9.80665 m/s² × 0.02254345 m³
+  = 996.78 × 9.80665 × 0.02254345
+  = 220.3639 Newton
 ```
 
 > **Catatan Densitas Air:** Pada suhu kolam 26°C, densitas air tawar dihitung menggunakan rumus Kell (1975) yang diimplementasikan dalam `EnvironmentModel.js`:
@@ -478,13 +478,13 @@ B = ρ × g × V
 **3. Gaya Bersih ke Atas (Delta F):**
 ```
 ΔF = B - W
-   = 112.4908 - 112.7765
+  = 220.3639 - 220.6496
    = -0.2857 Newton
 ```
 
 **Interpretasi:** Gaya bersih negatif (wahana sedikit lebih berat daripada gaya apung) berarti wahana cenderung tenggelam perlahan tanpa thrust — **near-neutral buoyancy** yang ideal untuk operasi bawah air (berat 29 gram-force lebih dari apungannya).
 
-> **Catatan Kalibrasi:** Volume benaman 0.01151 m³ sudah dikalibrasi dengan ballast weights untuk mencapai kondisi mendekati netral buoyancy. Dalam suhu kolam yang berbeda, densitas air berubah dan sedikit menggeser keseimbangan ini.
+> **Catatan Kalibrasi:** Volume benaman 0.02254345 m³ adalah target awal ballast untuk massa nominal 22.5 kg. Verifikasi dengan uji benaman diperlukan; suhu kolam yang berbeda mengubah densitas air dan sedikit menggeser keseimbangan ini.
 
 ---
 
@@ -508,12 +508,12 @@ Karena `xG=xB=0`, `yG=yB=0`, `zG=0`, `zB=-0.025`:
 
 ```
 Hitung (W - B):
-  W - B = 112.7765 - 112.4908 = +0.2857 N
+  W - B = 220.6496 - 220.3639 = +0.2857 N
 
 Hitung (zG×W - zB×B):
-  = (0.0 × 112.7765) - (-0.025 × 112.4908)
-  = 0 + 2.8123
-  = +2.8123 N·m
+  = (0.0 × 220.6496) - (-0.025 × 220.3639)
+  = 0 + 5.5091
+  = +5.5091 N·m
 
 Hitung (yG×W - yB×B) = (0×W - 0×B) = 0
 Hitung (xG×W - xB×B) = (0×W - 0×B) = 0
@@ -1111,14 +1111,14 @@ Jika baterai 14.5V:
 
 | Nama Parameter | Notasi Simbol | Nilai Numerik | Satuan SI | Sumber Kalibrasi |
 | :--- | :--- | :--- | :--- | :--- |
-| **Massa Kering Kapal** | m | 11.5 | kg | Penimbangan digital darat |
+| **Massa Kering Kapal** | m | 22.5 | kg | Nominal; verifikasi dengan penimbangan digital darat |
 | **Momen Inersia Roll** | Ixx | 0.12 | kg·m² | Ekstraksi CAD Mesh & URDF |
 | **Momen Inersia Pitch**| Iyy | 0.22 | kg·m² | Ekstraksi CAD Mesh & URDF |
 | **Momen Inersia Yaw**  | Izz | 0.24 | kg·m² | Ekstraksi CAD Mesh & URDF |
 | **Dimensi Panjang** | L | 0.54 | m | Pengukuran fisik |
 | **Dimensi Lebar** | W | 0.28 | m | Pengukuran fisik |
 | **Dimensi Tinggi** | H | 0.24 | m | Pengukuran fisik |
-| **Volume Benaman Air** | V | 0.01151 | m³ (11.51 L) | Uji benaman + ballast weights |
+| **Volume Benaman Air** | V | 0.02254345 | m³ (22.54 L) | Target uji benaman + ballast weights |
 | **Densitas Air Kolam (26°C)** | ρ | 996.78 | kg/m³ | UNESCO 1980 / Kell 1975 |
 | **Percepatan Gravitasi**| g | 9.80665 | m/s² | Konstanta geofisika lokal |
 | **Pusat Gravitasi (CG)**| [xG, yG, zG] | [0.0, 0.0, 0.0] | meter | Asal kerangka bodi {b} |

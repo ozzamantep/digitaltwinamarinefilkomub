@@ -56,8 +56,8 @@ Sensor Data ──► EKF Predict ──► EKF Update ──► SysID (RLS) ─
 | **2× Vertical Ducted Thrusters** | Inside aerodynamic nose and tail cowlings for heave & pitch |
 | **Battery System** | 4× cylindrical pressure hulls, dual stacked (4S LiPo 16V) |
 | **Electronics** | Clear acrylic enclosure: Jetson Nano, flight controller, status LEDs |
-| **Dry Mass** | 11.5 kg |
-| **Displaced Volume** | 11.51 L (0.01151 m³, near-neutral buoyancy) |
+| **Dry Mass** | 22.5 kg (nominal; configurable 20-25 kg) |
+| **Displaced Volume** | 22.54 L (0.02254345 m³, near-neutral buoyancy) |
 | **Dimensions** | 540mm × 280mm × 240mm |
 
 ---
@@ -75,9 +75,9 @@ M ν̇ + C(ν)ν + D(ν_r)ν_r + g(η) = τ_thruster + τ_env + τ_pinn
 
 | DOF | M_RB | M_A (Added Mass) | **M_total** | **M⁻¹** |
 |:----|:-----|:-----------------|:------------|:---------|
-| Surge | 11.5 kg | 5.5 kg | **17.0 kg** | 0.05882 |
-| Sway | 11.5 kg | 12.7 kg | **24.2 kg** | 0.04132 |
-| Heave | 11.5 kg | 14.6 kg | **26.1 kg** | 0.03831 |
+| Surge | 22.5 kg | 5.5 kg | **28.0 kg** | 0.03571 |
+| Sway | 22.5 kg | 12.7 kg | **35.2 kg** | 0.02841 |
+| Heave | 22.5 kg | 14.6 kg | **37.1 kg** | 0.02695 |
 | Roll | 0.12 kg·m² | 0.12 kg·m² | **0.24 kg·m²** | 4.16667 |
 | Pitch | 0.22 kg·m² | 0.12 kg·m² | **0.34 kg·m²** | 2.94118 |
 | Yaw | 0.24 kg·m² | 0.12 kg·m² | **0.36 kg·m²** | 2.77778 |
@@ -93,8 +93,8 @@ M ν̇ + C(ν)ν + D(ν_r)ν_r + g(η) = τ_thruster + τ_env + τ_pinn
 
 ### Hydrostatic Restoring Forces
 ```
-Weight:    W = 11.5 × 9.80665 = 112.78 N
-Buoyancy:  B = 996.78 × 9.80665 × 0.01151 = 112.49 N   (at 26°C pool)
+Weight:    W = 22.5 × 9.80665 = 220.65 N
+Buoyancy:  B = 996.78 × 9.80665 × 0.02254345 = 220.36 N   (at 26°C pool)
 Net Force: ΔF = -0.29 N  (near-neutral buoyancy)
 
 Righting Moment (CB 25mm above CG):
