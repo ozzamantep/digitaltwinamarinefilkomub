@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -9,6 +10,38 @@ app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 
 let mainWindow = null;
+let jetsonSshProcess = null;
+
+function validateSshTarget(host, user) {
+  return /^[a-zA-Z0-9.-]+$/.test(host) && /^[a-zA-Z0-9_-]+$/.test(user);
+}
+
+ipcMain.handle('jetson:ssh-status', () => ({ running: Boolean(jetsonSshProcess && !jetsonSshProcess.killed) }));
+
+ipcMain.handle('jetson:start-rosbridge', async (_, { host, user }) => {
+  if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
+  if (jetsonSshProcess && !jetsonSshProcess.killed) return { ok: true, alreadyRunning: true };
+
+  const command = 'source /opt/ros/$ROS_DISTRO/setup.bash && cd ~/digitaltwin && ros2 launch digitaltwin digitaltwin.launch.py';
+  jetsonSshProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+    windowsHide: true,
+  });
+  let error = '';
+  jetsonSshProcess.stderr.on('data', (chunk) => { error += chunk.toString(); });
+  jetsonSshProcess.on('error', (spawnError) => { error = spawnError.message; });
+  jetsonSshProcess.on('close', () => { jetsonSshProcess = null; });
+
+  return await new Promise((resolve) => setTimeout(() => {
+    if (error) resolve({ ok: false, error: error.trim() });
+    else resolve({ ok: Boolean(jetsonSshProcess), error: '' });
+  }, 900));
+});
+
+ipcMain.handle('jetson:stop-rosbridge', () => {
+  if (jetsonSshProcess && !jetsonSshProcess.killed) jetsonSshProcess.kill();
+  jetsonSshProcess = null;
+  return { ok: true };
+});
 
 // Helper to quickly check if Vite dev server is running on port 5173
 function checkDevServer(url, timeoutMs = 800) {
@@ -52,6 +85,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: false,
     },
   });

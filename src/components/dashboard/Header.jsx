@@ -20,6 +20,8 @@ export default function Header() {
 
   const [ipInput, setIpInput] = useState(jetsonIp);
   const [time, setTime] = useState(new Date());
+  const [sshUser, setSshUser] = useState('amarine');
+  const [sshState, setSshState] = useState('idle');
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -41,6 +43,22 @@ export default function Header() {
     const ros = rosConnection.connect(ipInput);
     topicSubscriber.subscribeAll(ros);
     topicPublisher.init(ros);
+  };
+
+  const handleStartJetsonBridge = async () => {
+    if (!window.jetsonSsh) {
+      setSshState('desktop-only');
+      return;
+    }
+    setSshState('starting');
+    const result = await window.jetsonSsh.startRosbridge(ipInput, sshUser);
+    setSshState(result.ok ? 'running' : 'error');
+  };
+
+  const handleStopJetsonBridge = async () => {
+    if (!window.jetsonSsh) return;
+    await window.jetsonSsh.stopRosbridge();
+    setSshState('idle');
   };
 
   const handleSwitchMode = (newMode) => {
@@ -230,6 +248,22 @@ export default function Header() {
             />
             <button className="ip-connect-btn" onClick={handleConnect}>
               Link
+            </button>
+            <input
+              type="text"
+              className="ip-input"
+              value={sshUser}
+              onChange={(e) => setSshUser(e.target.value)}
+              placeholder="jetson user"
+              style={{ width: '78px' }}
+              title="Jetson SSH username"
+            />
+            <button
+              className="ip-connect-btn"
+              onClick={sshState === 'running' ? handleStopJetsonBridge : handleStartJetsonBridge}
+              title="Start or stop rosbridge on Jetson through SSH key authentication"
+            >
+              {sshState === 'running' ? 'Stop ROS' : sshState === 'starting' ? 'Starting' : 'Start ROS'}
             </button>
           </div>
         )}
