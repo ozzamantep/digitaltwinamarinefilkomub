@@ -77,14 +77,14 @@ class HydrodynamicsEngineService {
 
     // Thruster forces in 6-DOF
     // Thrust scale factor: command [-100..100] -> Newtons
-    const thrustScale = 0.85;
+    const thrustScale = 1.0;
     const tau = [
       (thrustForces.surge || 0) * thrustScale,
       (thrustForces.sway || 0) * thrustScale,
       (thrustForces.heave || 0) * thrustScale,
       (thrustForces.roll || 0) * 0.1,
       (thrustForces.pitch || 0) * 0.1,
-      (thrustForces.yaw || 0) * 1.4,
+      (thrustForces.yaw || 0) * 1.4 * (thrustForces.yawBoost || 1.0),
     ];
 
     const result = this.coreEngine.step({ eta, nu, quat }, tau, dt);

@@ -20,6 +20,12 @@ assert.equal(useVehicleStore.getState().flaresFallen.blue, true, 'Flare did not 
 useVehicleStore.setState({
   flaresFallen: { ...useVehicleStore.getState().flaresFallen, blue: false },
 });
+collisionEngine.resolveCollision(0.30, 0, 0.85, 0, 0, 0, -0.80, 0);
+assert.equal(useVehicleStore.getState().flaresFallen.blue, true, 'High-speed hull sweep missed flare contact');
+
+useVehicleStore.setState({
+  flaresFallen: { ...useVehicleStore.getState().flaresFallen, blue: false },
+});
 collisionEngine.resolveCollision(-0.40, 0, 0.85, 0, 0, Math.PI / 2);
 assert.equal(useVehicleStore.getState().flaresFallen.blue, false, 'Rotated narrow side used the wrong extent');
 

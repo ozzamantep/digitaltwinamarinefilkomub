@@ -9,10 +9,11 @@ export class AdvancedAutonomyEngine {
     this.currentEstimate = { x: 0, y: 0, z: 0 };
     this.faultCounters = { depth: 0, dvl: 0 };
     this.thrusterFaultCounters = new Array(6).fill(0);
+    this.thrusterCommandTime = new Array(6).fill(0);
     this.lastAssessment = null;
   }
 
-  evaluate({ floorAltitude, depthRate = 0, estimated = {}, dvlVelocity = [], thrusters = [], measuredCurrents = [] }) {
+  evaluate({ floorAltitude, depthRate = 0, estimated = {}, dvlVelocity = [], thrusters = [], measuredCurrents = [], dt = 0.05 }) {
     const downwardSpeed = Math.max(0, depthRate);
     const brakingDeceleration = 1.2;
     const reactionTime = 0.10;
@@ -31,7 +32,12 @@ export class AdvancedAutonomyEngine {
       const current = measuredCurrents[index];
       const hasMeasurement = Number.isFinite(current);
       const expectedCurrent = command * 0.25;
-      const underCurrent = hasMeasurement && command > 35 && current < expectedCurrent * 0.45;
+      this.thrusterCommandTime[index] = command > 35
+        ? this.thrusterCommandTime[index] + dt
+        : 0;
+      // T200 thrust and current are first-order dynamics (tau ~= 0.35 s).
+      // Do not isolate a healthy thruster while it is still spooling up.
+      const underCurrent = hasMeasurement && this.thrusterCommandTime[index] >= 1.0 - dt && current < expectedCurrent * 0.45;
       this.thrusterFaultCounters[index] = underCurrent ? this.thrusterFaultCounters[index] + 1 : 0;
       if (this.thrusterFaultCounters[index] >= 3) thrusterFaults.push(index);
     }
@@ -75,7 +81,6 @@ export class AdvancedAutonomyEngine {
       safe.surge = clamp(safe.surge || 0, -0.35, 0.35);
       safe.sway = clamp(safe.sway || 0, -0.25, 0.25);
     }
-    safe.sway = clamp((safe.sway || 0) - assessment.currentEstimate.y * 0.5, -1, 1);
     return safe;
   }
 
@@ -83,6 +88,7 @@ export class AdvancedAutonomyEngine {
     this.currentEstimate = { x: 0, y: 0, z: 0 };
     this.faultCounters = { depth: 0, dvl: 0 };
     this.thrusterFaultCounters.fill(0);
+    this.thrusterCommandTime.fill(0);
     this.lastAssessment = null;
   }
 }

@@ -53,7 +53,7 @@ const THRUSTER_CONFIG = [
   },
 ];
 
-const PARTICLES_PER_THRUSTER = 42;
+const PARTICLES_PER_THRUSTER = 16;
 const TOTAL_PARTICLES = PARTICLES_PER_THRUSTER * 6;
 
 function mixControlInput(controlInput) {
@@ -192,7 +192,7 @@ export default function ThrusterBubbles() {
           );
 
           // Bubble size scales with effort
-          sizeArr[i] = 0.02 + (effort / 100) * 0.04 + Math.random() * 0.012;
+          sizeArr[i] = 0.012 + (effort / 100) * 0.018 + Math.random() * 0.006;
         } else {
           // Hide inactive particles
           arr[i * 3 + 1] = -20;
@@ -245,13 +245,12 @@ export default function ThrusterBubbles() {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.055}
+        size={0.025}
         color="#e0f2fe"
         transparent
-        opacity={0.9}
-        blending={THREE.AdditiveBlending}
+        opacity={0.42}
         depthWrite={false}
-        depthTest={false}
+        depthTest
         sizeAttenuation={true}
       />
     </points>

@@ -180,31 +180,10 @@ class SubseaCollisionEngine {
       },
     ];
 
-    const flareKeys = [
-      { key: 'orange_flare', color: 'orange', x: orangeX, z: orangeZ },
-      { key: 'blue_flare',   color: 'blue',   x: obs.blue_flare?.x ?? -2.0,   z: obs.blue_flare?.z ?? 2.2 },
-      { key: 'red_flare',    color: 'red',    x: obs.red_flare?.x ?? 0.5,    z: obs.red_flare?.z ?? 4.0 },
-      { key: 'yellow_flare', color: 'yellow', x: obs.yellow_flare?.x ?? -0.5, z: obs.yellow_flare?.z ?? -4.5 },
-    ];
-
-    for (const fl of flareKeys) {
-      if (!flaresFallen[fl.color] && flareStrategies[fl.key] === 'MENGHINDAR') {
-        list.push({
-          id: `flare_${fl.color}`,
-          type: 'cylinder',
-          x: fl.x,
-          z: fl.z,
-          radius: 0.24,
-          minY: 0.0,
-          maxY: 1.65,
-        });
-      }
-    }
-
     return list;
   }
 
-  resolveCollision(posX, posZ, depth, velX = 0, velZ = 0, heading = 0) {
+  resolveCollision(posX, posZ, depth, velX = 0, velZ = 0, heading = 0, previousX = posX, previousZ = posZ) {
     const store = useVehicleStore.getState ? useVehicleStore.getState() : null;
     const obstacleDict = store?.obstacles;
     const flaresFallen = store?.flaresFallen || {};
@@ -318,15 +297,25 @@ class SubseaCollisionEngine {
           const flareMinY = (fObs.y || 0) - (fObs.height || 1.5) * 0.5;
           const flareMaxY = (fObs.y || 0) + (fObs.height || 1.5) * 0.5;
           const verticalContact = subY + this.topOffset >= flareMinY && subY - this.bottomOffset <= flareMaxY;
-          const contact = this.getCylinderContact(
-            correctedX,
-            correctedZ,
-            heading,
-            fObs.x,
-            fObs.z,
-            flareRadius
-          );
-          if (verticalContact && contact.collided) {
+          let hitFlare = false;
+          // Sweep the oriented hull over this integration step. This prevents a
+          // high-speed ram from tunneling through a narrow flare between ticks.
+          for (let sample = 0; sample <= 4; sample++) {
+            const fraction = sample / 4;
+            const contact = this.getCylinderContact(
+              previousX + (correctedX - previousX) * fraction,
+              previousZ + (correctedZ - previousZ) * fraction,
+              heading,
+              fObs.x,
+              fObs.z,
+              flareRadius
+            );
+            if (contact.collided) {
+              hitFlare = true;
+              break;
+            }
+          }
+          if (verticalContact && hitFlare) {
             store?.knockdownFlare(color);
           }
         }

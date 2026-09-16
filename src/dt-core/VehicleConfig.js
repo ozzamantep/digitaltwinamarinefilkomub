@@ -193,7 +193,7 @@ const defaultConfig = {
   // ═══════════════════════════════════════════════════════════════════════════
   limits: {
     maxVelocity: {
-      u: param(1.5, 'm/s', 'Max surge velocity', [0.5, 3.0], 'spec'),
+      u: param(2.0, 'm/s', 'Max surge velocity (simulation turbo limit)', [0.5, 3.0], 'simulation'),
       v: param(1.2, 'm/s', 'Max sway velocity',  [0.3, 2.0], 'spec'),
       w: param(0.8, 'm/s', 'Max heave velocity', [0.3, 1.5], 'spec'),
       p: param(1.5, 'rad/s', 'Max roll rate',    [0.5, 3.0], 'spec'),

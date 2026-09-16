@@ -160,9 +160,10 @@ class AUVMotionController {
     // Steering is applied as a tiny multiplicative differential (max ±12%)
     // so the vehicle maintains strong forward thrust even while turning.
     // =========================================================================
-    const targetSurge = (userCmd.surge || 0) * 0.75; // Responsive surge 0.75 m/s
+    const targetSurge = (userCmd.surge || 0) * 1.0; // Autonomous cruise authority up to 1.0 m/s
     const targetSway = (userCmd.sway || 0) * 0.40;   // Lateral 0.40 m/s
-    let targetYawRate = (userCmd.yaw || 0) * 0.55;    // Calm yaw rate 0.55 rad/s
+    const yawAuthority = userCmd.turnBoost ? 0.90 : 0.55;
+    let targetYawRate = (userCmd.yaw || 0) * yawAuthority;
     let targetHeave = 0;
 
     // 1. Closed-loop Depth PID Regulation
@@ -194,7 +195,7 @@ class AUVMotionController {
       // hold target heading locked so vehicle travels in a laser-straight line
       const headingErr = Kinematics.wrapAngle(this.targetHeading - currentPose.heading);
       const yawRes = this.yawPid.compute(currentPose.heading);
-      targetYawRate = yawRes.output * 0.55;
+      targetYawRate = yawRes.output * yawAuthority;
       this.pidTelemetry.yawError = headingErr;
       this.pidTelemetry.yawEffort = yawRes.output;
     }
@@ -217,17 +218,17 @@ class AUVMotionController {
     // 3. CLEAN THRUSTER ALLOCATION — Straight-line priority
     // ---------------------------------------------------------------
     // Base effort: ALL 4 horizontal thrusters get the SAME power for pure forward thrust
-    const surgeNorm = targetSurge / 0.75;           // -1..+1
-    const basePower = surgeNorm * 78;                // All thrusters at 78% for full surge
+    const surgeNorm = targetSurge / 1.0;            // -1..+1
+    const basePower = surgeNorm * 100;               // Full T200 authority at full manual/autonomous surge
     
     // Sway effort (lateral strafe)
     const swayNorm = targetSway / 0.40;
     const swayPower = swayNorm * 30;
 
     // Yaw differential: additive torque so steering direction is identical in forward, reverse, and spot turn
-    const yawNorm = Math.max(-1, Math.min(1, targetYawRate / 0.55));
+    const yawNorm = Math.max(-1, Math.min(1, targetYawRate / yawAuthority));
     // When surging fast, moderate yaw differential for high-speed straight-line stability
-    const maxDifferential = Math.abs(basePower) > 20 ? 12 : 28;
+    const maxDifferential = userCmd.turnBoost ? 38 : Math.abs(basePower) > 20 ? 12 : 28;
     const yawDiff = yawNorm * maxDifferential;
 
     // Decoupled thruster commands:
@@ -266,7 +267,10 @@ class AUVMotionController {
     const thrusterResult = thrusterDynamics.update(thrusterCommands, batteryVoltage, dt);
 
     // 5. Convert actual thruster output to body-frame forces
-    const bodyForces = thrusterDynamics.thrustToBodyForces(thrusterResult.thrusts);
+    const bodyForces = {
+      ...thrusterDynamics.thrustToBodyForces(thrusterResult.thrusts),
+      yawBoost: userCmd.turnBoost ? 1.6 : 1.0,
+    };
 
     // 6. Full Hydrodynamic Step
     const hydroResult = hydrodynamicsEngine.step(
@@ -320,6 +324,7 @@ class AUVMotionController {
       pitch: this.dynamicPitch,
       roll: this.dynamicRoll,
       thrusters: thrusterResult.efforts,
+      thrusterRPMs: thrusterResult.rpms,
       telemetry: { ...this.pidTelemetry },
       hydroTelemetry: this.hydroTelemetry,
     };

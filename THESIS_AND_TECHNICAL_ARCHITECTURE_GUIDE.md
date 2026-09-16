@@ -1143,7 +1143,7 @@ Jika baterai 14.5V:
 | **Time Constant Fisik** | tau_phys | 0.42 | detik | Bollard test dyno |
 | **Tegangan Baterai**   | V_bat | 16.0 | Volt | LiPo 4S 10.000 mAh |
 | **Deadband PWM Motor** | PWM_deadband | 1470 s.d. 1530 | mikrodetik (μs) | BlueRobotics Basic ESC |
-| **Kecepatan Maks Surge** | u_max | 1.5 | m/s | Spesifikasi operasi |
+| **Kecepatan Maks Surge** | u_max | 2.0 | m/s | Batas turbo simulasi; perlu validasi sebelum diterapkan pada hardware |
 | **Kecepatan Maks Sway** | v_max | 1.2 | m/s | Spesifikasi operasi |
 | **Kecepatan Maks Heave** | w_max | 0.8 | m/s | Spesifikasi operasi |
 | **Laju Yaw Maks** | r_max | 2.0 | rad/s | Spesifikasi operasi |

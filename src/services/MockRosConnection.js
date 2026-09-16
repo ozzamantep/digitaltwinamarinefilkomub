@@ -19,6 +19,7 @@ import safetySupervisor from './SafetySupervisor.js';
 import advancedAutonomyEngine from './AdvancedAutonomyEngine.js';
 import { createSafetyRecoveryTree } from './BehaviorTree.js';
 import thrusterDynamics from './ThrusterDynamicsModel.js';
+import { planFlareAvoidance } from './AvoidancePlanner.js';
 
 class MockRosConnection {
   constructor() {
@@ -76,6 +77,7 @@ class MockRosConnection {
     auvMotionController.reset();
     sysIdEngine.reset();
     advancedAutonomyEngine.reset();
+    defaultStateEstimator.reset({ x: this.simX, y: this.simZ, z: this.simDepth });
     defaultDataLogger.startRecording();
 
     // 20 Hz simulation loop (50ms)
@@ -166,30 +168,28 @@ class MockRosConnection {
   }
 
   resetQualification() {
-    this.simX = -11.0;
-    this.simZ = 2.0;
-    this.simDepth = 0.15; // Start at pool surface
-    this.simHeading = 0.0;
+    // Preserve the live pose so qualification can be started from any location.
     this.qualState = 1;
     this.qualPrevState = 1;
     this.qualStateStartTime = 0;
     this.qualUTurnTargetYaw = 0;
     this.qualReturnPass = false;
-    this.lastQualDepth = 0.15;
+    this.lastQualDepth = this.simDepth;
     useVehicleStore.getState().resetPayload();
     useVehicleStore.getState().resetFlares();
     auvMotionController.reset();
     sysIdEngine.reset();
+    advancedAutonomyEngine.reset();
+    safetySupervisor.reset();
+    defaultStateEstimator.reset({ x: this.simX, y: this.simZ, z: this.simDepth });
+    useVehicleStore.getState().setAdvancedAutonomy({ floorBrake: false, stoppingDistance: 0, brakingAltitude: 0, depthSensorFault: false, dvlFault: false, thrusterFaults: [], currentEstimate: { x: 0, y: 0, z: 0 }, events: [], autonomyRestricted: false });
   }
 
   resetFinal() {
-    this.simX = -11.0;
-    this.simZ = 2.0;
-    this.simDepth = 0.8;
-    this.simHeading = 0.0;
+    // Preserve the live pose so the final mission can be started from any location.
     this.missionStage = 0;
     this.missionTime = 0;
-    this.lastFinalDepth = 0.8;
+    this.lastFinalDepth = this.simDepth;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
@@ -197,6 +197,10 @@ class MockRosConnection {
     useVehicleStore.getState().resetFlares();
     auvMotionController.reset();
     sysIdEngine.reset();
+    advancedAutonomyEngine.reset();
+    safetySupervisor.reset();
+    defaultStateEstimator.reset({ x: this.simX, y: this.simZ, z: this.simDepth });
+    useVehicleStore.getState().setAdvancedAutonomy({ floorBrake: false, stoppingDistance: 0, brakingAltitude: 0, depthSensorFault: false, dvlFault: false, thrusterFaults: [], currentEstimate: { x: 0, y: 0, z: 0 }, events: [], autonomyRestricted: false });
   }
 
   /**
@@ -264,6 +268,7 @@ class MockRosConnection {
       dvlVelocity: [store.speed?.surge || 0, store.speed?.sway || 0, store.speed?.heave || 0],
       thrusters: store.thrusters,
       measuredCurrents: thrusterDynamics.actualCurrent,
+      dt,
     });
     this.lastAutonomyAssessment = autonomyAssessment;
     thrusterDynamics.setFailedThrusters(autonomyAssessment.thrusterFaults);
@@ -303,7 +308,7 @@ class MockRosConnection {
         case 1: // State 1: Dive-on-the-fly Launch & Line up with Gate Runway
           statusText = 'State 1/5: ⚡ Smooth Dive-on-the-Fly Launch (0.85m)';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.72;
+          cmdSurge = 1.15;
 
           // Aim for gate entry runway (GATE_X - 1.5, GATE_Z) so vehicle lines up with Z=0 before the gate
           const diveTargetHeading = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.5) - this.simX);
@@ -319,7 +324,7 @@ class MockRosConnection {
         case 4: // State 4: Vector Gate Entry Lock-in (aiming directly at gate entry)
           statusText = 'State 2/5: 🎯 Vector Gate Approach Runway';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.75;
+          cmdSurge = 1.25;
 
           const targetHeading = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.0) - this.simX);
           cmdYaw = this.computeSmoothSteering(targetHeading, this.simHeading, 0.50, 0.02);
@@ -336,8 +341,8 @@ class MockRosConnection {
           const elapsed = t - this.qualStateStartTime;
 
           if (!this.qualReturnPass) {
-            statusText = `State 3/5: 🏁 Stable Gate Transit (${elapsed.toFixed(1)}s @ 0.78 m/s)`;
-            cmdSurge = 0.78;
+            statusText = `State 3/5: 🏁 High-Speed Gate Transit (${elapsed.toFixed(1)}s @ 1.5 m/s)`;
+            cmdSurge = 1.50;
             
             // Aim straight through gate opening along Z=GATE_Z to exit point
             const gatePassYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X + 2.5) - this.simX);
@@ -352,17 +357,17 @@ class MockRosConnection {
             // Return pass through gate
             if (this.simX > GATE_X) {
               statusText = `State 5/5: ⚡ Return Transit Lead-in (Z = ${GATE_Z.toFixed(1)}m)`;
-              cmdSurge = 0.65;
+              cmdSurge = 1.15;
               const retGateYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X - 1.5) - this.simX);
               cmdYaw = this.computeSmoothSteering(retGateYaw, this.simHeading, 0.60, 0.02);
             } else if (this.simX > GATE_X - 2.5) {
               statusText = `State 5/5: ⚡ Return Transit Through Gate (Z = ${GATE_Z.toFixed(1)}m)`;
-              cmdSurge = 0.75;
+              cmdSurge = 1.50;
               const retGateYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X - 2.5) - this.simX);
               cmdYaw = this.computeSmoothSteering(retGateYaw, this.simHeading, 0.55, 0.02);
             } else {
               statusText = `State 5/5: 🚀 CRUISE TO DOCK (${elapsed.toFixed(1)}s)`;
-              cmdSurge = 0.75;
+              cmdSurge = 1.50;
               const returnHeading = Math.atan2(2.0 - this.simZ, -11.0 - this.simX);
               cmdYaw = this.computeSmoothSteering(returnHeading, this.simHeading, 0.45, 0.02);
 
@@ -376,9 +381,9 @@ class MockRosConnection {
           break;
 
         case 3: // State 3: Clean Hairpin 180° U-Turn
-          statusText = 'State 4/5: 🔄 Controlled 180° Hairpin U-Turn';
+          statusText = 'State 4/5: 🔄 High-Authority 180° Spot Turn';
           cmdHeave = holdDepthHeave;
-          cmdSurge = 0.28;
+          cmdSurge = 0;
 
           const uTurnAimPointYaw = Math.atan2(GATE_Z - this.simZ, (GATE_X + 0.5) - this.simX);
           let uTurnErr = uTurnAimPointYaw - this.simHeading;
@@ -391,13 +396,13 @@ class MockRosConnection {
             this.qualReturnPass = true;
             this.qualStateStartTime = t;
           } else {
-            cmdYaw = this.computeSmoothSteering(uTurnAimPointYaw, this.simHeading, 0.65, 0.02);
+            cmdYaw = this.computeSmoothSteering(uTurnAimPointYaw, this.simHeading, 0.90, 0.02);
           }
           break;
 
         case 5: // State 5: Rapid Surface
           statusText = 'QUALIFICATION COMPLETE! 🏆 Surfacing at Start Zone';
-          cmdSurge = 0.35;
+          cmdSurge = 0.80;
           cmdHeave = -0.65;
           break;
       }
@@ -409,7 +414,7 @@ class MockRosConnection {
 
       ctrl = auvMotionController.update(
         currentPose,
-        applySafety({ surge: cmdSurge, sway: cmdSway, yaw: cmdYaw, heave: cmdHeave }),
+        applySafety({ surge: cmdSurge, sway: cmdSway, yaw: cmdYaw, heave: cmdHeave, turnBoost: this.qualState === 3 }),
         'MANUAL',
         true,
         dt,
@@ -472,19 +477,24 @@ class MockRosConnection {
         gate: true,
         drum_red_tgt: true,
       };
+      const missionTargets = {
+        orange_flare: { x: orangeX, z: orangeZ },
+        blue_flare: { x: blueX, z: blueZ },
+        red_flare: { x: redX, z: redZ },
+        yellow_flare: { x: yellowX, z: yellowZ },
+        gate: { x: gateX, z: gateZ },
+        drum_red_tgt: { x: drumX, z: drumZ },
+      };
+      const getNextTarget = (key) => {
+        const startIndex = obstacleOrder.indexOf(key) + 1;
+        for (let index = startIndex; index < obstacleOrder.length; index++) {
+          const nextKey = obstacleOrder[index];
+          if (obstacleEnabled[nextKey] !== false && missionTargets[nextKey]) return missionTargets[nextKey];
+        }
+        return { x: -11.0, z: 2.0 };
+      };
 
       const rawWaypoints = [];
-
-      // Milestone 0: Immediate Calm Dive Launch to Arena Target Depth (0.85m)
-      rawWaypoints.push({
-        id: 'initial_dive',
-        title: '[#0] ⚡ Smooth Dive Launch (0.85m)',
-        x: -9.0,
-        z: 2.0,
-        targetDepth: 0.85,
-        speed: 0.65,
-        threshold: 1.10,
-      });
 
       // Helper function to build clean sequential waypoints
       const addFlareWaypoint = (key, color, label, flX, flZ, stepNum) => {
@@ -499,43 +509,66 @@ class MockRosConnection {
             x: flX,
             z: flZ,
             targetDepth: 0.85,
-            speed: 0.72,
-            threshold: 0.80,
+            speed: 2.0,
+            threshold: 0.25,
             hitFlare: color,
+            requireFlareContact: true,
             flareX: flX,
             flareZ: flZ,
           });
         } else {
-          // 1. Waypoint Inspeksi Visual (Standoff at 1.4m)
+          const standoff = 1.60;
+          const route = planFlareAvoidance({
+            position: { x: this.simX, z: this.simZ },
+            flare: { x: flX, z: flZ },
+            nextTarget: getNextTarget(key),
+            standoff,
+          });
+
+          // 1. Reach the forward standoff before moving laterally. This prevents
+          // a diagonal leg from clipping the flare when the vehicle has momentum.
           rawWaypoints.push({
-            id: `${key}_inspect`,
-            title: `[#${stepNum}] 🛡️ Quick Inspect ${label}`,
+            id: `${key}_approach`,
+            title: `[#${stepNum}] Approach ${label} Safely`,
             strategy: 'MENGHINDAR',
-            x: flX - 1.40,
-            z: flZ,
+            x: route.approach.x,
+            z: route.approach.z,
             targetDepth: 0.85,
-            speed: 0.48,
-            threshold: 0.75,
+            speed: 0.65,
+            threshold: 0.30,
             hitFlare: null,
-            isAvoidInspect: true,
+            isAvoidApproach: true,
+          });
+
+          // 2. Move directly to the selected clear side before crossing the flare.
+          rawWaypoints.push({
+            id: `${key}_clearance`,
+            title: `[#${stepNum}] ↔ Clear ${label}`,
+            strategy: 'MENGHINDAR',
+            x: route.clearancePoint.x,
+            z: route.clearancePoint.z,
+            targetDepth: 0.85,
+            speed: 0.75,
+            threshold: 0.40,
+            hitFlare: null,
+            isAvoidClearance: true,
             inspectColor: color,
             flareX: flX,
             flareZ: flZ,
           });
 
-          // 2. Bypass lateral waypoint to smoothly clear the pole
-          const clearZ = (flZ >= 0) ? flZ - 1.20 : flZ + 1.20;
+          // 3. Pass the flare after lateral clearance has been established.
           rawWaypoints.push({
-            id: `${key}_bypass`,
-            title: `[#${stepNum}] 🛡️ Bypass ${label}`,
+            id: `${key}_pass`,
+            title: `[#${stepNum}] 🛡️ Pass ${label}`,
             strategy: 'MENGHINDAR',
-            x: flX + 1.20,
-            z: clearZ,
+            x: route.pass.x,
+            z: route.pass.z,
             targetDepth: 0.85,
-            speed: 0.68,
-            threshold: 0.85,
+            speed: 1.20,
+            threshold: 0.50,
             hitFlare: null,
-            isBypass: true,
+            isAvoidPass: true,
           });
         }
       };
@@ -563,7 +596,7 @@ class MockRosConnection {
             x: gateX - 3.50,
             z: gateZ,
             targetDepth: 0.85,
-            speed: 0.60,
+            speed: 0.80,
             threshold: 0.90,
             isGateApproach: true,
           });
@@ -574,7 +607,7 @@ class MockRosConnection {
             x: gateX - 1.00,
             z: gateZ,
             targetDepth: 0.85,
-            speed: 0.65,
+            speed: 0.90,
             threshold: 0.70,
             isGateApproach: true,
           });
@@ -585,7 +618,7 @@ class MockRosConnection {
             x: gateX + 2.50,
             z: gateZ,
             targetDepth: 0.85,
-            speed: 0.75,
+            speed: 1.0,
             threshold: 0.85,
             isGateApproach: true,
           });
@@ -597,7 +630,7 @@ class MockRosConnection {
             x: drumX - 0.35,
             z: drumZ,
             targetDepth: 0.85,
-            speed: 0.55,
+            speed: 0.75,
             threshold: 0.80,
           });
           rawWaypoints.push({
@@ -620,7 +653,7 @@ class MockRosConnection {
         x: -11.0,
         z: 2.0,
         targetDepth: 0.15,
-        speed: 0.65,
+        speed: 0.90,
         threshold: 0.90,
       });
 
@@ -673,23 +706,10 @@ class MockRosConnection {
       // 3. Waypoint Advancement Logic
       let canAdvance = distToWp < currentWp.threshold;
       if (currentWp.hitFlare) {
-        canAdvance = flaresFallen[currentWp.hitFlare] || distToWp < currentWp.threshold;
-      } else if (currentWp.isAvoidInspect) {
-        const flX = currentWp.flareX ?? currentWp.x;
-        const flZ = currentWp.flareZ ?? currentWp.z;
-        const distToFlare = Math.sqrt((this.simX - flX) ** 2 + (this.simZ - flZ) ** 2);
-        
-        if (distToFlare <= 1.60 || distToWp < currentWp.threshold) {
-          if (!this.avoidInspectStartTime) {
-            this.avoidInspectStartTime = t;
-          }
-          if (t - this.avoidInspectStartTime >= 0.45) {
-            canAdvance = true;
-            this.avoidInspectStartTime = null;
-          } else {
-            canAdvance = false;
-          }
-        }
+        // A ram task is complete only after the oriented hull collision knocks down the flare.
+        canAdvance = currentWp.requireFlareContact
+          ? flaresFallen[currentWp.hitFlare]
+          : flaresFallen[currentWp.hitFlare] || distToWp < currentWp.threshold;
       }
 
       if (
@@ -715,23 +735,23 @@ class MockRosConnection {
       while (headingErr > Math.PI) headingErr -= Math.PI * 2;
       while (headingErr < -Math.PI) headingErr += Math.PI * 2;
 
-      // Smooth steering — boost authority during gate approach for precise alignment
+      // Sharp route reversals use the same high-authority spot turn as Quali.
       const isGateWp = currentWp.isGateApproach;
-      const steerMaxYaw = isGateWp ? 0.50 : 0.25;
+      const isSharpTurn = Math.abs(headingErr) > 1.10;
+      const steerMaxYaw = isSharpTurn ? 1.0 : isGateWp ? 0.50 : 0.25;
       const steerDeadband = isGateWp ? 0.03 : 0.087;
       let cmdYaw = this.computeSmoothSteering(targetHeading, this.simHeading, steerMaxYaw, steerDeadband);
 
-      // Continuous Smooth Forward Surge — maintain high speed, barely slow for turns
+      // Rotate in place for sharp turns, then apply surge only once the bow is aligned.
       const alignment = Math.max(0, Math.cos(headingErr));
-      // For gate approach, slow down more when misaligned to allow correction
       const minDrive = isGateWp ? 0.45 : 0.70;
-      const forwardDrive = Math.max(minDrive, alignment);
+      const headingMagnitude = Math.abs(headingErr);
+      const forwardDrive = headingMagnitude > 0.60
+        ? 0
+        : headingMagnitude > 0.30
+          ? Math.min(0.35, alignment)
+          : Math.max(minDrive, alignment);
       let cmdSurge = currentWp.speed * forwardDrive;
-
-      if (currentWp.isAvoidInspect && (this.avoidInspectStartTime !== null)) {
-        cmdSurge = 0.0;
-        cmdYaw = 0.0;
-      }
 
       let finalTarget = `[FINAL] ${currentWp.name}`;
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
@@ -744,7 +764,7 @@ class MockRosConnection {
 
       ctrl = auvMotionController.update(
         currentPose,
-        applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave }),
+        applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave, turnBoost: isSharpTurn }),
         'MANUAL',
         true,
         dt,
@@ -769,7 +789,7 @@ class MockRosConnection {
     // Process Thruster Dynamics through the Identified Polynomial Model (ARX / ARMAX / OE / BJ)
     const rawSurge = ctrl?.surge || 0;
     const sysIdRes = sysIdEngine.step(input.surge || (rawSurge / 1.0), rawSurge, dt);
-    const effectiveSurge = Math.max(-0.85, Math.min(0.85, rawSurge * 0.75 + (sysIdRes.velocity || 0) * 0.25));
+    const effectiveSurge = Math.max(-2.0, Math.min(2.0, rawSurge * 0.90 + (sysIdRes.velocity || 0) * 0.10));
 
     // Clean pitch and roll — no artificial random oscillation that creates lateral disturbance
     const pitchDeg = (ctrl?.pitch || 0) + targetPitchAngle;
@@ -805,7 +825,9 @@ class MockRosConnection {
       proposedDepth,
       effectiveSurge,
       ctrl?.sway || 0,
-      this.simHeading
+      this.simHeading,
+      this.simX,
+      this.simZ
     );
 
     this.simX = isFinite(collision.x) ? collision.x : -11.0;
@@ -857,7 +879,10 @@ class MockRosConnection {
       this.sonarAccumulator = 0;
     }
 
-    store.updateThrusters(ctrl?.thrusters || [0, 0, 0, 0, 0, 0]);
+    store.updateThrusters(
+      ctrl?.thrusters || [0, 0, 0, 0, 0, 0],
+      ctrl?.thrusterRPMs || [0, 0, 0, 0, 0, 0]
+    );
 
     // Dynamic Hydrodynamic Water Pressure & Subsea Thermal Gradient Physics
     const vTotal = Math.sqrt(effectiveSurge ** 2 + ((ctrl?.sway || 0)) ** 2 + ((ctrl?.heave || 0)) ** 2);

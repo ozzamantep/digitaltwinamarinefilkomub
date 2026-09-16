@@ -39,6 +39,7 @@ const useVehicleStore = create((set, get) => ({
 
   // Thrusters (T200 Thrusters 1-6 in % output)
   thrusters: [0, 0, 0, 0, 0, 0],
+  thrusterRPMs: [0, 0, 0, 0, 0, 0],
 
   // Subsea Sensors
   imu: { roll: 0, pitch: 0, yaw: 0, accelX: 0, accelY: 0, accelZ: -9.81 },
@@ -502,7 +503,10 @@ const useVehicleStore = create((set, get) => ({
     });
   },
 
-  updateThrusters: (thrusters) => set({ thrusters }),
+  updateThrusters: (thrusters, thrusterRPMs) => set((state) => ({
+    thrusters,
+    thrusterRPMs: thrusterRPMs ?? state.thrusterRPMs,
+  })),
   updateIMU: (imu) => {
     const accelX = Number(imu.accelX) || 0;
     const accelY = Number(imu.accelY) || 0;

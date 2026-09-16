@@ -10,6 +10,10 @@ export class SafetySupervisor {
     this.blocked = { front: false, rear: false, left: false, right: false, floor: false };
   }
 
+  reset() {
+    this.blocked = { front: false, rear: false, left: false, right: false, floor: false };
+  }
+
   updateLatch(direction, range, stopDistance, releaseDistance) {
     if (!Number.isFinite(range)) {
       this.blocked[direction] = true;
