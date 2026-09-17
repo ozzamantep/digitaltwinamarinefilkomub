@@ -12,7 +12,8 @@ export default function ArduinoFirmwareModal({ isOpen, onClose }) {
  * Hardware Connections:
  * 1. Pin D9 (PWM) -> ESC White Signal Wire
  * 2. GND          -> ESC Black Wire & Battery Ground
- * 3. Pin D2 (INT) -> Hall Effect Sensor A3144 (magnet di hub propeller) [RPM nyata]
+ * 3. Pin A5       -> Back-EMF divider dari 1 kabel fasa motor (150k + 10k, TANPA sensor) [RPM_MODE 2]
+ *    ATAU Pin D2  -> Hall Effect Sensor A3144 (magnet di hub propeller) [RPM_MODE 1]
  * 4. Pin A0 (DT)  -> HX711 Load Cell Data
  * 5. Pin A1 (SCK) -> HX711 Load Cell Clock
  * 6. Pin A2 (V)   -> Voltage Divider (Optional for Battery V)
@@ -34,9 +35,14 @@ int currentPwm = NEUTRAL_PWM;
 unsigned long lastTelemetryTime = 0;
 const unsigned long TELEMETRY_INTERVAL_MS = 50; // 20 Hz telemetry stream
 
-// ===== Sensor RPM (Hall Effect A3144 + magnet neodymium di hub propeller) =====
-// Ubah ke true setelah sensor terpasang. false = mode demo (RPM disimulasikan dari PWM)
-#define USE_RPM_SENSOR true
+// ===== Mode Sensor RPM =====
+// 0 = DEMO   : RPM disimulasikan dari PWM (tanpa hardware tambahan)
+// 1 = HALL   : sensor hall A3144 + magnet di hub propeller (pin D2)
+// 2 = BACKEMF: TANPA SENSOR — baca tegangan back-EMF dari 1 kabel fasa motor
+//              via pembagi tegangan 150k:10k ke pin A5 (motor BLDC = generator!)
+#define RPM_MODE 2
+
+// --- Mode 1: Hall sensor ---
 const int HALL_PIN = 2;       // harus pin interrupt (D2 atau D3 di Uno/Nano)
 const int PULSES_PER_REV = 1; // jumlah magnet yang ditempel di hub
 volatile unsigned long lastPulseUs = 0;
@@ -46,6 +52,31 @@ void onHallPulse() {
   unsigned long nowUs = micros();
   if (lastPulseUs > 0) pulsePeriodUs = nowUs - lastPulseUs;
   lastPulseUs = nowUs;
+}
+
+// --- Mode 2: Back-EMF (sensorless) ---
+const int BEMF_PIN = A5;
+const int MOTOR_POLE_PAIRS = 7; // T200 = motor 14-pole → 7 siklus listrik per 1 putaran propeller
+int bemfMid = 0;                // titik tengah sinyal (auto-tracking)
+bool bemfWasAbove = false;
+unsigned long bemfLastCrossUs = 0;
+unsigned long bemfPeriodUs = 0;
+
+void sampleBackEmf() {
+  int raw = analogRead(BEMF_PIN);
+  bemfMid += (raw - bemfMid) / 64; // pelacak titik tengah lambat
+  bool above = raw > bemfMid + 4;  // hysteresis ±4 count anti-noise
+  bool below = raw < bemfMid - 4;
+
+  if (above && !bemfWasAbove) {
+    // rising crossing = 1 siklus listrik
+    unsigned long nowUs = micros();
+    if (bemfLastCrossUs > 0) bemfPeriodUs = nowUs - bemfLastCrossUs;
+    bemfLastCrossUs = nowUs;
+    bemfWasAbove = true;
+  } else if (below) {
+    bemfWasAbove = false;
+  }
 }
 
 // Simulated or HX711 load cell readings
@@ -58,9 +89,15 @@ void setup() {
   Serial.begin(115200);
   while (!Serial) { ; } // wait for serial port to connect
 
-#if USE_RPM_SENSOR
+#if RPM_MODE == 1
   pinMode(HALL_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(HALL_PIN), onHallPulse, FALLING);
+#elif RPM_MODE == 2
+  #if defined(__AVR__)
+  analogReference(INTERNAL); // ref 1.1V: back-EMF putaran jari yang kecil tetap terbaca
+  #endif
+  pinMode(BEMF_PIN, INPUT);
+  bemfMid = analogRead(BEMF_PIN);
 #endif
 
   // Attach ESC
@@ -89,6 +126,10 @@ void loop() {
     }
   }
 
+#if RPM_MODE == 2
+  sampleBackEmf(); // sampling kontinu tiap iterasi loop (~9 kHz ADC)
+#endif
+
   // 2. Transmit Telemetry back to Digital Twin at 20 Hz
   unsigned long now = millis();
   if (now - lastTelemetryTime >= TELEMETRY_INTERVAL_MS) {
@@ -98,7 +139,7 @@ void loop() {
     // Example: measuredThrust = scale.get_units(1) * 9.81; // kg to N
     // Example: measuredCurrent = ina219.getCurrent_mA() / 1000.0;
 
-#if USE_RPM_SENSOR
+#if RPM_MODE == 1
     // RPM NYATA dari periode antar-pulsa hall sensor.
     // Ikut terbaca walau propeller diputar manual pakai jari → twin digital ikut berputar.
     noInterrupts();
@@ -112,6 +153,19 @@ void loop() {
       measuredRpm = 0; // >1 detik tanpa pulsa = propeller berhenti
     }
     // Satu hall sensor tidak bisa deteksi arah: ambil arah dari perintah PWM
+    if (currentPwm < 1476) measuredRpm = -measuredRpm;
+    measuredThrust = (measuredRpm >= 0 ? 3.50e-6 : -2.80e-6) * measuredRpm * measuredRpm;
+    measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.8;
+#elif RPM_MODE == 2
+    // RPM NYATA dari back-EMF: motor BLDC yang diputar (oleh ESC ATAU jari)
+    // menghasilkan tegangan sinus di kabel fasa → frekuensinya = kecepatan putar.
+    if (bemfPeriodUs > 0 && (micros() - bemfLastCrossUs) < 1000000UL) {
+      // RPM mekanik = 60e6 / (periode listrik us) / jumlah pole-pair
+      measuredRpm = 60000000.0 / ((float)bemfPeriodUs * MOTOR_POLE_PAIRS);
+    } else {
+      measuredRpm = 0; // >1 detik tanpa siklus = propeller berhenti
+    }
+    // Back-EMF 1 fasa tidak bisa deteksi arah: ambil arah dari perintah PWM
     if (currentPwm < 1476) measuredRpm = -measuredRpm;
     measuredThrust = (measuredRpm >= 0 ? 3.50e-6 : -2.80e-6) * measuredRpm * measuredRpm;
     measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.8;
@@ -255,10 +309,14 @@ void loop() {
          ┌─────────────────────────┐
          │   Blue Robotics T200    │═════► [Load Cell HX711] ──► Arduino (A0, A1)
          └────────────┬────────────┘
-                      │ magnet neodymium kecil di hub propeller
-                      ▼
-         [Hall Sensor A3144] ──► Arduino Pin D2 (RPM nyata — ikut deteksi
-                                 putaran manual pakai jari!)`}
+                      │ TANPA SENSOR (RPM_MODE 2): ambil 1 kabel fasa motor
+                      │ (bullet A/B/C mana saja) → resistor 150k ─┬─ resistor 10k → GND
+                      │                                        └─► Arduino Pin A5
+                      │ Motor BLDC = generator: diputar jari pun menghasilkan
+                      │ tegangan → RPM nyata terbaca tanpa sensor apa pun!
+                      │
+                      │ ATAU (RPM_MODE 1): magnet neodymium kecil di hub propeller
+                      └─► [Hall Sensor A3144] ──► Arduino Pin D2`}
           </div>
 
           {/* Quick Setup Instructions */}
