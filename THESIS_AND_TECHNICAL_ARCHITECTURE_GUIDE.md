@@ -1093,7 +1093,7 @@ Thrust maks maju: 5.1 kgf (50.0 N) @ 16V
 Thrust maks mundur: 4.1 kgf (40.2 N) @ 16V
 RPM maksimal: 3600 RPM @ 16V full forward
 Deadband PWM (datasheet): 1470 - 1530 μs
-Deadband PWM (kalibrasi bench, single-thruster HIL): 1492 - 1508 μs (prop mulai berputar ~1510 μs)
+Deadband PWM (kalibrasi bench, single-thruster HIL): 1476 - 1524 μs (prop mulai berputar di 1525 μs maju / 1475 μs mundur)
 Batas PWM operasional (keselamatan): 1300 - 1600 μs
 Time constant fisik: 0.42 detik
 ```
@@ -1146,7 +1146,7 @@ Jika baterai 14.5V:
 | **Konstanta Waktu Motor**| tau_m | 0.35 | detik | Step response test |
 | **Time Constant Fisik** | tau_phys | 0.42 | detik | Bollard test dyno |
 | **Tegangan Baterai**   | V_bat | 16.0 | Volt | LiPo 4S 10.000 mAh |
-| **Deadband PWM Motor** | PWM_deadband | 1470 s.d. 1530 | mikrodetik (μs) | BlueRobotics Basic ESC (datasheet); HIL twin: 1492–1508 hasil kalibrasi bench |
+| **Deadband PWM Motor** | PWM_deadband | 1470 s.d. 1530 | mikrodetik (μs) | BlueRobotics Basic ESC (datasheet); HIL twin: 1476–1524 hasil kalibrasi bench |
 | **Batas PWM Operasional** | PWM_min, PWM_max | 1300 s.d. 1600 | mikrodetik (μs) | Keselamatan: propeller pecah pada full range 1100–1900 |
 | **Kecepatan Maks Surge** | u_max | 2.0 | m/s | Batas turbo simulasi; perlu validasi sebelum diterapkan pada hardware |
 | **Kecepatan Maks Sway** | v_max | 1.2 | m/s | Spesifikasi operasi |

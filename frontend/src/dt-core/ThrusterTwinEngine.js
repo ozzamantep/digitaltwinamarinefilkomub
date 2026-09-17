@@ -2,7 +2,7 @@
  * Blue Robotics T200 Single Thruster Digital Twin Engine
  * 
  * Implements physics-based and empirical benchmark characteristics for T200 thruster:
- * 1. PWM to RPM transfer function (Deadband calibrated to bench hardware, default 1492-1508 µs)
+ * 1. PWM to RPM transfer function (Deadband calibrated to bench hardware, default 1476-1524 µs)
  * 2. RPM to Thrust transfer function: T = k_t * omega * |omega|
  * 3. Power, Current, and Thermal modeling
  * 4. Online Recursive Least Squares (RLS) System Identification for adaptive k_t estimation
@@ -15,9 +15,9 @@
 export class ThrusterTwinEngine {
   constructor(options = {}) {
     this.voltage = options.voltage || 16.0; // Nominal 4S LiPo = 16.0V
-    // Bench-calibrated: real prop starts spinning ~1510 µs (datasheet spec: 1475-1525)
-    this.deadbandMin = options.deadbandMin ?? 1492;
-    this.deadbandMax = options.deadbandMax ?? 1508;
+    // Bench-calibrated: real prop starts spinning at 1525 µs fwd / 1475 µs rev
+    this.deadbandMin = options.deadbandMin ?? 1476;
+    this.deadbandMax = options.deadbandMax ?? 1524;
     this.neutralPwm = 1500;
     this.breakawayRpm = 150; // Static friction: motor jumps to this speed once out of deadband
     // SAFETY: command limits (propeller pernah pecah di full range 1100-1900)

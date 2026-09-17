@@ -212,12 +212,12 @@ class WebSerialManager {
       const pwm = this.simulatedPwm;
       let targetRpm = 0;
 
-      // Realistic deadband & response (matches bench-calibrated 1492-1508 µs)
-      if (pwm > 1508) {
-        const delta = (pwm - 1508) * (375 / 392);
+      // Realistic deadband & response (matches bench-calibrated 1476-1524 µs)
+      if (pwm > 1524) {
+        const delta = (pwm - 1524) * (375 / 376);
         targetRpm = Math.max(150, 10.2 * delta - 0.001 * Math.pow(delta, 2));
-      } else if (pwm < 1492) {
-        const delta = (1492 - pwm) * (375 / 392);
+      } else if (pwm < 1476) {
+        const delta = (1476 - pwm) * (375 / 376);
         targetRpm = -Math.max(150, 9.0 * delta - 0.0009 * Math.pow(delta, 2));
       }
 

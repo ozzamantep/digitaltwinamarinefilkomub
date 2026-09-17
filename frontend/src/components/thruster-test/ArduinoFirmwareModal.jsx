@@ -79,14 +79,14 @@ void loop() {
     // Example: measuredCurrent = ina219.getCurrent_mA() / 1000.0;
     
     // For bench demonstration, calculate approximate sensor response:
-    // (deadband 1492-1508 µs, calibrated to real prop start point ~1510 µs)
-    if (currentPwm > 1508) {
-      int delta = currentPwm - 1508;
-      measuredRpm = max(150.0, 10.2 * delta * (375.0 / 392.0));
+    // (deadband 1476-1524 µs, calibrated: prop starts at 1525 fwd / 1475 rev)
+    if (currentPwm > 1524) {
+      int delta = currentPwm - 1524;
+      measuredRpm = max(150.0, 10.2 * delta * (375.0 / 376.0));
       measuredThrust = (3.50e-6 * measuredRpm * measuredRpm);
       measuredCurrent = 0.3 + (measuredRpm / 1000.0) * 1.8;
-    } else if (currentPwm < 1492) {
-      int delta = 1492 - currentPwm;
+    } else if (currentPwm < 1476) {
+      int delta = 1476 - currentPwm;
       measuredRpm = -max(150.0, 9.0 * delta * (375.0 / 392.0));
       measuredThrust = -(2.80e-6 * measuredRpm * measuredRpm);
       measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.6;
