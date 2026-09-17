@@ -1,5 +1,5 @@
-import { ParameterIdentifier } from '../src/dt-core/ParameterIdentifier.js';
-import { HydrodynamicsEngine } from '../src/dt-core/HydrodynamicsEngine.js';
+import { ParameterIdentifier } from '../frontend/src/dt-core/ParameterIdentifier.js';
+import { HydrodynamicsEngine } from '../frontend/src/dt-core/HydrodynamicsEngine.js';
 
 console.log('Testing ParameterIdentifier with Differential Evolution...');
 

@@ -106,7 +106,7 @@ async function createWindow() {
 
   const devUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
   const isDevRunning = await checkDevServer(devUrl);
-  const distHtmlPath = path.join(__dirname, '../dist/index.html');
+  const distHtmlPath = path.join(__dirname, '../frontend/dist/index.html');
 
   if (isDevRunning) {
     mainWindow.loadURL(devUrl).catch(() => {

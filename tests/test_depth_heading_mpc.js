@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { DepthHeadingMPC } from '../src/services/DepthHeadingMPC.js';
+import { DepthHeadingMPC } from '../frontend/src/services/DepthHeadingMPC.js';
 
 const mpc = new DepthHeadingMPC();
 const floorApproach = mpc.solve({ depth: 1.55, depthRate: 0.45, heading: 0, yawRate: 0, targetDepth: 0.85, targetHeading: 0 });

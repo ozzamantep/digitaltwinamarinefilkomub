@@ -1,4 +1,4 @@
-import { ThrusterTwinEngine } from '../src/dt-core/ThrusterTwinEngine.js';
+import { ThrusterTwinEngine } from '../frontend/src/dt-core/ThrusterTwinEngine.js';
 
 console.log('Testing ThrusterTwinEngine...');
 

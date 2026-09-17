@@ -1,0 +1,14 @@
+{
+  "stop_distance": 0.55,
+  "slow_distance": 1.2,
+  "floor_stop_distance": 0.37,
+  "floor_slow_distance": 0.7,
+  "stale_timeout": 0.5,
+  "backoff_speed": 0.2,
+  "emergency_surface_speed": 0.35,
+  "battery_voltage_critical": 13.0,
+  "battery_fraction_critical": 0.08,
+  "impact_accel_threshold": 18.0,
+  "impact_gyro_threshold": 2.5,
+  "impact_hold_seconds": 1.0
+}

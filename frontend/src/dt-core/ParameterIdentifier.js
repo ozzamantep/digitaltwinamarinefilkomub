@@ -48,8 +48,11 @@ export class ParameterIdentifier {
     const { names, values: initialValues, bounds } = vehicleConfig.getIdentifiableParameters();
     const D = names.length;
 
+    // Diverging candidate sims can yield NaN RMSE; treat as worst-possible fitness
+    const safeFitness = (value) => (Number.isFinite(value) ? value : Number.POSITIVE_INFINITY);
+
     // Evaluate baseline fitness with current configuration
-    const initialFitness = this.evaluateFitness(initialValues, names, dataset);
+    const initialFitness = safeFitness(this.evaluateFitness(initialValues, names, dataset));
 
     // 1. Initialize DE Population within physical bounds
     let population = [];
@@ -67,10 +70,13 @@ export class ParameterIdentifier {
         ind.push(val);
       }
       population.push(ind);
-      fitness.push(this.evaluateFitness(ind, names, dataset));
+      fitness.push(safeFitness(this.evaluateFitness(ind, names, dataset)));
     }
 
-    let bestIdx = fitness.indexOf(Math.min(...fitness));
+    let bestIdx = 0;
+    for (let i = 1; i < fitness.length; i++) {
+      if (fitness[i] < fitness[bestIdx]) bestIdx = i;
+    }
     this.bestFitness = fitness[bestIdx];
     this.bestParameters = [...population[bestIdx]];
 
@@ -100,7 +106,7 @@ export class ParameterIdentifier {
         }
 
         // Selection
-        const trialFitness = this.evaluateFitness(trial, names, dataset);
+        const trialFitness = safeFitness(this.evaluateFitness(trial, names, dataset));
         if (trialFitness < fitness[i]) {
           population[i] = trial;
           fitness[i] = trialFitness;

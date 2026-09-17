@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { AdvancedAutonomyEngine } from '../src/services/AdvancedAutonomyEngine.js';
+import { AdvancedAutonomyEngine } from '../frontend/src/services/AdvancedAutonomyEngine.js';
 
 const engine = new AdvancedAutonomyEngine();
 const descending = engine.evaluate({ floorAltitude: 0.60, depthRate: 0.50 });

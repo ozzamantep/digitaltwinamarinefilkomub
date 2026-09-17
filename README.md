@@ -212,7 +212,8 @@ cd simulator
 
 ```
 digitaltwin/
-├── src/
+├── frontend/                       ← React/Vite UI (index.html, vite.config.js, tsconfig.json)
+│   ├── src/
 │   ├── dt-core/                    ← Physics engine core (18 modules)
 │   │   ├── VehicleConfig.js        ← All 50+ vehicle parameters
 │   │   ├── HydrodynamicsEngine.js  ← 6-DOF Fossen dynamics + RK4
@@ -230,11 +231,11 @@ digitaltwin/
 │       ├── 3d/                     ← Three.js 3D viewport
 │       ├── dashboard/              ← Telemetry panels
 │       └── thruster-test/          ← HIL T200 test page
-├── electron/                       ← Electron desktop wrapper
-├── jetson/                         ← Jetson Nano ROS2 configs
+│   └── public/                     ← Static assets & 3D models
+├── desktop/                        ← Electron desktop wrapper
+├── backend/                        ← Jetson/ROS2 vehicle code (sauvc26_code)
 ├── simulator/                      ← Gazebo simulation
-├── tests/                          ← Unit & integration tests
-└── public/                         ← Static assets & 3D models
+└── tests/                          ← Unit & integration tests
 ```
 
 ---

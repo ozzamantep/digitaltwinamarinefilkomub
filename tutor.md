@@ -34,7 +34,7 @@ Run this once on the Jetson:
 ```bash
 source /opt/ros/$ROS_DISTRO/setup.bash
 cd ~/digitaltwin
-bash jetson/setup_rosbridge.sh
+bash backend/setup_rosbridge.sh
 ```
 
 The script installs `rosbridge_server` and compressed image transport.

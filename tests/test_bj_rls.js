@@ -1,4 +1,4 @@
-import { SystemIdentificationEngine } from '../src/services/SystemIdentificationEngine.js';
+import { SystemIdentificationEngine } from '../frontend/src/services/SystemIdentificationEngine.js';
 
 const engine = new SystemIdentificationEngine();
 const armaxBefore = JSON.stringify(engine.models.ARMAX);

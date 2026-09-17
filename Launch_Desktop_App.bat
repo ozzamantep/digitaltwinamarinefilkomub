@@ -21,7 +21,7 @@ if %errorlevel% equ 0 (
 
 :: 2. Ensure frontend bundle is built and ready
 echo [2/3] Preparing Digital Twin Core Engine...
-if not exist "dist\index.html" (
+if not exist "frontend\dist\index.html" (
     echo [INFO] Building production bundle for first run...
     call npm run build
 )

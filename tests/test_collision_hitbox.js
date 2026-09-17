@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import useVehicleStore from '../src/store/vehicleStore.js';
-import collisionEngine from '../src/services/SubseaCollisionEngine.js';
+import useVehicleStore from '../frontend/src/store/vehicleStore.js';
+import collisionEngine from '../frontend/src/services/SubseaCollisionEngine.js';
 
 const store = useVehicleStore.getState();
 const blueFlare = { ...store.obstacles.blue_flare, x: 0, z: 0, y: 0.75, width: 0.35, height: 1.5 };

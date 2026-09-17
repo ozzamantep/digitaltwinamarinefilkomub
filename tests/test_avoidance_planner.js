@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { planFlareAvoidance } from '../src/services/AvoidancePlanner.js';
+import { planFlareAvoidance } from '../frontend/src/services/AvoidancePlanner.js';
 
 const flare = { x: 0, z: 0 };
 const fromLeft = { x: -4, z: 0 };

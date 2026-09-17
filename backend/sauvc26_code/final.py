@@ -11,6 +11,7 @@ from geometry_msgs.msg import PoseStamped, Point
 from sensor_msgs.msg import BatteryState, Imu, Range
 from std_msgs.msg import Bool, String
 from mavros_msgs.msg import PositionTarget
+from mavros_msgs.srv import CommandLong
 from sauvc26_code.collision_safety import CollisionSafety
 from sauvc26_code.pid import PID
 
@@ -27,6 +28,11 @@ FORWARD_DURATION_SCAN = 3.5  # s     - Swift scan duration
 FORWARD_DURATION_GATE = 4.0  # s     - Smooth gate transit
 FORWARD_DURATION_DRUM = 1.5  # s     - Stable drum approach
 FORWARD_DURATION_FLARE = 1.8 # s     - Reliable flare ramming
+
+# Ball dropper servo (MAV_CMD_DO_SET_SERVO via /mavros/cmd/command)
+MAV_CMD_DO_SET_SERVO = 183
+DROPPER_SERVO_CHANNEL = 9     # AUX output channel - calibrate to actual wiring
+DROPPER_SERVO_PWM_RELEASE = 1900  # PWM for open/release position - calibrate on bench
 
 # Tuned High-Stability PID Gains
 KP_DEPTH = 0.75
@@ -122,6 +128,11 @@ class GuidedMove(Node):
             Bool, '/leak_detected', self.leak_safety_callback, qos_profile
         )
         self.last_safety_reason = None
+
+        # Servo dropper client (retry until MAVROS command service is up)
+        self.servo_client = self.create_client(CommandLong, '/mavros/cmd/command')
+        self.ball_drop_pending = False
+        self.ball_dropped = False
         
         # PositionTarget
         self.cmd = PositionTarget()
@@ -281,16 +292,18 @@ class GuidedMove(Node):
                     self.last_drum_time = current_time
                     self.get_logger().debug(f'[DRUM] Detected: x={point.x:.3f}, z={point.z:.3f}')
                 elif class_lower in ['orange flare', 'red flare', 'yellow flare', 'blue flare', 'flare']:
-                    # Check if this matches our current target flare
-                    target_flare_name = self.flare_order.get(list(self.flare_order.keys())[self.flare_state], "").lower()
-                    if class_lower == target_flare_name or class_lower == 'flare':
-                        self.flare_coord = point
-                        self.last_flare_time = current_time
-                        self.get_logger().debug(f'[FLARE] Detected target {class_name}: x={point.x:.3f}')
+                    # Check if this matches our current target flare (bounds-checked: all flares may be done)
+                    flare_keys = list(self.flare_order.keys())
+                    if self.flare_state < len(flare_keys):
+                        target_flare_name = self.flare_order.get(flare_keys[self.flare_state], "").lower()
+                        if class_lower == target_flare_name or class_lower == 'flare':
+                            self.flare_coord = point
+                            self.last_flare_time = current_time
+                            self.get_logger().debug(f'[FLARE] Detected target {class_name}: x={point.x:.3f}')
                     
         except json.JSONDecodeError as e:
             self.get_logger().warn(f'Failed to parse YOLO JSON: {e}')
-        except (KeyError, TypeError) as e:
+        except (KeyError, TypeError, IndexError) as e:
             self.get_logger().warn(f'Error processing YOLO detections: {e}')
 
     def obstacle_order_callback(self, msg):
@@ -342,36 +355,49 @@ class GuidedMove(Node):
         self.cmd.yaw = 0.0
 
     def drop_ball_payload(self):
-        """Trigger servo dropper to release golf ball into red drum (instant non-blocking trigger)"""
-        self.get_logger().info('🎯 [PAYLOAD] Actuating servo dropper: Ball released into target drum!')
+        """Trigger servo dropper to release golf ball into red drum (non-blocking, retried in send_cmd)"""
+        if self.ball_dropped or self.ball_drop_pending:
+            return
+        self.ball_drop_pending = True
+        self._try_release_ball()
+
+    def _try_release_ball(self):
+        if not self.ball_drop_pending:
+            return
+        if not self.servo_client.service_is_ready():
+            self.get_logger().warn('[PAYLOAD] /mavros/cmd/command not ready, retrying...', throttle_duration_sec=1.0)
+            return
+        request = CommandLong.Request()
+        request.broadcast = False
+        request.command = MAV_CMD_DO_SET_SERVO
+        request.confirmation = 0
+        request.param1 = float(DROPPER_SERVO_CHANNEL)
+        request.param2 = float(DROPPER_SERVO_PWM_RELEASE)
+        self.servo_client.call_async(request)
+        self.ball_drop_pending = False
+        self.ball_dropped = True
+        self.get_logger().info('🎯 [PAYLOAD] Servo dropper actuated: Ball released into target drum!')
 
     def rotate(self, yaw_rate):
         """Set velocity command for rotate (yaw_rate in rad/s)"""
         self.cmd.yaw_rate = yaw_rate
         
     def forward(self, speed):
-        """Set velocity command for forward"""
-        if self.current_pose is None:
-            self.cmd.velocity.x = speed
-            self.cmd.velocity.y = 0.0
-            self.cmd.velocity.z = 0.0
-            return
-        
-        yaw = self.get_yaw()
-
-        self.cmd.velocity.x = speed * math.cos(yaw)
-        self.cmd.velocity.y = speed * math.sin(yaw)
-        self.cmd.velocity.z = 0.0
+        """Set velocity command for forward.
+        FRAME_BODY_NED = body frame: +x is always vehicle-forward, no yaw
+        rotation needed. Leaves velocity.z untouched so maintain_depth() holds.
+        """
+        self.cmd.velocity.x = speed
+        self.cmd.velocity.y = 0.0
     
     def sway(self, speed, forward_speed=0.0):
         """Set velocity command for sway (moving sideways) with optional forward motion
-        speed > 0: sway to right (east)
-        speed < 0: sway to left (west)
+        speed > 0: sway to right
+        speed < 0: sway to left
         forward_speed: optional forward velocity during sway
         """
-        self.cmd.velocity.x = 0.0
+        self.cmd.velocity.x = forward_speed
         self.cmd.velocity.y = speed
-        self.cmd.velocity.z = 0.0
 
     def change_state(self, new_state):
         """Change state"""
@@ -542,6 +568,7 @@ class GuidedMove(Node):
 
     def send_cmd(self):
         current_time = self.get_clock().now()
+        self._try_release_ball()  # Retry pending ball drop until service accepts it
         
         # State machine logic
         match self.state:
@@ -860,7 +887,7 @@ class GuidedMove(Node):
                 else:
                     self.track_drum()
                     self.forward(FORWARD_SPEED_DRUM)
-                    self.cmd.velocity.z = 0.12  # Downward pitch
+                    self.cmd.velocity.z = -0.12  # Descend toward drum (z-up convention)
                     if self.drum_coord is not None and self.drum_coord.z > 0.10:
                         self.close_to_drum = True
                         self.reset()

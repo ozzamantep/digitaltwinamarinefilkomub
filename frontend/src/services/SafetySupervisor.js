@@ -1,3 +1,8 @@
+// Single source of truth shared with the vehicle backend code (collision_safety.py)
+import SAFETY_PARAMS from '../../../backend/sauvc26_code/safety_params.json' with { type: 'json' };
+
+export { SAFETY_PARAMS };
+
 export const SAFETY_STATE = Object.freeze({
   NORMAL: 'NORMAL',
   CAUTION: 'CAUTION',
@@ -25,16 +30,17 @@ export class SafetySupervisor {
   }
 
   evaluate({ sonarRanges = {}, floorAltitude, leakDetected, battery = {}, imuDetection = {}, oodStatus = {} }) {
-    this.updateLatch('front', sonarRanges.front, 0.55, 1.2);
-    this.updateLatch('rear', sonarRanges.rear, 0.55, 1.2);
-    this.updateLatch('left', sonarRanges.left, 0.55, 1.2);
-    this.updateLatch('right', sonarRanges.right, 0.55, 1.2);
-    this.updateLatch('floor', floorAltitude, 0.37, 0.7);
+    const P = SAFETY_PARAMS;
+    this.updateLatch('front', sonarRanges.front, P.stop_distance, P.slow_distance);
+    this.updateLatch('rear', sonarRanges.rear, P.stop_distance, P.slow_distance);
+    this.updateLatch('left', sonarRanges.left, P.stop_distance, P.slow_distance);
+    this.updateLatch('right', sonarRanges.right, P.stop_distance, P.slow_distance);
+    this.updateLatch('floor', floorAltitude, P.floor_stop_distance, P.floor_slow_distance);
 
     const emergencyReasons = [];
     if (leakDetected) emergencyReasons.push('HULL_LEAK');
     if (imuDetection.impactDetected) emergencyReasons.push('IMU_IMPACT');
-    if ((battery.level ?? 100) <= 8 || (battery.voltage ?? 16) <= 13.0) emergencyReasons.push('BATTERY_CRITICAL');
+    if ((battery.level ?? 100) <= P.battery_fraction_critical * 100 || (battery.voltage ?? 16) <= P.battery_voltage_critical) emergencyReasons.push('BATTERY_CRITICAL');
 
     let state = SAFETY_STATE.NORMAL;
     const reasons = [];
@@ -47,7 +53,7 @@ export class SafetySupervisor {
       if (oodStatus.isOOD) reasons.push('OOD_LOCK');
     } else {
       const nearestWall = Math.min(...Object.values(sonarRanges).filter(Number.isFinite));
-      if (nearestWall < 1.2 || floorAltitude < 0.7 || (battery.level ?? 100) < 20) {
+      if (nearestWall < SAFETY_PARAMS.slow_distance || floorAltitude < SAFETY_PARAMS.floor_slow_distance || (battery.level ?? 100) < 20) {
         state = SAFETY_STATE.CAUTION;
         reasons.push('REDUCED_SPEED');
       }
@@ -57,20 +63,22 @@ export class SafetySupervisor {
   }
 
   applyCommand(command, status) {
+    const P = SAFETY_PARAMS;
     if (status.state === SAFETY_STATE.EMERGENCY_SURFACE) {
-      return { surge: 0, sway: 0, yaw: 0, heave: -0.65 };
+      // Twin heave convention: negative = up (jetson z-up uses positive = up)
+      return { surge: 0, sway: 0, yaw: 0, heave: -P.emergency_surface_speed };
     }
 
     const safe = { ...command };
     if (status.blocked.front && status.blocked.rear) safe.surge = 0;
-    else if (status.blocked.front) safe.surge = Math.min(safe.surge, -0.30);
-    else if (status.blocked.rear) safe.surge = Math.max(safe.surge, 0.30);
+    else if (status.blocked.front) safe.surge = Math.min(safe.surge, -P.backoff_speed);
+    else if (status.blocked.rear) safe.surge = Math.max(safe.surge, P.backoff_speed);
 
     if (status.blocked.left && status.blocked.right) safe.sway = 0;
-    else if (status.blocked.left) safe.sway = Math.max(safe.sway, 0.30);
-    else if (status.blocked.right) safe.sway = Math.min(safe.sway, -0.30);
+    else if (status.blocked.left) safe.sway = Math.max(safe.sway, P.backoff_speed);
+    else if (status.blocked.right) safe.sway = Math.min(safe.sway, -P.backoff_speed);
 
-    if (status.blocked.floor) safe.heave = Math.min(safe.heave, -0.25);
+    if (status.blocked.floor) safe.heave = Math.min(safe.heave, -P.backoff_speed);
 
     if (status.state === SAFETY_STATE.CAUTION) {
       safe.surge *= 0.5;

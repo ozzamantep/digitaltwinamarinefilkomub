@@ -3,17 +3,17 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "desktop/main.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "vite frontend",
+    "build": "tsc -p frontend && vite build frontend",
     "test:bj-rls": "node tests/test_bj_rls.js",
     "test:collision-safety": "python tests/test_collision_safety.py",
     "test:collision-hitbox": "node tests/test_collision_hitbox.js",
     "test:safety-supervisor": "node tests/test_safety_supervisor.js",
-    "preview": "vite preview",
+    "preview": "vite preview frontend",
     "desktop": "electron .",
-    "start": "vite --port 5173"
+    "start": "vite frontend --port 5173"
   },
   "devDependencies": {
     "electron": "^44.0.0",

@@ -1184,7 +1184,10 @@ Akses di `http://localhost:5173` untuk mode pengembangan dengan hot-reload.
 
 ```
 digitaltwin/
-├── src/
+├── frontend/                             ← React/Vite UI application
+│   ├── index.html / vite.config.js / tsconfig.json
+│   ├── public/                           ← Static assets & 3D models
+│   └── src/
 │   ├── dt-core/                          ← INTI MESIN FISIKA DIGITAL TWIN
 │   │   ├── VehicleConfig.js              ← Single Source of Truth parameter wahana
 │   │   ├── HydrodynamicsEngine.js        ← 6-DOF Fossen dynamics (M, C, D, g, RK4)
@@ -1229,19 +1232,17 @@ digitaltwin/
 │   ├── App.jsx                           ← Root React component
 │   └── main.jsx                          ← Application entry point
 │
-├── electron/                             ← Electron desktop wrapper
+├── desktop/                              ← Electron desktop wrapper
 │   └── main.cjs                          ← Electron main process
 │
-├── jetson/                               ← Jetson Nano ROS2 launch files
+├── backend/                              ← Jetson/ROS2 vehicle code & launch files
 │   └── sauvc26_code/collision_safety.py  ← Hardware safety latch & emergency surface
 ├── simulator/                            ← Gazebo simulation configs
 ├── tests/                                ← Unit & integration tests
-├── public/                               ← Static assets & 3D models
 │
 ├── Launch_Desktop_App.bat                ← Windows desktop launcher
 ├── Launch_Gazebo_WSL.bat                 ← WSL2 Gazebo launcher
 ├── package.json                          ← NPM dependencies
-├── vite.config.js                        ← Vite build configuration
 └── README.md                             ← Project overview
 ```
 

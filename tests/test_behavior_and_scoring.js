@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { BT_STATUS, createSafetyRecoveryTree } from '../src/services/BehaviorTree.js';
-import { CompetitionScoringEngine } from '../src/dt-core/CompetitionScoringEngine.js';
+import { BT_STATUS, createSafetyRecoveryTree } from '../frontend/src/services/BehaviorTree.js';
+import { CompetitionScoringEngine } from '../frontend/src/dt-core/CompetitionScoringEngine.js';
 
 const tree = createSafetyRecoveryTree();
 const command = { surge: 0.8, sway: 0, yaw: 0, heave: 1 };

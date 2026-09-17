@@ -9,15 +9,15 @@
  * 5. Parameter Identifier & Differential Evolution
  */
 
-import Kinematics from '../src/dt-core/Kinematics.js';
-import vehicleConfig from '../src/dt-core/VehicleConfig.js';
-import { HydrodynamicsEngine } from '../src/dt-core/HydrodynamicsEngine.js';
-import { StateEstimator } from '../src/dt-core/StateEstimator.js';
-import { PredictionAPI } from '../src/dt-core/PredictionAPI.js';
-import { ParameterIdentifier } from '../src/dt-core/ParameterIdentifier.js';
-import { UncertaintyEstimator } from '../src/dt-core/UncertaintyEstimator.js';
-import { OODDetector } from '../src/dt-core/OODDetector.js';
-import { ValidationEngine } from '../src/dt-core/ValidationEngine.js';
+import Kinematics from '../frontend/src/dt-core/Kinematics.js';
+import vehicleConfig from '../frontend/src/dt-core/VehicleConfig.js';
+import { HydrodynamicsEngine } from '../frontend/src/dt-core/HydrodynamicsEngine.js';
+import { StateEstimator } from '../frontend/src/dt-core/StateEstimator.js';
+import { PredictionAPI } from '../frontend/src/dt-core/PredictionAPI.js';
+import { ParameterIdentifier } from '../frontend/src/dt-core/ParameterIdentifier.js';
+import { UncertaintyEstimator } from '../frontend/src/dt-core/UncertaintyEstimator.js';
+import { OODDetector } from '../frontend/src/dt-core/OODDetector.js';
+import { ValidationEngine } from '../frontend/src/dt-core/ValidationEngine.js';
 
 let passed = 0;
 let failed = 0;

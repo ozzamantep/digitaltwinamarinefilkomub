@@ -30,6 +30,7 @@ ROTATE_SPEED = 1.05          # rad/s - Stable, controlled yaw rotation
 FORWARD_SPEED_RACE = 0.90    # m/s   - Smooth cruise through gate
 FORWARD_SPEED_SCAN = 0.75    # m/s   - Stable scan velocity
 FORWARD_DURATION_GATE = 4.2  # s     - Optimized sprint duration across gate
+SPRINT_TIMEOUT = 25.0        # s     - Fail-safe: surface if gate never found on a leg
 
 # Tuned High-Stability PID Gains
 KP_DEPTH = 0.75
@@ -139,6 +140,7 @@ class GuidedMove(Node):
         self.close_to_gate = False
         self.deadzone_gate = False
         self.forward_to_gate = False
+        self.return_leg = False  # True after U-turn: gate must be re-crossed before surfacing
         
         self.change_state(1)
         self.get_logger().info('🚀 RACING QUALIFICATION NODE INITIALIZED (Calibrated Smooth Mode)')
@@ -211,12 +213,9 @@ class GuidedMove(Node):
         self.cmd.yaw_rate = yaw_rate
         
     def forward(self, speed, sway=0.0):
-        if self.current_pose is None:
-            return
-        yaw = self.get_yaw()
-        # Body to World velocity transformation
-        self.cmd.velocity.x = speed * math.cos(yaw) - sway * math.sin(yaw)
-        self.cmd.velocity.y = speed * math.sin(yaw) + sway * math.cos(yaw)
+        # FRAME_BODY_NED = body frame: +x is vehicle-forward, no yaw rotation needed
+        self.cmd.velocity.x = speed
+        self.cmd.velocity.y = sway
 
     def change_state(self, new_state):
         self.reset()
@@ -293,22 +292,29 @@ class GuidedMove(Node):
                     
             case 2: # Full Throttle Sprint
                 self.maintain_depth()
+                elapsed = (current_time - self.state_start_time).nanoseconds / 1e9
                 
-                if self.gate_coord is not None and not self.forward_to_gate and self.prev_state != 3:
+                # Re-engage gate tracking on BOTH legs (outbound and return after U-turn)
+                if self.gate_coord is not None and not self.forward_to_gate:
                     self.change_state(4)
                     return
                 
-                if (self.prev_state == 4 or self.prev_state == 3) and self.forward_to_gate:
-                    elapsed = (current_time - self.state_start_time).nanoseconds / 1e9
+                if self.forward_to_gate:
+                    # Committed blitz through the gate opening
                     if elapsed < FORWARD_DURATION_GATE:
                         self.forward(FORWARD_SPEED_RACE)
+                    elif self.return_leg:
+                        self.get_logger().info('🏆 Gate re-crossed on return leg! Surfacing at dock.')
+                        self.change_state(5)
                     else:
-                        if self.prev_state == 3:
-                            self.change_state(5)
-                        else:
-                            self.change_state(3)
+                        self.change_state(3)
                 else:
-                    self.forward(FORWARD_SPEED_RACE)
+                    # Hunting for the gate; fail-safe so we never sprint forever
+                    if elapsed > SPRINT_TIMEOUT:
+                        self.get_logger().warn(f'Gate not found within {SPRINT_TIMEOUT:.0f}s - fail-safe surfacing!')
+                        self.change_state(5)
+                    else:
+                        self.forward(FORWARD_SPEED_RACE)
 
             case 3: # Fast 180° Hairpin U-Turn with Counter-Braking
                 self.maintain_depth()
@@ -323,7 +329,9 @@ class GuidedMove(Node):
                 error = self.normalize_angle(self.target_yaw - current_yaw)
                 
                 if abs(error) < math.radians(4.0):
-                    # Lock heading and launch immediately!
+                    # U-turn done: re-arm gate tracking for the full return leg
+                    self.return_leg = True
+                    self.forward_to_gate = False
                     self.change_state(2)
                 else:
                     # Dynamic brake & snap rotation

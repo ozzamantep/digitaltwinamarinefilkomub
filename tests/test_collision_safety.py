@@ -3,7 +3,7 @@ import sys
 from types import SimpleNamespace
 
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'jetson'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from sauvc26_code.collision_safety import CollisionSafety
 
@@ -53,6 +53,18 @@ stale = command(x=1.0)
 assert safety.apply(stale, now=4.0) == 'front_sonar'
 assert stale.velocity.x == 0.0
 
+# Stale sensor must STOP, never latch a sustained reverse back-off
+still_stale = command(x=1.0)
+assert safety.apply(still_stale, now=4.5) == 'front_sonar'
+assert still_stale.velocity.x == 0.0
+
+# Out-of-range / no-echo reading counts as fresh clear path
+clear_after_stale = CollisionSafety()
+clear_after_stale.update_range('front', 10.0, max_range=5.0, now=4.0)
+no_echo = command(x=1.0)
+assert clear_after_stale.apply(no_echo, now=4.1) is None
+assert no_echo.velocity.x == 1.0
+
 safety.update_imu(20.0, 0.0, 0.0, 0.0, 0.0, 0.0, now=5.0)
 impact = command(x=1.0, y=1.0, z=1.0, yaw_rate=1.0)
 assert safety.apply(impact, now=5.1) == 'imu_emergency_stop'
@@ -61,26 +73,27 @@ assert impact.velocity.y == 0.0
 assert impact.velocity.z == 0.0
 assert impact.yaw_rate == 0.0
 
+# z-up convention: descending = negative z, floor guard forces ascend
 floor_guard = CollisionSafety()
 floor_guard.update_range('floor', 0.30, now=5.0)
-forced_dive = command(z=0.8)
+forced_dive = command(z=-0.8)
 assert floor_guard.apply(forced_dive, now=5.1) == 'floor_dvl'
-assert forced_dive.velocity.z == -0.20
+assert forced_dive.velocity.z == 0.20
 
 floor_guard.update_range('floor', 0.525, now=6.0)
-latched_dive = command(z=0.8)
+latched_dive = command(z=-0.8)
 assert floor_guard.apply(latched_dive, now=6.1) == 'floor_dvl'
-assert latched_dive.velocity.z == -0.20
+assert latched_dive.velocity.z == 0.20
 
 floor_guard.update_range('floor', 0.75, now=6.2)
 floor_guard.update_range('floor', 0.525, now=6.3)
-slowed_dive = command(z=0.8)
+slowed_dive = command(z=-0.8)
 assert floor_guard.apply(slowed_dive, now=6.4) == 'floor_dvl'
-assert 0.0 < slowed_dive.velocity.z < 0.8
+assert -0.8 < slowed_dive.velocity.z < 0.0
 
-surface_command = command(z=-0.8)
+surface_command = command(z=0.8)
 assert floor_guard.apply(surface_command, now=7.0) is None
-assert surface_command.velocity.z == -0.8
+assert surface_command.velocity.z == 0.8
 
 metadata_default = CollisionSafety()
 metadata_default.update_range('front', 1.5, max_range=0.0, now=6.0)
@@ -92,7 +105,7 @@ emergency_command = command(x=1.0, y=1.0, z=1.0, yaw_rate=1.0)
 assert emergency.apply(emergency_command, now=8.0) == 'emergency_surface:hull_leak'
 assert emergency_command.velocity.x == 0.0
 assert emergency_command.velocity.y == 0.0
-assert emergency_command.velocity.z == -0.35
+assert emergency_command.velocity.z == 0.35  # z-up: positive = surface
 assert emergency_command.yaw_rate == 0.0
 
 battery_emergency = CollisionSafety()
