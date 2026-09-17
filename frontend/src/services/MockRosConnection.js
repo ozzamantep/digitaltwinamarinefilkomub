@@ -727,8 +727,46 @@ class MockRosConnection {
       const cmdHeave = Math.max(-0.65, Math.min(0.65, depthErr * 2.2 - depthRate * 1.5));
 
       // 5. Smooth Pure Pursuit Guidance
-      const toWpX = currentWp.x - this.simX;
-      const toWpZ = currentWp.z - this.simZ;
+      // En-route avoidance: detour around any OTHER standing flare that blocks
+      // the straight leg to the current waypoint (e.g. a flare between the
+      // start position and target #1 used to get rammed).
+      const currentFlareKey = (currentWp.id || '').replace(/_(approach|clearance|pass)$/, '');
+      const AVOID_RADIUS = 1.10;
+      let guideX = currentWp.x;
+      let guideZ = currentWp.z;
+      let detourActive = false;
+      {
+        const legX = currentWp.x - this.simX;
+        const legZ = currentWp.z - this.simZ;
+        const legLen = Math.hypot(legX, legZ);
+        if (legLen > 0.05) {
+          const ux = legX / legLen;
+          const uz = legZ / legLen;
+          let nearestProj = Infinity;
+          for (const [key, cfg] of Object.entries(flareConfig)) {
+            if (key === currentFlareKey) continue; // never detour around own target
+            if (obstacleEnabled[key] === false) continue;
+            if (flaresFallen[cfg.color]) continue;
+            const fx = cfg.flX - this.simX;
+            const fz = cfg.flZ - this.simZ;
+            const proj = fx * ux + fz * uz; // along-track position of flare
+            if (proj < -0.2 || proj > legLen + 0.2) continue; // behind us / beyond waypoint
+            const cross = ux * fz - uz * fx; // signed cross-track offset (left normal)
+            if (Math.abs(cross) > AVOID_RADIUS) continue; // path already clears it
+            if (Math.hypot(fx, fz) > 3.5) continue; // react only when reasonably close
+            if (proj >= nearestProj) continue; // steer around the nearest obstruction
+            nearestProj = proj;
+            // Pass on the side the current path is already biased toward
+            const side = cross >= 0 ? -1 : 1;
+            guideX = cfg.flX + -uz * side * (AVOID_RADIUS + 0.40);
+            guideZ = cfg.flZ + ux * side * (AVOID_RADIUS + 0.40);
+            detourActive = true;
+          }
+        }
+      }
+
+      const toWpX = guideX - this.simX;
+      const toWpZ = guideZ - this.simZ;
       const targetHeading = Math.atan2(toWpZ, toWpX);
 
       let headingErr = targetHeading - this.simHeading;
@@ -751,7 +789,9 @@ class MockRosConnection {
         : headingMagnitude > 0.30
           ? Math.min(0.35, alignment)
           : Math.max(minDrive, alignment);
-      let cmdSurge = currentWp.speed * forwardDrive;
+      // Slow down while detouring so momentum can't carry the hull into the flare
+      const legSpeed = detourActive ? Math.min(currentWp.speed, 0.85) : currentWp.speed;
+      let cmdSurge = legSpeed * forwardDrive;
 
       let finalTarget = `[FINAL] ${currentWp.name}`;
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
