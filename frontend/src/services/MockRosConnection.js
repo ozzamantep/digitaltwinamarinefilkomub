@@ -43,6 +43,7 @@ class MockRosConnection {
     // Final Mission State Machine
     this.missionStage = 0;
     this.missionTime = 0;
+    this.missionComplete = false;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
@@ -69,6 +70,7 @@ class MockRosConnection {
     this.resetQualification();
     this.missionStage = 0;
     this.missionTime = 0;
+    this.missionComplete = false;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
     this.orangeInspectStartTime = 0;
@@ -189,6 +191,7 @@ class MockRosConnection {
     // Preserve the live pose so the final mission can be started from any location.
     this.missionStage = 0;
     this.missionTime = 0;
+    this.missionComplete = false;
     this.lastFinalDepth = this.simDepth;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
@@ -646,14 +649,14 @@ class MockRosConnection {
         }
       });
 
-      // Final milestone: Surface
+      // Final milestone: sprint back to the pool edge and surface
       rawWaypoints.push({
         id: 'surface_dock',
-        title: `[#${stepNum}] 🏆 Surface at Dock`,
-        x: -11.0,
+        title: `[#${stepNum}] 🏆 Return to Pool Edge & Surface`,
+        x: -11.3,
         z: 2.0,
         targetDepth: 0.15,
-        speed: 0.90,
+        speed: 1.40,
         threshold: 0.90,
       });
 
@@ -664,6 +667,13 @@ class MockRosConnection {
 
       const currentWp = waypoints[this.missionStage] || waypoints[waypoints.length - 1];
       const distToWp = Math.sqrt((currentWp.x - this.simX) ** 2 + (currentWp.z - this.simZ) ** 2);
+
+      // Mission complete: docked at pool edge + surfaced → all thrusters OFF permanently
+      if (!this.missionComplete && currentWp.id === 'surface_dock' && distToWp < currentWp.threshold && this.simDepth < 0.40) {
+        this.missionComplete = true;
+        auvMotionController.reset();
+        console.log('[MockROS] ✅ MISSION COMPLETE — docked at pool edge, all thrusters OFF');
+      }
 
       // Flare knockdown is handled only by oriented 3D contact in SubseaCollisionEngine.
 
@@ -797,20 +807,28 @@ class MockRosConnection {
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
         finalTarget = `[FINAL] ${waypoints.length}/${waypoints.length}: 🎯 BALL DROPPED INTO RED DRUM!`;
       }
+      if (this.missionComplete) {
+        finalTarget = '[FINAL] ✅ MISSION COMPLETE — Docked at pool edge, thrusters OFF';
+      }
 
       if (store.activeTarget !== finalTarget) {
         useVehicleStore.setState({ activeTarget: finalTarget });
       }
 
-      ctrl = auvMotionController.update(
-        currentPose,
-        applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave, turnBoost: isSharpTurn }),
-        'MANUAL',
-        true,
-        dt,
-        store.battery.voltage || 16.0,
-        t
-      );
+      if (this.missionComplete) {
+        // Passive float at the dock: zero commands, no station-keeping
+        ctrl = { surge: 0, sway: 0, yaw: 0, heave: 0, pitch: 0, roll: 0, thrusters: [0, 0, 0, 0, 0, 0] };
+      } else {
+        ctrl = auvMotionController.update(
+          currentPose,
+          applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave, turnBoost: isSharpTurn }),
+          'MANUAL',
+          true,
+          dt,
+          store.battery.voltage || 16.0,
+          t
+        );
+      }
     } else {
       ctrl = auvMotionController.update(currentPose, applySafety(input), flightMode, true, dt, store.battery.voltage || 16.0, t);
     }
