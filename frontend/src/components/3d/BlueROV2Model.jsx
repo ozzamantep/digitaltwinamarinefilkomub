@@ -230,23 +230,33 @@ export default function BlueROV2Model({ onFrame }) {
       groupRef.current.quaternion.slerp(targetQuaternionRef.current, positionAlpha);
     }
 
-    // Dynamic propeller spin uses signed motor RPM. Visual speed is capped below
-    // the three-blade stroboscopic range so reverse rotation remains visible.
+    // Dynamic propeller spin driven by actual per-thruster RPM. A pure spot-turn
+    // commands each side at only ~modest effort (differential torque only, no
+    // forward thrust), so a fast hull rotation used to look mismatched against
+    // a slow-looking prop. Fix: derive visual spin from whichever is FASTER —
+    // the raw motor RPM (ramped, physically real) or the instantaneous commanded
+    // effort (unlagged) — then add an angular-rate boost so the props visibly
+    // spin up during hard turns, matching how fast the hull is actually rotating.
     propRefs.forEach((ref, idx) => {
       if (ref.current) {
         if (armed) {
           const effort = thrusters[idx] || 0;
           const motorRPM = thrusterRPMs[idx] || 0;
           if (Math.abs(effort) > 2 || Math.abs(motorRPM) > 40) {
-            // Signed motor RPM preserves physical rotation direction in reverse.
             const horizontalSpeed = Math.hypot(speed.surge || 0, speed.sway || 0);
+            const angularSpeed = Math.abs(speed.angular || 0);
+            // Horizontal (vectored) thrusters visibly spin up with hull turn rate;
+            // vertical thrusters only care about heave/pitch motion, not yaw.
             const motionVisualBoost = idx < 4
-              ? 1 + Math.min(1.40, horizontalSpeed * 0.70) + Math.min(0.80, Math.abs(speed.angular || 0) * 0.85)
+              ? 1 + Math.min(1.40, horizontalSpeed * 0.70) + Math.min(1.80, angularSpeed * 1.30)
               : 1;
-            const baseRPM = Math.abs(motorRPM) > 40
-              ? THREE.MathUtils.clamp((motorRPM * Math.PI * 2 / 60) * 0.10 * motionVisualBoost, -42, 42)
-              : (effort / 100) * 32.0;
-            const finalRPM = baseRPM * delta;
+            const rpmRate = (motorRPM * Math.PI * 2 / 60) * 0.10;
+            const effortRate = (effort / 100) * 32.0;
+            // Use whichever signal shows the stronger commanded intent so a hard
+            // spot-turn (high effort, RPM still ramping) never looks slower than
+            // straight-line cruising at the same effort level.
+            const baseRPM = Math.abs(rpmRate) >= Math.abs(effortRate) ? rpmRate : effortRate;
+            const finalRPM = THREE.MathUtils.clamp(baseRPM * motionVisualBoost, -60, 60) * delta;
 
             if (idx >= 4) {
               // 4 & 5: Vertical thrusters in yellow cowls rotate around vertical Y-axis
