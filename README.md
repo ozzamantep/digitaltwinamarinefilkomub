@@ -127,7 +127,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | **Box-Jenkins System Identification** | Online pseudo-linear RLS (λ=0.985) adapting 6 plant/noise parameters | `src/services/SystemIdentificationEngine.js` |
 | **Competition Safety Supervisor** | Directional latches, active wall/floor repulsion, emergency surface, sensor fail-safe | `src/services/SafetySupervisor.js` |
 | **PID Flight Controller** | Depth hold, heading lock, attitude stabilization with anti-windup | `src/services/AUVMotionController.js` |
-| **Thruster Dynamics** | T200 lookup table, motor lag (τ=0.35s), voltage sag, PWM deadband | `src/services/ThrusterDynamicsModel.js` |
+| **Thruster Dynamics** | T200 lookup table, motor lag (τ=0.35s), voltage sag, PWM deadband, safety clamp 1300–1600 µs | `src/services/ThrusterDynamicsModel.js` |
 | **PINN Residual** | Physics-Informed Neural Network for unmodeled dynamics compensation | `src/dt-core/PINNResidual.js` |
 | **Environment Model** | UNESCO water density, Gauss-Markov current turbulence, depth pressure | `src/dt-core/EnvironmentModel.js` |
 | **Kinematics** | Quaternion integration, Euler↔quaternion, body↔world transforms | `src/dt-core/Kinematics.js` |

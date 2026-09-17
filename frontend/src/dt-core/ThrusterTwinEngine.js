@@ -2,7 +2,7 @@
  * Blue Robotics T200 Single Thruster Digital Twin Engine
  * 
  * Implements physics-based and empirical benchmark characteristics for T200 thruster:
- * 1. PWM to RPM transfer function (Deadband: 1475-1525 µs)
+ * 1. PWM to RPM transfer function (Deadband calibrated to bench hardware, default 1492-1508 µs)
  * 2. RPM to Thrust transfer function: T = k_t * omega * |omega|
  * 3. Power, Current, and Thermal modeling
  * 4. Online Recursive Least Squares (RLS) System Identification for adaptive k_t estimation
@@ -15,9 +15,14 @@
 export class ThrusterTwinEngine {
   constructor(options = {}) {
     this.voltage = options.voltage || 16.0; // Nominal 4S LiPo = 16.0V
-    this.deadbandMin = 1475;
-    this.deadbandMax = 1525;
+    // Bench-calibrated: real prop starts spinning ~1510 µs (datasheet spec: 1475-1525)
+    this.deadbandMin = options.deadbandMin ?? 1492;
+    this.deadbandMax = options.deadbandMax ?? 1508;
     this.neutralPwm = 1500;
+    this.breakawayRpm = 150; // Static friction: motor jumps to this speed once out of deadband
+    // SAFETY: command limits (propeller pernah pecah di full range 1100-1900)
+    this.minPwm = options.minPwm ?? 1300;
+    this.maxPwm = options.maxPwm ?? 1600;
 
     // Nominal empirical coefficients for T200 @ 16V
     // Max forward thrust ~5.25 kgf (~51.5 N) @ 1900 µs (~3800 RPM)
@@ -43,6 +48,14 @@ export class ThrusterTwinEngine {
   }
 
   /**
+   * Calibrate deadband to match the real ESC (µs where prop actually starts/stops)
+   */
+  setDeadband(min, max) {
+    this.deadbandMin = Math.max(1400, Math.min(1499, min));
+    this.deadbandMax = Math.max(1501, Math.min(1600, max));
+  }
+
+  /**
    * Compute theoretical steady-state RPM from PWM input signal
    * @param {number} pwm - Microseconds (1100 - 1900)
    * @returns {number} Signed RPM (+ = forward, - = reverse)
@@ -55,17 +68,17 @@ export class ThrusterTwinEngine {
     const vFactor = Math.sqrt(this.voltage / 16.0);
 
     if (pwm > this.deadbandMax) {
-      // Forward direction: 1525 -> 1900 µs (delta: 0 -> 375 µs)
-      const delta = pwm - this.deadbandMax;
+      // Forward: normalize span so 1900 µs still hits max RPM regardless of deadband calibration
+      const delta = (pwm - this.deadbandMax) * (375 / (1900 - this.deadbandMax));
       // Polynomial fit to Blue Robotics 16V curve (max ~3800 RPM)
       const rpm = (10.45 * delta - 0.00085 * Math.pow(delta, 2)) * vFactor;
-      return Math.min(3900, Math.max(0, rpm));
+      return Math.min(3900, Math.max(this.breakawayRpm * vFactor, rpm));
     } else {
-      // Reverse direction: 1475 -> 1100 µs (delta: 0 -> 375 µs)
-      const delta = this.deadbandMin - pwm;
+      // Reverse: normalize span so 1100 µs still hits max reverse RPM
+      const delta = (this.deadbandMin - pwm) * (375 / (this.deadbandMin - 1100));
       // Polynomial fit to reverse curve (max ~3300 RPM)
       const rpm = (9.15 * delta - 0.00078 * Math.pow(delta, 2)) * vFactor;
-      return -Math.min(3400, Math.max(0, rpm));
+      return -Math.min(3400, Math.max(this.breakawayRpm * vFactor, rpm));
     }
   }
 
@@ -104,11 +117,14 @@ export class ThrusterTwinEngine {
    * Step the Digital Twin forward in time by dt seconds
    * Incorporates first-order motor lag & produces full DT telemetry
    * 
-   * @param {number} pwm - Commanded PWM (1100-1900 µs)
+   * @param {number} pwm - Commanded PWM (clamped to safety limits 1300-1600 µs)
    * @param {number} dt - Time step in seconds
    * @param {number|null} measuredThrust - Real physical thrust if available (for RLS)
    */
   step(pwm, dt = 0.05, measuredThrust = null) {
+    // 0. Safety clamp: mirror hardware-side PWM limits
+    pwm = Math.max(this.minPwm, Math.min(this.maxPwm, pwm));
+
     // 1. Target theoretical steady-state values
     const targetRpm = this.pwmToNominalRpm(pwm);
 

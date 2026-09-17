@@ -4,7 +4,7 @@
  * Provides:
  * 1. Direct Web Serial API connection to USB Microcontroller (Arduino/ESP32)
  * 2. Bi-directional data pipeline:
- *    - Digital -> Physical: Sends PWM commands (1100 - 1900 µs)
+ *    - Digital -> Physical: Sends PWM commands (1300 - 1600 µs, safety-limited)
  *    - Physical -> Digital: Receives live telemetry (RPM, Thrust, Current, Voltage)
  * 3. High-fidelity Virtual Hardware Simulator fallback for offline testing
  */
@@ -190,7 +190,7 @@ class WebSerialManager {
     try {
       const textEncoder = new TextEncoder();
       const writer = this.port.writable.getWriter();
-      const message = `PWM:${Math.round(pwm)}\n`;
+      const message = `PWM:${Math.max(1300, Math.min(1600, Math.round(pwm)))}\n`; // SAFETY: hard clamp 1300-1600 µs
       await writer.write(textEncoder.encode(message));
       writer.releaseLock();
     } catch (err) {
@@ -212,13 +212,13 @@ class WebSerialManager {
       const pwm = this.simulatedPwm;
       let targetRpm = 0;
 
-      // Realistic deadband & response
-      if (pwm > 1525) {
-        const delta = pwm - 1525;
-        targetRpm = 10.2 * delta - 0.001 * Math.pow(delta, 2);
-      } else if (pwm < 1475) {
-        const delta = 1475 - pwm;
-        targetRpm = -(9.0 * delta - 0.0009 * Math.pow(delta, 2));
+      // Realistic deadband & response (matches bench-calibrated 1492-1508 µs)
+      if (pwm > 1508) {
+        const delta = (pwm - 1508) * (375 / 392);
+        targetRpm = Math.max(150, 10.2 * delta - 0.001 * Math.pow(delta, 2));
+      } else if (pwm < 1492) {
+        const delta = (1492 - pwm) * (375 / 392);
+        targetRpm = -Math.max(150, 9.0 * delta - 0.0009 * Math.pow(delta, 2));
       }
 
       // Apply mechanical inertia lag (~140ms time constant)

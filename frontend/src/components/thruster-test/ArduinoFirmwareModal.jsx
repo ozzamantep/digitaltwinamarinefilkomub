@@ -18,7 +18,7 @@ export default function ArduinoFirmwareModal({ isOpen, onClose }) {
  * 6. Pin A3 (I)   -> ACS712 / INA219 (Optional for Current A)
  * 
  * Protocol:
- * - IN (Laptop -> Arduino):  "PWM:1650\\n" (1100 - 1900 us)
+ * - IN (Laptop -> Arduino):  "PWM:1550\\n" (1300 - 1600 us, safety-limited)
  * - OUT (Arduino -> Laptop): {"rpm":2410,"thrust":30.8,"current":3.8,"voltage":16.1}
  */
 
@@ -59,8 +59,8 @@ void loop() {
 
     if (command.startsWith("PWM:")) {
       int pwmVal = command.substring(4).toInt();
-      // Enforce safe boundary limits (1100 - 1900 µs)
-      pwmVal = constrain(pwmVal, 1100, 1900);
+      // SAFETY: hard limit 1300 - 1600 us (full range dapat merusak propeller)
+      pwmVal = constrain(pwmVal, 1300, 1600);
       currentPwm = pwmVal;
       esc.writeMicroseconds(currentPwm);
     } else if (command == "STOP") {
@@ -79,14 +79,15 @@ void loop() {
     // Example: measuredCurrent = ina219.getCurrent_mA() / 1000.0;
     
     // For bench demonstration, calculate approximate sensor response:
-    if (currentPwm > 1525) {
-      int delta = currentPwm - 1525;
-      measuredRpm = (10.2 * delta);
+    // (deadband 1492-1508 µs, calibrated to real prop start point ~1510 µs)
+    if (currentPwm > 1508) {
+      int delta = currentPwm - 1508;
+      measuredRpm = max(150.0, 10.2 * delta * (375.0 / 392.0));
       measuredThrust = (3.50e-6 * measuredRpm * measuredRpm);
       measuredCurrent = 0.3 + (measuredRpm / 1000.0) * 1.8;
-    } else if (currentPwm < 1475) {
-      int delta = 1475 - currentPwm;
-      measuredRpm = -(9.0 * delta);
+    } else if (currentPwm < 1492) {
+      int delta = 1492 - currentPwm;
+      measuredRpm = -max(150.0, 9.0 * delta * (375.0 / 392.0));
       measuredThrust = -(2.80e-6 * measuredRpm * measuredRpm);
       measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.6;
     } else {

@@ -108,8 +108,9 @@ export default function ThrusterTestbed() {
   }, [pwm, armed, voltage]);
 
   // Handle PWM Change & Send Command to Physical Serial
+  // SAFETY: limit 1300-1600 µs — full range (1100-1900) pernah memecahkan propeller di bench test
   const handlePwmChange = (newPwm) => {
-    const clamped = Math.max(1100, Math.min(1900, Number(newPwm)));
+    const clamped = Math.max(1300, Math.min(1600, Number(newPwm)));
     setPwm(clamped);
     if (armed) {
       webSerialManager.sendPwm(clamped);
@@ -157,7 +158,7 @@ export default function ThrusterTestbed() {
     handlePwmChange(1500);
 
     setTimeout(() => {
-      handlePwmChange(1700); // 50% forward step
+      handlePwmChange(1550); // 50% forward step (safe range)
       setTimeout(() => {
         handlePwmChange(1500); // Return to neutral
         setTestRoutine('none');
@@ -172,7 +173,7 @@ export default function ThrusterTestbed() {
     let currentStep = 1500;
     const interval = setInterval(() => {
       currentStep += 10;
-      if (currentStep > 1850) {
+      if (currentStep > 1600) {
         clearInterval(interval);
         setTimeout(() => {
           handlePwmChange(1500);
@@ -461,15 +462,15 @@ export default function ThrusterTestbed() {
               {pwm === 1500
                 ? 'NEUTRAL (STOP)'
                 : pwm > 1500
-                ? `FORWARD (+${(((pwm - 1500) / 400) * 100).toFixed(0)}%)`
-                : `REVERSE (-${(((1500 - pwm) / 400) * 100).toFixed(0)}%)`}
+                ? `FORWARD (+${(((pwm - 1500) / 100) * 100).toFixed(0)}%)`
+                : `REVERSE (-${(((1500 - pwm) / 200) * 100).toFixed(0)}%)`}
             </div>
 
             {/* Range Slider */}
             <input
               type="range"
-              min="1100"
-              max="1900"
+              min="1300"
+              max="1600"
               step="5"
               value={pwm}
               disabled={!armed || testRoutine !== 'none'}
@@ -492,9 +493,9 @@ export default function ThrusterTestbed() {
                 fontFamily: 'monospace',
               }}
             >
-              <span>1100 µs (Rev)</span>
+              <span>1300 µs (Rev)</span>
               <span>1500 µs</span>
-              <span>1900 µs (Fwd)</span>
+              <span>1600 µs (Fwd)</span>
             </div>
           </div>
 
@@ -505,46 +506,46 @@ export default function ThrusterTestbed() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
               <button
+                onClick={() => handlePwmChange(1525)}
+                disabled={!armed}
+                style={presetButtonStyle('#00ff88')}
+              >
+                +25% (1525)
+              </button>
+              <button
+                onClick={() => handlePwmChange(1550)}
+                disabled={!armed}
+                style={presetButtonStyle('#00ff88')}
+              >
+                +50% (1550)
+              </button>
+              <button
                 onClick={() => handlePwmChange(1600)}
                 disabled={!armed}
                 style={presetButtonStyle('#00ff88')}
               >
-                +25% (1600)
+                +100% (1600)
               </button>
               <button
-                onClick={() => handlePwmChange(1700)}
+                onClick={() => handlePwmChange(1450)}
                 disabled={!armed}
-                style={presetButtonStyle('#00ff88')}
+                style={presetButtonStyle('#ff8c00')}
               >
-                +50% (1700)
-              </button>
-              <button
-                onClick={() => handlePwmChange(1900)}
-                disabled={!armed}
-                style={presetButtonStyle('#00ff88')}
-              >
-                +100% (1900)
+                -25% (1450)
               </button>
               <button
                 onClick={() => handlePwmChange(1400)}
                 disabled={!armed}
                 style={presetButtonStyle('#ff8c00')}
               >
-                -25% (1400)
+                -50% (1400)
               </button>
               <button
                 onClick={() => handlePwmChange(1300)}
                 disabled={!armed}
                 style={presetButtonStyle('#ff8c00')}
               >
-                -50% (1300)
-              </button>
-              <button
-                onClick={() => handlePwmChange(1100)}
-                disabled={!armed}
-                style={presetButtonStyle('#ff8c00')}
-              >
-                -100% (1100)
+                -100% (1300)
               </button>
             </div>
             <button

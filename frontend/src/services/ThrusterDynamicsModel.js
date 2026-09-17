@@ -24,8 +24,9 @@ class ThrusterDynamicsModel {
     this.deadbandLow = 1470;
     this.deadbandHigh = 1530;
     this.neutralPWM = 1500;
-    this.minPWM = 1100;
-    this.maxPWM = 1900;
+    // SAFETY: command limits 1300-1600 µs (full range pernah memecahkan propeller)
+    this.minPWM = 1300;
+    this.maxPWM = 1600;
 
     // T200 Performance at 16V (4S LiPo nominal)
     this.nominalVoltage = 16.0;
@@ -93,11 +94,11 @@ class ThrusterDynamicsModel {
     if (Math.abs(clamped) < 5) return this.neutralPWM;
 
     if (clamped > 0) {
-      // Forward: map 5..100 → 1530..1900
+      // Forward: map 5..100 → 1530..1600 (safety-limited)
       const normalized = (clamped - 5) / 95;
       return this.deadbandHigh + normalized * (this.maxPWM - this.deadbandHigh);
     } else {
-      // Reverse: map -5..-100 → 1470..1100
+      // Reverse: map -5..-100 → 1470..1300 (safety-limited)
       const normalized = (-clamped - 5) / 95;
       return this.deadbandLow - normalized * (this.deadbandLow - this.minPWM);
     }
