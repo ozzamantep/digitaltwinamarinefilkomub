@@ -315,7 +315,12 @@ void loop() {
                       │ Nilai 150k tak harus persis — boleh seri: 100k+47k,
                       │ 2x100k, 3x47k, atau 220k:15k / 100k:6.8k (rasio ±15:1).
                       │ Darurat: 1 resistor seri >=47k langsung ke A5 (tanpa 10k).
-                      │ JANGAN 10k:10k atau tanpa resistor (16V merusak pin!).
+                      │ Bisa juga potensio 10k: kiri=fasa, kanan=GND, tengah=A5
+                      │ (putar knob ~15% dari sisi GND).
+                      │ TANPA RESISTOR SAMA SEKALI: fasa langsung ke A5 HANYA
+                      │ BOLEH saat baterai DICABUT (tes putar jari saja) —
+                      │ back-EMF jari <1V aman. CABUT KABEL A5 SEBELUM POWER ON!
+                      │ JANGAN 10k:10k atau tanpa resistor saat berdaya (16V!).
                       │ Motor BLDC = generator: diputar jari pun menghasilkan
                       │ tegangan → RPM nyata terbaca tanpa sensor apa pun!
                       │
