@@ -161,7 +161,7 @@ class AUVMotionController {
     // so the vehicle maintains strong forward thrust even while turning.
     // =========================================================================
     const targetSurge = (userCmd.surge || 0) * 1.0; // Autonomous cruise authority up to 1.0 m/s
-    const targetSway = (userCmd.sway || 0) * 0.40;   // Lateral 0.40 m/s
+    const targetSway = (userCmd.sway || 0) * 0.60;   // Lateral 0.60 m/s (was 0.40 - too weak to notice)
     const yawAuthority = userCmd.turnBoost ? 0.90 : 0.55;
     let targetYawRate = (userCmd.yaw || 0) * yawAuthority;
     let targetHeave = 0;
@@ -222,8 +222,8 @@ class AUVMotionController {
     const basePower = surgeNorm * 100;               // Full T200 authority at full manual/autonomous surge
     
     // Sway effort (lateral strafe)
-    const swayNorm = targetSway / 0.40;
-    const swayPower = swayNorm * 30;
+    const swayNorm = targetSway / 0.60;
+    const swayPower = swayNorm * 60;
 
     // Yaw differential: additive torque so steering direction is identical in forward, reverse, and spot turn
     const yawNorm = Math.max(-1, Math.min(1, targetYawRate / yawAuthority));
