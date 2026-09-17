@@ -312,6 +312,10 @@ void loop() {
                       │ TANPA SENSOR (RPM_MODE 2): ambil 1 kabel fasa motor
                       │ (bullet A/B/C mana saja) → resistor 150k ─┬─ resistor 10k → GND
                       │                                        └─► Arduino Pin A5
+                      │ Nilai 150k tak harus persis — boleh seri: 100k+47k,
+                      │ 2x100k, 3x47k, atau 220k:15k / 100k:6.8k (rasio ±15:1).
+                      │ Darurat: 1 resistor seri >=47k langsung ke A5 (tanpa 10k).
+                      │ JANGAN 10k:10k atau tanpa resistor (16V merusak pin!).
                       │ Motor BLDC = generator: diputar jari pun menghasilkan
                       │ tegangan → RPM nyata terbaca tanpa sensor apa pun!
                       │
