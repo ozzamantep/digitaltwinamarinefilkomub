@@ -775,6 +775,27 @@ class MockRosConnection {
         }
       }
 
+      // Gate re-crossing guard: the gate posts are a fixed chokepoint. Any leg
+      // that isn't itself a dedicated gate-approach waypoint (e.g. a U-turn
+      // back to an earlier flare after "Gate Transit") must still be funneled
+      // through the centered opening instead of cutting straight at an angle
+      // that clips a post.
+      if (!currentWp.isGateApproach && obstacleEnabled.gate !== false) {
+        const GATE_SAFE_HALF_WIDTH = 0.55; // opening is ±0.9m, posts + sub hull need margin
+        const legX = guideX - this.simX;
+        const legZ = guideZ - this.simZ;
+        const crossesGate = (this.simX - gateX) * (guideX - gateX) < 0; // gateX lies between them
+        if (crossesGate && Math.abs(legX) > 1e-6) {
+          const tAtGate = (gateX - this.simX) / legX;
+          const zAtGate = this.simZ + tAtGate * legZ;
+          if (Math.abs(zAtGate - gateZ) > GATE_SAFE_HALF_WIDTH) {
+            guideX = gateX;
+            guideZ = gateZ;
+            detourActive = true;
+          }
+        }
+      }
+
       const toWpX = guideX - this.simX;
       const toWpZ = guideZ - this.simZ;
       const targetHeading = Math.atan2(toWpZ, toWpX);
