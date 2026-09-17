@@ -12,10 +12,11 @@ export default function ArduinoFirmwareModal({ isOpen, onClose }) {
  * Hardware Connections:
  * 1. Pin D9 (PWM) -> ESC White Signal Wire
  * 2. GND          -> ESC Black Wire & Battery Ground
- * 3. Pin A0 (DT)  -> HX711 Load Cell Data
- * 4. Pin A1 (SCK) -> HX711 Load Cell Clock
- * 5. Pin A2 (V)   -> Voltage Divider (Optional for Battery V)
- * 6. Pin A3 (I)   -> ACS712 / INA219 (Optional for Current A)
+ * 3. Pin D2 (INT) -> Hall Effect Sensor A3144 (magnet di hub propeller) [RPM nyata]
+ * 4. Pin A0 (DT)  -> HX711 Load Cell Data
+ * 5. Pin A1 (SCK) -> HX711 Load Cell Clock
+ * 6. Pin A2 (V)   -> Voltage Divider (Optional for Battery V)
+ * 7. Pin A3 (I)   -> ACS712 / INA219 (Optional for Current A)
  * 
  * Protocol:
  * - IN (Laptop -> Arduino):  "PWM:1550\\n" (1300 - 1600 us, safety-limited)
@@ -33,6 +34,20 @@ int currentPwm = NEUTRAL_PWM;
 unsigned long lastTelemetryTime = 0;
 const unsigned long TELEMETRY_INTERVAL_MS = 50; // 20 Hz telemetry stream
 
+// ===== Sensor RPM (Hall Effect A3144 + magnet neodymium di hub propeller) =====
+// Ubah ke true setelah sensor terpasang. false = mode demo (RPM disimulasikan dari PWM)
+#define USE_RPM_SENSOR true
+const int HALL_PIN = 2;       // harus pin interrupt (D2 atau D3 di Uno/Nano)
+const int PULSES_PER_REV = 1; // jumlah magnet yang ditempel di hub
+volatile unsigned long lastPulseUs = 0;
+volatile unsigned long pulsePeriodUs = 0;
+
+void onHallPulse() {
+  unsigned long nowUs = micros();
+  if (lastPulseUs > 0) pulsePeriodUs = nowUs - lastPulseUs;
+  lastPulseUs = nowUs;
+}
+
 // Simulated or HX711 load cell readings
 float measuredThrust = 0.0; // in Newtons
 float measuredRpm = 0.0;
@@ -42,6 +57,11 @@ float measuredVoltage = 16.0;
 void setup() {
   Serial.begin(115200);
   while (!Serial) { ; } // wait for serial port to connect
+
+#if USE_RPM_SENSOR
+  pinMode(HALL_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(HALL_PIN), onHallPulse, FALLING);
+#endif
 
   // Attach ESC
   esc.attach(ESC_PIN, 1100, 1900);
@@ -77,8 +97,26 @@ void loop() {
     // TODO: Read your real sensors here
     // Example: measuredThrust = scale.get_units(1) * 9.81; // kg to N
     // Example: measuredCurrent = ina219.getCurrent_mA() / 1000.0;
-    
-    // For bench demonstration, calculate approximate sensor response:
+
+#if USE_RPM_SENSOR
+    // RPM NYATA dari periode antar-pulsa hall sensor.
+    // Ikut terbaca walau propeller diputar manual pakai jari → twin digital ikut berputar.
+    noInterrupts();
+    unsigned long periodUs = pulsePeriodUs;
+    unsigned long lastUs = lastPulseUs;
+    interrupts();
+
+    if (periodUs > 0 && (micros() - lastUs) < 1000000UL) {
+      measuredRpm = 60000000.0 / ((float)periodUs * PULSES_PER_REV);
+    } else {
+      measuredRpm = 0; // >1 detik tanpa pulsa = propeller berhenti
+    }
+    // Satu hall sensor tidak bisa deteksi arah: ambil arah dari perintah PWM
+    if (currentPwm < 1476) measuredRpm = -measuredRpm;
+    measuredThrust = (measuredRpm >= 0 ? 3.50e-6 : -2.80e-6) * measuredRpm * measuredRpm;
+    measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.8;
+#else
+    // Mode demo tanpa sensor: perkiraan respons dari PWM
     // (deadband 1476-1524 µs, calibrated: prop starts at 1525 fwd / 1475 rev)
     if (currentPwm > 1524) {
       int delta = currentPwm - 1524;
@@ -87,7 +125,7 @@ void loop() {
       measuredCurrent = 0.3 + (measuredRpm / 1000.0) * 1.8;
     } else if (currentPwm < 1476) {
       int delta = 1476 - currentPwm;
-      measuredRpm = -max(150.0, 9.0 * delta * (375.0 / 392.0));
+      measuredRpm = -max(150.0, 9.0 * delta * (375.0 / 376.0));
       measuredThrust = -(2.80e-6 * measuredRpm * measuredRpm);
       measuredCurrent = 0.3 + (abs(measuredRpm) / 1000.0) * 1.6;
     } else {
@@ -95,6 +133,7 @@ void loop() {
       measuredThrust = 0;
       measuredCurrent = 0.25;
     }
+#endif
 
     // Output JSON string to USB serial
     Serial.print("{\\"rpm\\":");
@@ -215,7 +254,11 @@ void loop() {
                       ▼ 3-Phase Bullets (A, B, C)
          ┌─────────────────────────┐
          │   Blue Robotics T200    │═════► [Load Cell HX711] ──► Arduino (A0, A1)
-         └─────────────────────────┘`}
+         └────────────┬────────────┘
+                      │ magnet neodymium kecil di hub propeller
+                      ▼
+         [Hall Sensor A3144] ──► Arduino Pin D2 (RPM nyata — ikut deteksi
+                                 putaran manual pakai jari!)`}
           </div>
 
           {/* Quick Setup Instructions */}
