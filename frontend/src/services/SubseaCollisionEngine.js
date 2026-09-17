@@ -262,7 +262,9 @@ class SubseaCollisionEngine {
           hitObstacle = obstacleItem.id;
           if (obstacleItem.id.startsWith('gate_')) {
             recoilX = 0; // Don't block forward gate passage
-            recoilZ = contact.nz * 0.35; // Nudge laterally away from post
+            // Strong outward push so a steady pool current can't pin the hull
+            // against a post indefinitely (current re-shoves it in every tick).
+            recoilZ = contact.nz * 0.70;
           } else {
             recoilX = contact.nx * 0.25;
             recoilZ = contact.nz * 0.25;

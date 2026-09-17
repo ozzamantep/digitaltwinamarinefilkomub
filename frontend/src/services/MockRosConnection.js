@@ -815,8 +815,11 @@ class MockRosConnection {
       const alignment = Math.max(0, Math.cos(headingErr));
       const minDrive = isGateWp ? 0.45 : 0.70;
       const headingMagnitude = Math.abs(headingErr);
+      // Keep a small forward crawl even while re-aligning (was a hard 0) — a
+      // steady pool current could otherwise pin the hull in place indefinitely
+      // since it never regains enough surge to punch through the drift.
       const forwardDrive = headingMagnitude > 0.60
-        ? 0
+        ? 0.15
         : headingMagnitude > 0.30
           ? Math.min(0.35, alignment)
           : Math.max(minDrive, alignment);
