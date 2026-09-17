@@ -196,6 +196,7 @@ class SubseaCollisionEngine {
     let hitObstacle = null;
     let recoilX = 0;
     let recoilZ = 0;
+    let recoilDepth = 0;
 
     // 1. POOL WALL BOUNDARIES (25m x 16m)
     const extents = this.getHorizontalExtents(heading);
@@ -235,7 +236,7 @@ class SubseaCollisionEngine {
       correctedDepth = 0.1;
     }
 
-    const subY = 2.0 - correctedDepth;
+    let subY = 2.0 - correctedDepth;
 
     // 3. DYNAMIC OBSTACLES RESOLUTION
     const activeObstacles = this.getDynamicObstacles();
@@ -276,13 +277,44 @@ class SubseaCollisionEngine {
         const inY = subY + this.topOffset > obstacleItem.minY && subY - this.bottomOffset < obstacleItem.maxY;
 
         if (inX && inZ && inY) {
-          // Push horizontally away from the crossbar
-          const midX = (obstacleItem.minX + obstacleItem.maxX) / 2;
-          const pushDir = correctedX < midX ? -1 : 1;
-          correctedX += pushDir * 0.05;
+          // Resolve along whichever axis needs the SHORTEST push to clear the box.
+          // A thin overhead crossbar has very little Y overlap when the hull is
+          // only barely too shallow — pushing sideways (old behavior) never
+          // freed it and just nudged it back and forth in place ("nyangkut").
+          const exitNegX = (correctedX + extents.x) - obstacleItem.minX;
+          const exitPosX = obstacleItem.maxX - (correctedX - extents.x);
+          const exitNegZ = (correctedZ + extents.z) - obstacleItem.minZ;
+          const exitPosZ = obstacleItem.maxZ - (correctedZ - extents.z);
+          // Y/depth: subY increases upward (toward surface). Exiting "down" means
+          // reducing subY (increasing depth); exiting "up" increases subY (less depth).
+          const exitDownY = (subY + this.topOffset) - obstacleItem.minY;
+          const exitUpY = obstacleItem.maxY - (subY - this.bottomOffset);
+
+          const options = [
+            { axis: 'x', dist: exitNegX, dir: -1 },
+            { axis: 'x', dist: exitPosX, dir: 1 },
+            { axis: 'z', dist: exitNegZ, dir: -1 },
+            { axis: 'z', dist: exitPosZ, dir: 1 },
+            { axis: 'y', dist: exitDownY, dir: -1 },
+            { axis: 'y', dist: exitUpY, dir: 1 },
+          ];
+          const best = options.reduce((a, b) => (b.dist < a.dist ? b : a));
+
           isCollided = true;
           hitObstacle = obstacleItem.id;
-          recoilX = pushDir * 0.2;
+          if (best.axis === 'x') {
+            correctedX += best.dir * (best.dist + 0.02);
+            recoilX = best.dir * 0.2;
+          } else if (best.axis === 'z') {
+            correctedZ += best.dir * (best.dist + 0.02);
+            recoilZ = best.dir * 0.2;
+          } else {
+            // dir=-1 (down/deeper) means subY shrinks -> depth grows; dir=1 (up) -> depth shrinks
+            correctedDepth += -best.dir * (best.dist + 0.02);
+            correctedDepth = Math.max(0.1, Math.min(this.maxSafeDepth, correctedDepth));
+            recoilDepth = -best.dir * 0.3;
+            subY = 2.0 - correctedDepth;
+          }
         }
       }
     }
@@ -332,6 +364,7 @@ class SubseaCollisionEngine {
       obstacle: hitObstacle,
       recoilX,
       recoilZ,
+      recoilDepth,
     };
   }
 }

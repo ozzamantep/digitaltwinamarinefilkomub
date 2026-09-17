@@ -919,6 +919,7 @@ class MockRosConnection {
     if (collision.collided) {
       this.simX += (collision.recoilX || 0) * dt * 2.0;
       this.simZ += (collision.recoilZ || 0) * dt * 2.0;
+      this.simDepth = Math.max(0.08, Math.min(subseaCollisionEngine.maxSafeDepth, this.simDepth + (collision.recoilDepth || 0) * dt * 2.0));
     }
 
     // Three.js coordinates (Y is Up: Y = 2.0 - depth)
