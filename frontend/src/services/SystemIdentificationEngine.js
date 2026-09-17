@@ -352,12 +352,12 @@ export class SystemIdentificationEngine {
   }
 
   /**
-   * Convert normalized command [-1, +1] to PWM (safety-limited 1300-1600μs)
+   * Convert normalized command [-1, +1] to PWM (in-water mission limit 1200-1800μs)
    */
   normalizedToPWM(cmd) {
     if (Math.abs(cmd) < 0.06) return 1500; // Deadband
-    if (cmd > 0) return 1530 + cmd * (1600 - 1530);
-    return 1470 + cmd * (1470 - 1300);
+    if (cmd > 0) return 1530 + cmd * (1800 - 1530);
+    return 1470 + cmd * (1470 - 1200);
   }
 
   /**

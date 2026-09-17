@@ -24,9 +24,11 @@ class ThrusterDynamicsModel {
     this.deadbandLow = 1470;
     this.deadbandHigh = 1530;
     this.neutralPWM = 1500;
-    // SAFETY: command limits 1300-1600 µs (full range pernah memecahkan propeller)
-    this.minPWM = 1300;
-    this.maxPWM = 1600;
+    // SAFETY (misi DALAM AIR): 1200-1800 µs ≈ 70% thrust maks, margin dari redline.
+    // Full range 1100-1900 aman di air per datasheet, tapi pernah ada insiden prop pecah
+    // (di udara) — bench/in-air testbed dibatasi lebih ketat: 1300-1600 (ThrusterTwinEngine)
+    this.minPWM = 1200;
+    this.maxPWM = 1800;
 
     // T200 Performance at 16V (4S LiPo nominal)
     this.nominalVoltage = 16.0;
@@ -94,11 +96,11 @@ class ThrusterDynamicsModel {
     if (Math.abs(clamped) < 5) return this.neutralPWM;
 
     if (clamped > 0) {
-      // Forward: map 5..100 → 1530..1600 (safety-limited)
+      // Forward: map 5..100 → 1530..1800 (in-water mission limit)
       const normalized = (clamped - 5) / 95;
       return this.deadbandHigh + normalized * (this.maxPWM - this.deadbandHigh);
     } else {
-      // Reverse: map -5..-100 → 1470..1300 (safety-limited)
+      // Reverse: map -5..-100 → 1470..1200 (in-water mission limit)
       const normalized = (-clamped - 5) / 95;
       return this.deadbandLow - normalized * (this.deadbandLow - this.minPWM);
     }

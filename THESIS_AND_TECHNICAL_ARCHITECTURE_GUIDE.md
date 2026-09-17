@@ -1083,7 +1083,9 @@ Data dari official Blue Robotics Performance Data (Bollard Test, September 2019)
 | 1800 | +2.70 | +2500 | 13.0 | |
 | 1900 | +5.10 | +3600 | 25.0 | **Full forward** |
 
-> ⚠️ **BATAS AMAN OPERASIONAL: 1300 – 1600 μs.** Tabel di atas adalah data fisika full-range dari datasheet; namun seluruh jalur perintah (testbed UI, Web Serial, firmware Arduino, twin engine, model dinamika) di-clamp ke 1300–1600 μs karena propeller pernah pecah saat dioperasikan mendekati full range. Untuk misi nyata via ArduSub, set `MOT_PWM_MIN=1300` dan `MOT_PWM_MAX=1600`.
+> ⚠️ **BATAS AMAN OPERASIONAL (dua profil):**
+> - **Bench / di udara (single-thruster HIL testbed): 1300–1600 μs.** T200 berbahaya diputar kencang tanpa air (tanpa beban & pendinginan — propeller pernah pecah); testbed UI, Web Serial, firmware Arduino, dan twin engine di-clamp ke rentang ini.
+> - **Misi dalam air (quali/final, model kendaraan): 1200–1800 μs** (≈70% thrust maks, margin 100 μs dari redline). Full range 1100–1900 sebenarnya dalam spek datasheet untuk operasi dalam air, namun margin dipertahankan pasca-insiden. Untuk misi nyata via ArduSub, set `MOT_PWM_MIN=1200` dan `MOT_PWM_MAX=1800`.
 
 ### B. Spesifikasi Thruster T200:
 ```
@@ -1094,7 +1096,8 @@ Thrust maks mundur: 4.1 kgf (40.2 N) @ 16V
 RPM maksimal: 3600 RPM @ 16V full forward
 Deadband PWM (datasheet): 1470 - 1530 μs
 Deadband PWM (kalibrasi bench, single-thruster HIL): 1476 - 1524 μs (prop mulai berputar di 1525 μs maju / 1475 μs mundur)
-Batas PWM operasional (keselamatan): 1300 - 1600 μs
+Batas PWM bench/di udara (keselamatan): 1300 - 1600 μs
+Batas PWM misi dalam air: 1200 - 1800 μs
 Time constant fisik: 0.42 detik
 ```
 
@@ -1147,7 +1150,7 @@ Jika baterai 14.5V:
 | **Time Constant Fisik** | tau_phys | 0.42 | detik | Bollard test dyno |
 | **Tegangan Baterai**   | V_bat | 16.0 | Volt | LiPo 4S 10.000 mAh |
 | **Deadband PWM Motor** | PWM_deadband | 1470 s.d. 1530 | mikrodetik (μs) | BlueRobotics Basic ESC (datasheet); HIL twin: 1476–1524 hasil kalibrasi bench |
-| **Batas PWM Operasional** | PWM_min, PWM_max | 1300 s.d. 1600 | mikrodetik (μs) | Keselamatan: propeller pecah pada full range 1100–1900 |
+| **Batas PWM Operasional** | PWM_min, PWM_max | Bench/udara: 1300–1600; Misi air: 1200–1800 | mikrodetik (μs) | Keselamatan: prop pecah saat spin kencang di udara; air memberi beban & pendinginan |
 | **Kecepatan Maks Surge** | u_max | 2.0 | m/s | Batas turbo simulasi; perlu validasi sebelum diterapkan pada hardware |
 | **Kecepatan Maks Sway** | v_max | 1.2 | m/s | Spesifikasi operasi |
 | **Kecepatan Maks Heave** | w_max | 0.8 | m/s | Spesifikasi operasi |
