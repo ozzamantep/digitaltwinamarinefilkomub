@@ -39,6 +39,28 @@ bash backend/setup_rosbridge.sh
 
 The script installs `rosbridge_server` and compressed image transport.
 
+## 3b. Start the MAVROS Telemetry Bridge (REQUIRED for position & battery sync)
+
+`/odom` and `/battery_state` have no publisher on the real vehicle by default - MAVROS only exposes `/mavros/local_position/pose`, `/velocity_local`, and `/mavros/battery`. Without this node running, the Digital Twin's 3D position never moves and the real low-battery emergency-surface safety check never sees real voltage:
+
+```bash
+ros2 run digitaltwin odom_bridge
+# or directly:
+python3 backend/sauvc26_code/odom_bridge.py
+```
+
+This is a read-only telemetry bridge (no actuation) - safe to run alongside any other node, always.
+
+## 3c. Start the Camera Driver (REQUIRED for the live video feed)
+
+`/camera/image_raw/compressed` has no publisher yet on the real vehicle. Use the standard ROS2 `v4l2_camera` driver + `image_transport` republish (no custom code needed):
+
+```bash
+bash backend/start_camera.sh /dev/video0
+```
+
+Pass a different device path as the first argument if the camera isn't `/dev/video0`.
+
 ## 4. Start the ROS 2 Bridge
 
 Each time the AUV system is used, start ROS 2 and the bridge:
@@ -84,12 +106,12 @@ The application expects these ROS 2 topics:
 |---|---|---|
 | `/odom` | `nav_msgs/msg/Odometry` | Position, orientation, and velocity |
 | `/mavros/imu/data` | `sensor_msgs/msg/Imu` | Attitude and acceleration (direct from Pixhawk via MAVROS) |
-| `/depth` | `sensor_msgs/msg/FluidPressure` | Pressure-derived depth |
-| `/dvl/range` | `sensor_msgs/msg/Range` | Altitude above the pool floor |
-| `/sonar/front/range` | `sensor_msgs/msg/Range` | Forward collision clearance |
-| `/sonar/rear/range` | `sensor_msgs/msg/Range` | Rear collision clearance |
-| `/sonar/left/range` | `sensor_msgs/msg/Range` | Port-side collision clearance |
-| `/sonar/right/range` | `sensor_msgs/msg/Range` | Starboard-side collision clearance |
+| `/depth` | `sensor_msgs/msg/FluidPressure` | Pressure-derived depth - **not yet installed on the real hull**, no publisher exists yet |
+| `/dvl/range` | `sensor_msgs/msg/Range` | Altitude above the pool floor - **no DVL on the real hull**, floor-lock safety has no real data source |
+| `/sonar/front/range` | `sensor_msgs/msg/Range` | Forward collision clearance - **the only sonar the real hull actually has** |
+| `/sonar/rear/range` | `sensor_msgs/msg/Range` | Rear collision clearance - **no physical sensor**, rear-wall safety has no real data source |
+| `/sonar/left/range` | `sensor_msgs/msg/Range` | Port-side collision clearance - **no physical sensor** |
+| `/sonar/right/range` | `sensor_msgs/msg/Range` | Starboard-side collision clearance - **no physical sensor** |
 | `/battery_state` | `sensor_msgs/msg/BatteryState` | Battery health |
 | `/thruster_outputs` | `std_msgs/msg/Float64MultiArray` | Signed normalized thruster feedback |
 | `/camera/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` | Forward camera stream |
@@ -162,9 +184,9 @@ If DVL bottom lock is unavailable, use IMU dead reckoning only temporarily; posi
 
 ## 9. Pre-Water Checklist
 
-- `ros2 topic echo /odom --once` returns a valid pose.
-- `/mavros/imu/data`, `/depth`, and `/battery_state` update continuously.
-- All sonar and DVL ranges are finite and match measured distances.
+- `ros2 topic echo /odom --once` returns a valid pose (requires `odom_bridge.py` running).
+- `/mavros/imu/data` and `/battery_state` update continuously (`/depth` has no sensor installed yet - skip this check until hardware is added).
+- `/sonar/front/range` is finite and matches measured distance (the only sonar the real hull has - rear/left/right/DVL have no physical sensor yet, so collision safety only actively protects the front).
 - Dashboard status is `JETSON ORIN LINKED`.
 - `/cmd_vel` direction is verified while disarmed.
 - Emergency stop sends zero velocity and zero thruster command.

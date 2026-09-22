@@ -23,3 +23,6 @@ class Header:
 class PoseStamped:
     header: Header = Header()
     pose: Pose = Pose()
+class TwistStamped:
+    header: Header = Header()
+    twist: Twist = Twist()
