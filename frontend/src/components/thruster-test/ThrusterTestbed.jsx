@@ -66,7 +66,7 @@ export default function ThrusterTestbed() {
       } else if (msg.type === 'telemetry') {
         // Run Digital Twin Model Step
         const activePwm = armed ? pwm : 1500;
-        const dtResult = thrusterTwinEngine.step(activePwm, 0.05, msg.thrustReal);
+        const dtResult = thrusterTwinEngine.step(activePwm, 0.05, msg.thrustReal, msg.rpmReal);
 
         const currentTelemetry = {
           rpmDT: dtResult.rpmDT,

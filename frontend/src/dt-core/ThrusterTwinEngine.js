@@ -120,8 +120,9 @@ export class ThrusterTwinEngine {
    * @param {number} pwm - Commanded PWM (clamped to safety limits 1300-1600 µs)
    * @param {number} dt - Time step in seconds
    * @param {number|null} measuredThrust - Real physical thrust if available (for RLS)
+   * @param {number|null} measuredRpm - Real measured RPM if available (fuses live load/medium effects, e.g. water resistance, into the twin's state)
    */
-  step(pwm, dt = 0.05, measuredThrust = null) {
+  step(pwm, dt = 0.05, measuredThrust = null, measuredRpm = null) {
     // 0. Safety clamp: mirror hardware-side PWM limits
     pwm = Math.max(this.minPwm, Math.min(this.maxPwm, pwm));
 
@@ -131,6 +132,14 @@ export class ThrusterTwinEngine {
     // 2. Dynamic motor inertia filtering: d(RPM)/dt = (target - current) / tau
     const alpha = Math.min(1.0, dt / this.motorTimeConstant);
     this.currentRpm += alpha * (targetRpm - this.currentRpm);
+
+    // 2b. Sensor fusion: nudge the twin's RPM state toward the real measured RPM so
+    // unmodeled load (e.g. water resistance vs bench-calibrated air curve) is reflected,
+    // not just the open-loop PWM->RPM prediction. Falls back to pure model when no sensor.
+    if (measuredRpm !== null) {
+      const rpmCorrectionGain = 0.35;
+      this.currentRpm += rpmCorrectionGain * (measuredRpm - this.currentRpm);
+    }
 
     // 3. Digital Twin predicted thrust
     const thrustDT = this.rpmToThrust(this.currentRpm, false);

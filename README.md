@@ -128,6 +128,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | **Competition Safety Supervisor** | Latch arah, active repulsion dinding/lantai, emergency surface, fail-safe sensor | `src/services/SafetySupervisor.js` |
 | **PID Flight Controller** | Depth hold, heading lock, stabilisasi attitude dengan anti-windup | `src/services/AUVMotionController.js` |
 | **Dinamika Thruster** | Lookup table T200, motor lag (τ=0.35s), voltage sag, PWM deadband, clamp misi 1200–1800 µs (bench in-air: 1300–1600) | `src/services/ThrusterDynamicsModel.js` |
+| **HIL Single-Thruster Twin** | Model PWM→RPM→thrust T200 + RLS adaptif; state RPM di-*fusion* (nudge gain 0.35) ke RPM asli dari sensor Hall/back-EMF via Web Serial, sehingga beban nyata (mis. hambatan air) ikut tercermin, bukan hanya prediksi open-loop | `src/dt-core/ThrusterTwinEngine.js` |
 | **PINN Residual** | Physics-Informed Neural Network untuk kompensasi dinamika yang tak termodelkan | `src/dt-core/PINNResidual.js` |
 | **Model Lingkungan** | Densitas air UNESCO, turbulensi arus Gauss-Markov, tekanan kedalaman | `src/dt-core/EnvironmentModel.js` |
 | **Kinematika** | Integrasi kuaternion, transform Euler↔kuaternion, body↔world | `src/dt-core/Kinematics.js` |
