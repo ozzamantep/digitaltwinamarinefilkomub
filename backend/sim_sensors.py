@@ -25,7 +25,7 @@ class BlueROV2Simulator(Node):
 
         # Publishers
         self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
-        self.imu_pub = self.create_publisher(Imu, '/imu/data', 10)
+        self.imu_pub = self.create_publisher(Imu, '/mavros/imu/data', 10)
         self.depth_pub = self.create_publisher(FluidPressure, '/depth', 10)
         self.dvl_pub = self.create_publisher(Range, '/dvl/range', 10)
         self.battery_pub = self.create_publisher(BatteryState, '/battery_state', 10)
@@ -35,7 +35,7 @@ class BlueROV2Simulator(Node):
         self.t = 0.0
         self.battery_level = 0.95
 
-        self.get_logger().info('📡 Publishing: /odom, /imu/data, /depth, /dvl/range, /battery_state')
+        self.get_logger().info('📡 Publishing: /odom, /mavros/imu/data, /depth, /dvl/range, /battery_state')
 
     def publish_telemetry(self):
         self.t += 1.0 / 30.0

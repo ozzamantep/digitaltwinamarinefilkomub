@@ -3,7 +3,7 @@
 AUV BlueROV2 Subsea ROS2 Node & Physics Publisher
 Publishes real-time hydrodynamic telemetry to ROS2 topics:
  - /odom (nav_msgs/Odometry)
- - /imu/data (sensor_msgs/Imu)
+ - /mavros/imu/data (sensor_msgs/Imu, from Pixhawk via MAVROS)
  - /depth (sensor_msgs/FluidPressure)
  - /dvl/range (sensor_msgs/Range)
  - /battery_state (sensor_msgs/BatteryState)
@@ -23,7 +23,7 @@ class AuvSubseaPublisher(Node):
         super().__init__('auv_subsea_publisher')
         
         self.pub_odom = self.create_publisher(Odometry, '/odom', 10)
-        self.pub_imu = self.create_publisher(Imu, '/imu/data', 10)
+        self.pub_imu = self.create_publisher(Imu, '/mavros/imu/data', 10)
         self.pub_depth = self.create_publisher(FluidPressure, '/depth', 10)
         self.pub_dvl = self.create_publisher(Range, '/dvl/range', 10)
         self.pub_battery = self.create_publisher(BatteryState, '/battery_state', 10)
@@ -96,7 +96,7 @@ class AuvSubseaPublisher(Node):
         odom.twist.twist.linear.z = math.cos(t * 0.4) * 0.06
         self.pub_odom.publish(odom)
         
-        # 2. IMU (/imu/data)
+        # 2. IMU (/mavros/imu/data, from Pixhawk)
         imu = Imu()
         imu.header.stamp = self.get_clock().now().to_msg()
         imu.header.frame_id = 'imu_link'

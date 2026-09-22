@@ -39,7 +39,7 @@ Digital Twin ini menghubungkan wahana fisik nyata (*Physical Twin*) dengan lingk
 └──────────────────────────────┬──────────────────────────────┘
                                │
             Telemetri ROS 2    │  WebSocket JSON / Protobuf
-             /odom, /imu,      │  (Port 9090 / rosbridge_server)
+             /odom, /mavros/imu/data, │  (Port 9090 / rosbridge_server)
              /depth, /dvl      │  Frekuensi: 20 Hz - 100 Hz
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -68,6 +68,16 @@ Digital Twin ini menghubungkan wahana fisik nyata (*Physical Twin*) dengan lingk
 │  - UUV Simulator / Buoyancy & Hydrodynamics Plugins         │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Kontrol Balik ke Physical Twin (Digital → Fisik)
+
+IMU pada wahana fisik BUKAN sensor berdiri sendiri - datanya berasal langsung dari Pixhawk via MAVROS (`/mavros/imu/data`), sehingga tidak ada node IMU terpisah di Jetson.
+
+Jalur kontrol Digital Twin → wahana fisik nyata (bukan simulator) melalui tiga mekanisme:
+
+1. **Manual pilot & gripper**: node `backend/sauvc26_code/manual_bridge.py` men-subscribe `/cmd_vel` dan `/gripper/command` dari dashboard, lalu mempublish ulang ke `/mavros/setpoint_raw/local` dan memanggil servo dropper via `/mavros/cmd/command`. Node ini dijalankan **sebagai pengganti** `final.py`/`qualification.py` - keduanya tidak boleh aktif bersamaan karena akan berebut setpoint yang sama.
+2. **Arm/disarm & flight mode**: tombol dashboard memanggil service MAVROS asli `/mavros/cmd/arming` dan `/mavros/set_mode` (via `TopicPublisher.armDisarm`/`setFlightMode`) ketika terhubung live, bukan sekadar mengubah state lokal.
+3. **Misi otonom**: `final.py`/`qualification.py` berjalan mandiri di Jetson dan melaporkan event nyata (flare kena, payload dijatuhkan) kembali ke Digital Twin lewat `/mission_state`, serta status armed/mode via `/mavros/state` - inilah jalur fisik → digital untuk event misi, melengkapi telemetri sensor mentah yang sudah mengalir terus-menerus.
 
 ### Aliran Data Pipeline per Frame (50 Hz):
 
@@ -1306,6 +1316,8 @@ Dua ember merah non-target merupakan objek pengirim sinyal. Karena konfigurasi w
 ### E. Gripper dan Pelepasan Payload
 
 Susunan lower centerline dari depan ke belakang adalah IMU, kamera yang lebih rendah, lalu gripper vertikal. Perintah hardware dipublish melalui `/gripper/command` dengan nilai `OPEN`, `CLOSE`, `GRASP`, atau `RELEASE`.
+
+Pada wahana fisik, `manual_bridge.py` menerjemahkan `/gripper/command` menjadi panggilan servo `MAV_CMD_DO_SET_SERVO` nyata: `OPEN`/`RELEASE` mengaktuasi servo dropper (satu-satunya aksi yang terkalibrasi di hardware saat ini), sedangkan `CLOSE`/`GRASP` sengaja diabaikan (log warning) karena servo dropper bersifat single-channel release-only - belum ada posisi hold/grasp yang dikalibrasi di bangku uji.
 
 - `Circle/B`: buka atau tutup gripper.
 - `Cross/A`: lepas atau capit payload.

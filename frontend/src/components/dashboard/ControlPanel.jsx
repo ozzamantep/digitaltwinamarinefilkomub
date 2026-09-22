@@ -455,7 +455,11 @@ export default function ControlPanel() {
           Flight Control
         </div>
         <button
-          onClick={() => setArmed(!armed)}
+          onClick={() => {
+            const next = !armed;
+            setArmed(next);
+            if (connectionStatus === 'connected') topicPublisher.armDisarm(next);
+          }}
           style={{
             padding: '3px 8px',
             fontSize: '0.65rem',
@@ -548,7 +552,10 @@ export default function ControlPanel() {
               <button
                 key={m}
                 className={`control-btn ${flightMode === m ? 'active' : ''}`}
-                onClick={() => setFlightMode(m)}
+                onClick={() => {
+                  setFlightMode(m);
+                  if (connectionStatus === 'connected') topicPublisher.setFlightMode(m);
+                }}
                 style={{ padding: '6px 2px', fontSize: '0.62rem' }}
               >
                 {m}
@@ -723,7 +730,10 @@ export default function ControlPanel() {
                 {activeTarget}
               </div>
               <button
-                onClick={() => setFlightMode('MANUAL')}
+                onClick={() => {
+                  setFlightMode('MANUAL');
+                  if (connectionStatus === 'connected') topicPublisher.setFlightMode('MANUAL');
+                }}
                 style={{
                   marginTop: '8px',
                   background: 'rgba(255, 255, 255, 0.1)',

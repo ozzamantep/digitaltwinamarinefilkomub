@@ -1,6 +1,6 @@
 # 🌊 Digital Twin AUV — Amarine FILKOM Universitas Brawijaya
 
-### Real-Time 6-DOF Autonomous Underwater Vehicle Digital Twin & Telemetry Software
+### Perangkat Lunak Digital Twin & Telemetri AUV (Autonomous Underwater Vehicle) 6-DOF Real-Time
 
 [![ROS2](https://img.shields.io/badge/ROS2-Humble%20%7C%20Jazzy-blue?logo=ros)](https://docs.ros.org/)
 [![Electron](https://img.shields.io/badge/Platform-Native%20Desktop%20(Windows)-47848F?logo=electron)](https://www.electronjs.org/)
@@ -10,11 +10,11 @@
 [![GPU](https://img.shields.io/badge/GPU-RTX%204050%20Accelerated-76B900?logo=nvidia)](https://www.nvidia.com/)
 [![License](https://img.shields.io/badge/License-Academic%20Research-green)]()
 
-> **Official repository** for the 6-DOF AUV Digital Twin developed for **Tim Amarine FILKOM UB (Universitas Brawijaya)**. Features full nonlinear Fossen hydrodynamics, hardware-in-the-loop (HIL) and software-in-the-loop (SITL) subsea simulation, closed-loop PID control, online system identification (Box-Jenkins with pseudo-linear Recursive Least Squares), and real-time 3D subsea visualization.
+> **Repositori resmi** Digital Twin AUV 6-DOF yang dikembangkan untuk **Tim Amarine FILKOM UB (Universitas Brawijaya)**. Menghadirkan hidrodinamika nonlinear Fossen secara penuh, simulasi subsea hardware-in-the-loop (HIL) dan software-in-the-loop (SITL), kontrol PID closed-loop, identifikasi sistem online (Box-Jenkins dengan pseudo-linear Recursive Least Squares), dan visualisasi 3D subsea real-time.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Arsitektur Sistem
 
 ```
 ┌──────────────────────────────────────────────┐                ┌────────────────────────────────────────┐
@@ -28,7 +28,7 @@
 └──────────────────────────────────────────────┘   /cmd_vel     └────────────────────────────────────────┘
 ```
 
-### Data Flow Pipeline (50 Hz Loop)
+### Alur Data (Loop 50 Hz)
 
 ```
 Sensor Data ──► EKF Predict ──► EKF Update ──► SysID (RLS) ──► PID Controller
@@ -48,30 +48,30 @@ Sensor Data ──► EKF Predict ──► EKF Update ──► SysID (RLS) ─
 
 ---
 
-## 🛥️ Custom 6-Thruster AUV Configuration
+## 🛥️ Konfigurasi Kustom AUV 6-Thruster
 
-| Component | Specification |
+| Komponen | Spesifikasi |
 |:----------|:-------------|
-| **4× Horizontal Vectored Thrusters** | T200 at 45° corners for full surge, sway, and yaw vectoring |
-| **2× Vertical Ducted Thrusters** | Inside aerodynamic nose and tail cowlings for heave & pitch |
-| **Battery System** | 4× cylindrical pressure hulls, dual stacked (4S LiPo 16V) |
-| **Electronics** | Clear acrylic enclosure: Jetson Nano, flight controller, status LEDs |
-| **Dry Mass** | 22.5 kg (nominal; configurable 20-25 kg) |
-| **Displaced Volume** | 22.54 L (0.02254345 m³, near-neutral buoyancy) |
-| **Dimensions** | 540mm × 280mm × 240mm |
+| **4× Thruster Horizontal Vektor** | T200 di sudut 45° untuk vektor surge, sway, dan yaw penuh |
+| **2× Thruster Vertikal Ducted** | Di dalam cowling hidung dan ekor aerodinamis untuk heave & pitch |
+| **Sistem Baterai** | 4× tabung tekanan silinder, disusun dua tingkat (4S LiPo 16V) |
+| **Elektronik** | Enclosure akrilik bening: Jetson Nano, flight controller, LED status |
+| **Massa Kering** | 22.5 kg (nominal; dapat dikonfigurasi 20-25 kg) |
+| **Volume Displaced** | 22.54 L (0.02254345 m³, mendekati netral buoyancy) |
+| **Dimensi** | 540mm × 280mm × 240mm |
 
 ---
 
-## 🧮 Key Mathematical Models
+## 🧮 Model Matematis Utama
 
-This Digital Twin implements the following physics models from Fossen (2021):
+Digital Twin ini mengimplementasikan model fisika berikut dari Fossen (2021):
 
-### 6-DOF Fossen Equation of Motion
+### Persamaan Gerak 6-DOF Fossen
 ```
 M ν̇ + C(ν)ν + D(ν_r)ν_r + g(η) = τ_thruster + τ_env + τ_pinn
 ```
 
-### Mass Matrix (M = M_RB + M_A)
+### Matriks Massa (M = M_RB + M_A)
 
 | DOF | M_RB | M_A (Added Mass) | **M_total** | **M⁻¹** |
 |:----|:-----|:-----------------|:------------|:---------|
@@ -82,7 +82,7 @@ M ν̇ + C(ν)ν + D(ν_r)ν_r + g(η) = τ_thruster + τ_env + τ_pinn
 | Pitch | 0.22 kg·m² | 0.12 kg·m² | **0.34 kg·m²** | 2.94118 |
 | Yaw | 0.24 kg·m² | 0.12 kg·m² | **0.36 kg·m²** | 2.77778 |
 
-### Hydrodynamic Damping Coefficients
+### Koefisien Redaman Hidrodinamis (Damping)
 
 | DOF | Linear (D_L) | Quadratic (D_Q) |
 |:----|:-------------|:----------------|
@@ -91,18 +91,18 @@ M ν̇ + C(ν)ν + D(ν_r)ν_r + g(η) = τ_thruster + τ_env + τ_pinn
 | Heave | Zw = 5.18 N·s/m | Zww = 36.99 N·s²/m² |
 | Roll/Pitch/Yaw | 0.07 N·m·s/rad | 1.55 N·m·s²/rad² |
 
-### Hydrostatic Restoring Forces
+### Gaya Pemulih Hidrostatis (Restoring Forces)
 ```
-Weight:    W = 22.5 × 9.80665 = 220.65 N
-Buoyancy:  B = 996.78 × 9.80665 × 0.02254345 = 220.36 N   (at 26°C pool)
-Net Force: ΔF = -0.29 N  (near-neutral buoyancy)
+Berat:      W = 22.5 × 9.80665 = 220.65 N
+Buoyancy:   B = 996.78 × 9.80665 × 0.02254345 = 220.36 N   (kolam 26°C)
+Gaya Neto:  ΔF = -0.29 N  (mendekati netral buoyancy)
 
-Righting Moment (CB 25mm above CG):
+Momen Pemulih (CB 25mm di atas CG):
   Roll:  K_g = +2.81 × sin(φ) N·m
   Pitch: M_g = +2.81 × sin(θ) N·m
 ```
 
-### Thruster Allocation Matrix (6×6)
+### Matriks Alokasi Thruster / Thruster Allocation Matrix (6×6)
 ```
            T1       T2       T3       T4       T5       T6
 TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
@@ -113,94 +113,103 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
       [  -0.177,  +0.177,  -0.177,  +0.177,   0.000,   0.000 ]  ← Yaw   (N)
 ```
 
-> 📘 **Full mathematical derivations with step-by-step numerical calculations available in [`THESIS_AND_TECHNICAL_ARCHITECTURE_GUIDE.md`](THESIS_AND_TECHNICAL_ARCHITECTURE_GUIDE.md)**
+> 📘 **Derivasi matematis lengkap dengan perhitungan numerik langkah-demi-langkah tersedia di [`THESIS_AND_TECHNICAL_ARCHITECTURE_GUIDE.md`](THESIS_AND_TECHNICAL_ARCHITECTURE_GUIDE.md)**
 
 ---
 
-## 🧠 Digital Twin Core Engines
+## 🧠 Engine Inti Digital Twin
 
-| Engine | Description | File |
+| Engine | Deskripsi | File |
 |:-------|:-----------|:-----|
-| **6-DOF Fossen Hydrodynamics** | Full nonlinear M, C, D, g matrices with RK4 integration | `src/dt-core/HydrodynamicsEngine.js` |
-| **Vehicle Configuration** | Single source of truth for all 50+ physical parameters | `src/dt-core/VehicleConfig.js` |
-| **15-State EKF** | Multi-rate sensor fusion (IMU 100Hz, Depth 20Hz, DVL 10Hz) with Mahalanobis outlier gating | `src/dt-core/StateEstimator.js` |
-| **Box-Jenkins System Identification** | Online pseudo-linear RLS (λ=0.985) adapting 6 plant/noise parameters | `src/services/SystemIdentificationEngine.js` |
-| **Competition Safety Supervisor** | Directional latches, active wall/floor repulsion, emergency surface, sensor fail-safe | `src/services/SafetySupervisor.js` |
-| **PID Flight Controller** | Depth hold, heading lock, attitude stabilization with anti-windup | `src/services/AUVMotionController.js` |
-| **Thruster Dynamics** | T200 lookup table, motor lag (τ=0.35s), voltage sag, PWM deadband, mission clamp 1200–1800 µs (bench in-air: 1300–1600) | `src/services/ThrusterDynamicsModel.js` |
-| **PINN Residual** | Physics-Informed Neural Network for unmodeled dynamics compensation | `src/dt-core/PINNResidual.js` |
-| **Environment Model** | UNESCO water density, Gauss-Markov current turbulence, depth pressure | `src/dt-core/EnvironmentModel.js` |
-| **Kinematics** | Quaternion integration, Euler↔quaternion, body↔world transforms | `src/dt-core/Kinematics.js` |
+| **Hidrodinamika Fossen 6-DOF** | Matriks nonlinear penuh M, C, D, g dengan integrasi RK4 | `src/dt-core/HydrodynamicsEngine.js` |
+| **Konfigurasi Kendaraan** | Satu sumber kebenaran untuk 50+ parameter fisik | `src/dt-core/VehicleConfig.js` |
+| **EKF 15-State** | Fusi sensor multi-rate (IMU 100Hz, Depth 20Hz, DVL 10Hz) dengan gating outlier Mahalanobis | `src/dt-core/StateEstimator.js` |
+| **Identifikasi Sistem Box-Jenkins** | RLS pseudo-linear online (λ=0.985) mengadaptasi 6 parameter plant/noise | `src/services/SystemIdentificationEngine.js` |
+| **Competition Safety Supervisor** | Latch arah, active repulsion dinding/lantai, emergency surface, fail-safe sensor | `src/services/SafetySupervisor.js` |
+| **PID Flight Controller** | Depth hold, heading lock, stabilisasi attitude dengan anti-windup | `src/services/AUVMotionController.js` |
+| **Dinamika Thruster** | Lookup table T200, motor lag (τ=0.35s), voltage sag, PWM deadband, clamp misi 1200–1800 µs (bench in-air: 1300–1600) | `src/services/ThrusterDynamicsModel.js` |
+| **PINN Residual** | Physics-Informed Neural Network untuk kompensasi dinamika yang tak termodelkan | `src/dt-core/PINNResidual.js` |
+| **Model Lingkungan** | Densitas air UNESCO, turbulensi arus Gauss-Markov, tekanan kedalaman | `src/dt-core/EnvironmentModel.js` |
+| **Kinematika** | Integrasi kuaternion, transform Euler↔kuaternion, body↔world | `src/dt-core/Kinematics.js` |
 
 ---
 
-## 📡 ROS 2 Topics
+## 📡 Topik ROS 2
 
-| Topic | Type | Frequency | Description |
+| Topik | Tipe | Frekuensi | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `/odom` | `nav_msgs/Odometry` | 50 Hz | 3D position, orientation quaternion, velocities |
-| `/imu/data` | `sensor_msgs/Imu` | 100 Hz | Roll, pitch, yaw & 3-axis accelerations |
-| `/depth` | `sensor_msgs/FluidPressure` | 20 Hz | MS5837 barometer depth measurement |
-| `/dvl/range` | `sensor_msgs/Range` | 10 Hz | Acoustic DVL altitude (distance to bottom) |
-| `/sonar/front/range` | `sensor_msgs/Range` | ≥20 Hz | Forward collision distance |
-| `/sonar/rear/range` | `sensor_msgs/Range` | ≥20 Hz | Rear collision distance |
-| `/sonar/left/range` | `sensor_msgs/Range` | ≥20 Hz | Port-side collision distance |
-| `/sonar/right/range` | `sensor_msgs/Range` | ≥20 Hz | Starboard-side collision distance |
-| `/gripper/command` | `std_msgs/String` | Event | Gripper command: `OPEN`, `CLOSE`, `GRASP`, or `RELEASE` |
-| `/battery_state` | `sensor_msgs/BatteryState` | 1 Hz | 4S LiPo voltage, current, remaining capacity |
-| `/cmd_vel` | `geometry_msgs/Twist` | 50 Hz | 4-DOF velocity commands (surge, sway, heave, yaw) |
-| `/thruster_commands` | `std_msgs/Float64MultiArray` | 50 Hz | 6-channel thruster PWM/effort outputs |
-| `/thruster_outputs` | `std_msgs/Float64MultiArray` | 50 Hz | Real-time thruster RPM feedback |
-| `/camera/image_raw/compressed` | `sensor_msgs/CompressedImage` | 30 Hz | Front subsea camera video stream |
+| `/odom` | `nav_msgs/Odometry` | 50 Hz | Posisi 3D, kuaternion orientasi, kecepatan |
+| `/mavros/imu/data` | `sensor_msgs/Imu` | 100 Hz | Roll, pitch, yaw & akselerasi 3-axis (langsung dari Pixhawk via MAVROS) |
+| `/depth` | `sensor_msgs/FluidPressure` | 20 Hz | Pengukuran kedalaman barometer MS5837 |
+| `/dvl/range` | `sensor_msgs/Range` | 10 Hz | Altitude akustik DVL (jarak ke dasar) |
+| `/sonar/front/range` | `sensor_msgs/Range` | ≥20 Hz | Jarak tabrakan depan |
+| `/sonar/rear/range` | `sensor_msgs/Range` | ≥20 Hz | Jarak tabrakan belakang |
+| `/sonar/left/range` | `sensor_msgs/Range` | ≥20 Hz | Jarak tabrakan sisi kiri |
+| `/sonar/right/range` | `sensor_msgs/Range` | ≥20 Hz | Jarak tabrakan sisi kanan |
+| `/gripper/command` | `std_msgs/String` | Event | Perintah gripper: `OPEN`, `CLOSE`, `GRASP`, atau `RELEASE` |
+| `/battery_state` | `sensor_msgs/BatteryState` | 1 Hz | Voltage, current, sisa kapasitas 4S LiPo |
+| `/cmd_vel` | `geometry_msgs/Twist` | 50 Hz | Perintah kecepatan 4-DOF (surge, sway, heave, yaw) |
+| `/thruster_commands` | `std_msgs/Float64MultiArray` | 50 Hz | Output PWM/effort 6-channel thruster |
+| `/thruster_outputs` | `std_msgs/Float64MultiArray` | 50 Hz | Feedback RPM thruster real-time |
+| `/camera/image_raw/compressed` | `sensor_msgs/CompressedImage` | 30 Hz | Stream video kamera depan subsea |
+| `/mission_state` | `std_msgs/String` | Event | Event misi nyata (flare kena, payload dijatuhkan) disinkronkan balik ke Digital Twin |
+| `/mavros/state` | `mavros_msgs/State` | 1 Hz | Feedback armed/flight-mode dari kendaraan nyata (sinkronisasi fisik -> digital) |
+| `/mavros/cmd/arming`, `/mavros/set_mode` | `mavros_msgs/CommandBool`, `mavros_msgs/SetMode` | Service | Tombol arm/disarm & flight-mode di dashboard memanggil service ini langsung saat terhubung live |
 
-### Physical Collision Safety
+### Kontrol Dua Arah (Digital ↔ Fisik)
 
-The safety state machine is `NORMAL -> CAUTION -> LOCKED -> EMERGENCY_SURFACE`. Four directional sonar streams use hysteresis: a wall lock engages at `0.55 m` and releases only above `1.20 m`. A locked direction ignores continued pilot throttle and commands active escape thrust away from the wall. Stale data older than `0.50 s` fails safe.
+- **Misi otonom** (`final.py`, `qualification.py`) berjalan di Jetson dan menggerakkan kendaraan secara independen lewat `/mavros/setpoint_raw/local`; keduanya melaporkan event kembali lewat `/mission_state`.
+- **Manual pilot / gripper** dari dashboard dijembatani ke Pixhawk asli oleh `backend/sauvc26_code/manual_bridge.py`, yang subscribe ke `/cmd_vel` + `/gripper/command` lalu mempublish ulang setpoint MAVROS/panggilan servo. Jalankan node ini **sebagai pengganti** node misi otonom - jangan pernah keduanya berjalan bersamaan, karena setpoint-nya akan saling berebut.
+- Tombol arm/disarm dan flight-mode memanggil service `/mavros/cmd/arming` dan `/mavros/set_mode` yang sebenarnya (via `TopicPublisher.armDisarm`/`setFlightMode`) setiap kali dashboard terhubung live (bukan demo/SITL).
 
-The downward DVL engages the floor lock at `0.37 m` and releases above `0.70 m`. It clears motor lag/RPM on T5-T6 and commands upward escape thrust, so holding Dive cannot keep loading the pool floor. Hull leak or critical battery (`<= 8%` or `<= 13.0 V`) latches emergency surface. IMU acceleration above `18 m/s²` or angular rate above `2.5 rad/s` triggers an all-axis emergency stop.
+### Keselamatan Tabrakan Fisik
 
-An IMU cannot measure distance to a wall or floor. It is used for attitude, motion detection, and impact fallback; preventive collision avoidance depends on correctly mounted and calibrated waterproof sonar/DVL sensors. Bench-test every topic direction and stopping distance at low thrust before operating near a pool wall or floor.
+State machine keselamatan adalah `NORMAL -> CAUTION -> LOCKED -> EMERGENCY_SURFACE`. Empat stream sonar arah menggunakan hysteresis: wall lock aktif pada `0.55 m` dan hanya lepas di atas `1.20 m`. Arah yang terkunci mengabaikan throttle pilot yang berlanjut dan memerintahkan thrust melarikan diri secara aktif menjauhi dinding. Data basi (stale) yang lebih tua dari `0.50 s` fail-safe.
 
-### Competition Perception & Interaction
+DVL ke bawah mengaktifkan floor lock pada `0.37 m` dan melepas di atas `0.70 m`. Ia membersihkan motor lag/RPM pada T5-T6 dan memerintahkan thrust melarikan diri ke atas, sehingga menahan Dive tidak akan terus membebani lantai kolam. Kebocoran hull atau baterai kritis (`<= 8%` atau `<= 13.0 V`) mengunci emergency surface. Akselerasi IMU di atas `18 m/s²` atau angular rate di atas `2.5 rad/s` memicu emergency stop di semua sumbu.
 
-- The sonar radar uses actual wall and arena-object range/bearing data. Contacts flash only when the rotating sweep crosses their bearing.
-- Signal-only red buckets are excluded from acoustic sonar and labeled `CV ONLY`; the onboard camera/YOLO pipeline detects them because this vehicle has no signal receiver.
-- The collision model uses a heading-aware `0.58 m x 0.32 m` oriented hull footprint plus vertical overlap. A flare falls only after real geometric contact, never from a generous waypoint radius.
-- IMU, lowered forward camera, sonar housing, and vertical gripper are mounted on the lower centerline. Bubble jets show each T200 exhaust direction, including reverse and vertical thrust.
-- Controller mappings: `Circle/B` opens or closes the gripper; `Cross/A` releases or grasps the ball. Releases enter the target drum only within `0.55 m`; otherwise the ball drops from the current gripper position.
+IMU tidak dapat mengukur jarak ke dinding atau lantai. IMU digunakan untuk attitude, deteksi gerakan, dan fallback benturan; pencegahan tabrakan bergantung pada sensor sonar/DVL waterproof yang terpasang dan terkalibrasi dengan benar. Uji bangku (bench-test) setiap arah topik dan jarak henti pada thrust rendah sebelum beroperasi dekat dinding atau lantai kolam.
 
-### Real-Time Rendering Profile
+### Persepsi & Interaksi Kompetisi
 
-The control, collision, IMU, and EKF loops remain at `20 Hz`. Sonar visualization runs at `10 Hz`, derived validation/OOD/health telemetry at `5 Hz`, and the secondary computer-vision viewport at `15 FPS`. Three.js components read live telemetry inside `useFrame` to avoid rebuilding the scene graph on every ROS packet.
+- Radar sonar menggunakan data jarak/bearing dinding dan objek arena yang sebenarnya. Kontak berkedip hanya ketika sapuan berputar melintasi bearing-nya.
+- Ember merah signal-only dikecualikan dari sonar akustik dan diberi label `CV ONLY`; pipeline kamera/YOLO onboard mendeteksinya karena kendaraan ini tidak punya penerima sinyal.
+- Model tabrakan menggunakan footprint hull berorientasi heading `0.58 m x 0.32 m` ditambah overlap vertikal. Flare jatuh hanya setelah kontak geometris nyata, tidak pernah dari radius waypoint yang longgar.
+- IMU, kamera depan yang diturunkan, housing sonar, dan gripper vertikal dipasang di centerline bawah. Bubble jet menunjukkan arah exhaust tiap T200, termasuk reverse dan thrust vertikal.
+- Pemetaan kontroler: `Circle/B` membuka atau menutup gripper; `Cross/A` melepas atau menggenggam bola. Pelepasan masuk ke drum target hanya dalam `0.55 m`; jika tidak, bola jatuh dari posisi gripper saat ini.
+
+### Profil Rendering Real-Time
+
+Loop kontrol, tabrakan, IMU, dan EKF tetap pada `20 Hz`. Visualisasi sonar berjalan pada `10 Hz`, telemetri turunan validasi/OOD/health pada `5 Hz`, dan viewport computer-vision sekunder pada `15 FPS`. Komponen Three.js membaca telemetri live di dalam `useFrame` untuk menghindari pembangunan ulang scene graph di setiap paket ROS.
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- **Node.js** 18+ and **npm**
-- **Windows 10/11** (for native desktop app via Electron)
-- **WSL2 + Ubuntu 22.04** (optional, for Gazebo simulation)
+### Prasyarat
+- **Node.js** 18+ dan **npm**
+- **Windows 10/11** (untuk aplikasi desktop native via Electron)
+- **WSL2 + Ubuntu 22.04** (opsional, untuk simulasi Gazebo)
 
-### 1. Install Dependencies
+### 1. Install Dependensi
 ```bash
 npm install
 ```
 
-### 2. Run Native Desktop App (Recommended)
-Double-click `Launch_Desktop_App.bat` or:
+### 2. Jalankan Aplikasi Desktop Native (Direkomendasikan)
+Klik dua kali `Launch_Desktop_App.bat` atau:
 ```bash
 npm run desktop
 ```
 
-### 3. Run in Browser (Development Mode)
+### 3. Jalankan di Browser (Mode Development)
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173` in browser.
+Buka `http://localhost:5173` di browser.
 
-### 4. Run Gazebo 3D Simulation in WSL2
-Double-click `Launch_Gazebo_WSL.bat` or inside WSL:
+### 4. Jalankan Simulasi 3D Gazebo di WSL2
+Klik dua kali `Launch_Gazebo_WSL.bat` atau di dalam WSL:
 ```bash
 cd simulator
 ./setup_wsl_gazebo.sh
@@ -208,55 +217,55 @@ cd simulator
 
 ---
 
-## 📁 Project Structure
+## 📁 Struktur Proyek
 
 ```
 digitaltwin/
-├── frontend/                       ← React/Vite UI (index.html, vite.config.js, tsconfig.json)
+├── frontend/                       ← UI React/Vite (index.html, vite.config.js, tsconfig.json)
 │   ├── src/
-│   ├── dt-core/                    ← Physics engine core (18 modules)
-│   │   ├── VehicleConfig.js        ← All 50+ vehicle parameters
-│   │   ├── HydrodynamicsEngine.js  ← 6-DOF Fossen dynamics + RK4
-│   │   ├── Kinematics.js           ← Coordinate transforms
-│   │   ├── EnvironmentModel.js     ← Water density, currents
-│   │   ├── StateEstimator.js       ← 15-state EKF
+│   ├── dt-core/                    ← Inti engine fisika (18 modul)
+│   │   ├── VehicleConfig.js        ← Semua 50+ parameter kendaraan
+│   │   ├── HydrodynamicsEngine.js  ← Dinamika Fossen 6-DOF + RK4
+│   │   ├── Kinematics.js           ← Transformasi koordinat
+│   │   ├── EnvironmentModel.js     ← Densitas air, arus
+│   │   ├── StateEstimator.js       ← EKF 15-state
 │   │   └── ...
-│   ├── services/                   ← Controllers & bridges (12 modules)
+│   ├── services/                   ← Controller & bridge (12 modul)
 │   │   ├── AUVMotionController.js  ← PID flight controller
 │   │   ├── SystemIdentificationEngine.js ← Box-Jenkins/RLS
-│   │   ├── ThrusterDynamicsModel.js ← T200 motor model
-│   │   ├── MockRosConnection.js    ← SITL ROS2 simulator
+│   │   ├── ThrusterDynamicsModel.js ← Model motor T200
+│   │   ├── MockRosConnection.js    ← Simulator ROS2 SITL
 │   │   └── ...
-│   └── components/                 ← React UI components
-│       ├── 3d/                     ← Three.js 3D viewport
-│       ├── dashboard/              ← Telemetry panels
-│       └── thruster-test/          ← HIL T200 test page
-│   └── public/                     ← Static assets & 3D models
-├── desktop/                        ← Electron desktop wrapper
-├── backend/                        ← Jetson/ROS2 vehicle code (sauvc26_code)
-├── simulator/                      ← Gazebo simulation
-└── tests/                          ← Unit & integration tests
+│   └── components/                 ← Komponen UI React
+│       ├── 3d/                     ← Viewport 3D Three.js
+│       ├── dashboard/              ← Panel telemetri
+│       └── thruster-test/          ← Halaman tes HIL T200
+│   └── public/                     ← Aset statis & model 3D
+├── desktop/                        ← Wrapper desktop Electron
+├── backend/                        ← Kode kendaraan Jetson/ROS2 (sauvc26_code)
+├── simulator/                      ← Simulasi Gazebo
+└── tests/                          ← Unit & integration test
 ```
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technologies |
+| Layer | Teknologi |
 |:------|:------------|
 | **Desktop Runtime** | Electron 44, Node.js |
 | **Frontend** | React 19, Vite, Vanilla CSS Design System |
-| **3D Graphics** | Three.js, React Three Fiber, Drei, WebGL |
-| **Physics Engine** | Custom 6-DOF Fossen Hydrodynamics, RK4 Integrator |
+| **Grafis 3D** | Three.js, React Three Fiber, Drei, WebGL |
+| **Engine Fisika** | Hidrodinamika Fossen 6-DOF kustom, Integrator RK4 |
 | **System ID** | ARMAX / ARX / OE / Box-Jenkins, Recursive Least Squares (λ=0.985) |
-| **State Estimation** | 15-State Extended Kalman Filter, Mahalanobis Gating |
-| **Robotics** | ROS 2 Humble / Jazzy, roslibjs, rosbridge_server |
-| **Simulation** | Gazebo Classic (WSLg), UUV Simulator Plugins |
+| **State Estimation** | Extended Kalman Filter 15-State, Mahalanobis Gating |
+| **Robotika** | ROS 2 Humble / Jazzy, roslibjs, rosbridge_server |
+| **Simulasi** | Gazebo Classic (WSLg), UUV Simulator Plugins |
 | **Hardware** | NVIDIA Jetson Nano, BlueRobotics T200, MS5837, DVL |
 
 ---
 
-## 📚 References
+## 📚 Referensi
 
 1. T. I. Fossen, *"Handbook of Marine Craft Hydrodynamics and Motion Control"*, 2nd ed., Wiley, 2021.
 2. Berg, V., *"Development and Commissioning of a DP System for ROV SF 30k"*, NTNU, 2012.
@@ -266,4 +275,4 @@ digitaltwin/
 
 ---
 
-Developed with ❤️ for **Tim Amarine FILKOM Universitas Brawijaya**.
+Dikembangkan dengan ❤️ untuk **Tim Amarine FILKOM Universitas Brawijaya**.

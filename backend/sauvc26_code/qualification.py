@@ -83,7 +83,7 @@ class GuidedMove(Node):
         ]
         self.imu_sub = self.create_subscription(
             Imu,
-            '/imu/data',
+            '/mavros/imu/data',
             self.imu_callback,
             qos_profile
         )

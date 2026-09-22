@@ -1,7 +1,8 @@
-import { Topic } from 'roslib';
+import { Topic, Service, ServiceRequest } from 'roslib';
 
 class TopicPublisher {
   constructor() {
+    this.ros = null;
     this.cmdVelTopic = null;
     this.thrusterCmdTopic = null;
     this.obstacleOrderTopic = null;
@@ -10,6 +11,7 @@ class TopicPublisher {
 
   init(ros) {
     if (!ros) return;
+    this.ros = ros;
 
     // 1. Standard ROS2 4-DOF Subsea Velocity Command
     this.cmdVelTopic = new Topic({
@@ -91,6 +93,38 @@ class TopicPublisher {
   publishGripperCommand(command) {
     if (!this.gripperCommandTopic) return;
     this.gripperCommandTopic.publish({ data: command });
+  }
+
+  /**
+   * Arm/disarm the REAL vehicle via MAVROS (/mavros/cmd/arming).
+   */
+  armDisarm(value, callback = () => {}) {
+    if (!this.ros) return;
+    const service = new Service({
+      ros: this.ros,
+      name: '/mavros/cmd/arming',
+      serviceType: 'mavros_msgs/CommandBool',
+    });
+    service.callService(new ServiceRequest({ value }), callback, (err) => {
+      console.error('[TopicPublisher] Arm/disarm service call failed:', err);
+    });
+  }
+
+  /**
+   * Set the REAL vehicle's flight mode via MAVROS (/mavros/set_mode).
+   * Only real ArduSub modes (MANUAL, STABILIZE, ALT_HOLD, GUIDED, ...) are valid here -
+   * QUALIFIKASI/FINAL are twin-only visualization modes and must never be sent.
+   */
+  setFlightMode(customMode, callback = () => {}) {
+    if (!this.ros) return;
+    const service = new Service({
+      ros: this.ros,
+      name: '/mavros/set_mode',
+      serviceType: 'mavros_msgs/SetMode',
+    });
+    service.callService(new ServiceRequest({ custom_mode: customMode }), callback, (err) => {
+      console.error('[TopicPublisher] Set mode service call failed:', err);
+    });
   }
 
   emergencyStop() {

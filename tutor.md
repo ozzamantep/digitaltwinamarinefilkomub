@@ -7,7 +7,7 @@ This guide connects the desktop Digital Twin to the Jetson onboard the AUV using
 1. Keep the AUV disarmed before connecting the application.
 2. Keep a physical emergency stop and a battery disconnect accessible.
 3. Test commands with propellers removed or with the vehicle restrained before an in-water test.
-4. Use `/cmd_vel` through the flight-controller safety node. Do not connect the dashboard directly to ESC outputs for the first test.
+4. Run `backend/sauvc26_code/manual_bridge.py` on the Jetson for manual piloting - it is the node that subscribes `/cmd_vel` and `/gripper/command` and forwards them to MAVROS. Never run it at the same time as `final.py`/`qualification.py`; both publish to `/mavros/setpoint_raw/local` and will fight for control. Do not connect the dashboard directly to ESC outputs for the first test.
 
 ## 2. Network Setup
 
@@ -73,7 +73,7 @@ Before opening the desktop application, confirm that the physical AUV publishes 
 ```bash
 ros2 topic list
 ros2 topic echo /odom --once
-ros2 topic echo /imu/data --once
+ros2 topic echo /mavros/imu/data --once
 ros2 topic echo /depth --once
 ros2 topic echo /battery_state --once
 ```
@@ -83,7 +83,7 @@ The application expects these ROS 2 topics:
 | Topic | Type | Purpose |
 |---|---|---|
 | `/odom` | `nav_msgs/msg/Odometry` | Position, orientation, and velocity |
-| `/imu/data` | `sensor_msgs/msg/Imu` | Attitude and acceleration |
+| `/mavros/imu/data` | `sensor_msgs/msg/Imu` | Attitude and acceleration (direct from Pixhawk via MAVROS) |
 | `/depth` | `sensor_msgs/msg/FluidPressure` | Pressure-derived depth |
 | `/dvl/range` | `sensor_msgs/msg/Range` | Altitude above the pool floor |
 | `/sonar/front/range` | `sensor_msgs/msg/Range` | Forward collision clearance |
@@ -93,6 +93,10 @@ The application expects these ROS 2 topics:
 | `/battery_state` | `sensor_msgs/msg/BatteryState` | Battery health |
 | `/thruster_outputs` | `std_msgs/msg/Float64MultiArray` | Signed normalized thruster feedback |
 | `/camera/image_raw/compressed` | `sensor_msgs/msg/CompressedImage` | Forward camera stream |
+| `/mission_state` | `std_msgs/msg/String` | Real mission events (flare hit, payload dropped) reported back from the vehicle |
+| `/mavros/state` | `mavros_msgs/msg/State` | Real armed/flight-mode feedback from the Pixhawk |
+
+The dashboard's arm/disarm and flight-mode buttons also call the real `/mavros/cmd/arming` and `/mavros/set_mode` MAVROS services directly whenever connected live - they are not just local UI state.
 
 ## 6. Start the Digital Twin
 
@@ -120,7 +124,7 @@ The application automatically leaves demo mode, subscribes to the telemetry topi
 
 ## 7. Verify Commands Safely
 
-On Jetson, monitor the velocity command topic:
+On Jetson, make sure `manual_bridge.py` is running (not the autonomous mission nodes), then monitor the velocity command topic:
 
 ```bash
 ros2 topic echo /cmd_vel
@@ -141,7 +145,7 @@ The gripper uses:
 ros2 topic echo /gripper/command
 ```
 
-Possible commands are `OPEN`, `CLOSE`, `GRASP`, and `RELEASE`.
+Possible commands are `OPEN`, `CLOSE`, `GRASP`, and `RELEASE`. On real hardware only `OPEN`/`RELEASE` actuate the servo (single-channel, release-only) - `manual_bridge.py` logs a warning and ignores `CLOSE`/`GRASP` since no hold position is calibrated.
 
 ## 8. Synchronizing a Different Start Position
 
@@ -159,7 +163,7 @@ If DVL bottom lock is unavailable, use IMU dead reckoning only temporarily; posi
 ## 9. Pre-Water Checklist
 
 - `ros2 topic echo /odom --once` returns a valid pose.
-- `/imu/data`, `/depth`, and `/battery_state` update continuously.
+- `/mavros/imu/data`, `/depth`, and `/battery_state` update continuously.
 - All sonar and DVL ranges are finite and match measured distances.
 - Dashboard status is `JETSON ORIN LINKED`.
 - `/cmd_vel` direction is verified while disarmed.
@@ -187,4 +191,4 @@ Check the `/odom` coordinate frame and axis conversion. The twin expects pool po
 
 ### Commands arrive but the AUV does not move
 
-Keep the vehicle disarmed until topic direction is verified, then check the flight-controller node, arming state, kill switch, ESC power, and `/cmd_vel` subscriber.
+Keep the vehicle disarmed until topic direction is verified, then check: is `manual_bridge.py` actually running on the Jetson (it is the only node that subscribes `/cmd_vel` for the real vehicle - the autonomous mission nodes ignore it), the arming state, kill switch, ESC power, and GUIDED mode.

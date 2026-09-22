@@ -46,8 +46,8 @@ class TopicSubscriber {
       }
     });
 
-    // 2. IMU (Orientation & Inclinometer)
-    this.subscribe(ros, '/imu/data', 'sensor_msgs/msg/Imu', (msg) => {
+    // 2. IMU (Orientation & Inclinometer) - direct from Pixhawk via MAVROS, no standalone IMU sensor
+    this.subscribe(ros, '/mavros/imu/data', 'sensor_msgs/msg/Imu', (msg) => {
       const q = msg.orientation;
       // Quaternion to Euler (Roll, Pitch, Yaw)
       const sinr_cosp = 2 * (q.w * q.x + q.y * q.z);
@@ -190,6 +190,13 @@ class TopicSubscriber {
         }
       }
     );
+
+    // 10. Real Vehicle Arm/Mode Feedback (physical -> digital sync, e.g. safety-switch disarm or QGC mode change)
+    this.subscribe(ros, '/mavros/state', 'mavros_msgs/msg/State', (msg) => {
+      const store = useVehicleStore.getState();
+      store.setArmed(msg.armed);
+      if (msg.mode) store.setFlightMode(msg.mode);
+    });
 
     console.log('[TopicSubscriber] Subscribed to BlueROV2 ROS2 subsea topics, /thruster_outputs, /yolo_target_coord & /mission_state');
   }

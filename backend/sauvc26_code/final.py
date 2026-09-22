@@ -99,6 +99,8 @@ class GuidedMove(Node):
             self.obstacle_order_callback,
             qos_profile
         )
+        # Reports real mission events (flare hit, payload dropped) back to the Digital Twin
+        self.mission_state_pub = self.create_publisher(String, '/mission_state', qos_profile)
         self.collision_safety = CollisionSafety()
         self.sonar_subs = [
             self.create_subscription(
@@ -111,7 +113,7 @@ class GuidedMove(Node):
         ]
         self.imu_sub = self.create_subscription(
             Imu,
-            '/imu/data',
+            '/mavros/imu/data',
             self.imu_callback,
             qos_profile
         )
@@ -196,6 +198,7 @@ class GuidedMove(Node):
         self.deadzone_flare = False
         self.ramming_flare = False
         self.ramming_start_time = None
+        self.ramming_flare_color = None
         self.avoid_inspect_start_time = None
         self.flare_state = 0
         self.flare_order = {}
@@ -253,7 +256,13 @@ class GuidedMove(Node):
 
     def leak_safety_callback(self, msg):
         self.collision_safety.update_leak(msg.data)
-    
+
+    def publish_mission_state(self, payload):
+        """Sync a real mission event (flare hit, payload dropped, ...) back to the Digital Twin"""
+        msg = String()
+        msg.data = json.dumps(payload)
+        self.mission_state_pub.publish(msg)
+
     def coord_callback(self, msg):
         """Callback from YOLO target coordinates - parses JSON with all detections"""
         try:
@@ -377,6 +386,12 @@ class GuidedMove(Node):
         self.ball_drop_pending = False
         self.ball_dropped = True
         self.get_logger().info('🎯 [PAYLOAD] Servo dropper actuated: Ball released into target drum!')
+        pos = self.current_pose.pose.position if self.current_pose is not None else None
+        self.publish_mission_state({
+            'event': 'payload_dropped',
+            'x': pos.x if pos is not None else None,
+            'z': pos.y if pos is not None else None,
+        })
 
     def rotate(self, yaw_rate):
         """Set velocity command for rotate (yaw_rate in rad/s)"""
@@ -415,6 +430,7 @@ class GuidedMove(Node):
         self.deadzone_flare = False
         self.ramming_flare = False
         self.ramming_start_time = None
+        self.ramming_flare_color = None
         self.avoid_inspect_start_time = None
 
         self.sway_start_y = None  # Reset sway state
@@ -911,6 +927,7 @@ class GuidedMove(Node):
                         self.get_logger().info(f'💥 RACING HARD RAMMING: Plowing at {FORWARD_SPEED_FLARE:.2f}m/s through flare! ({ram_elapsed:.1f}s / 1.6s)')
                     else:
                         self.get_logger().info('🏆 Flare KNOCKDOWN COMPLETE: Target smashed! Accelerating to next milestone.')
+                        self.publish_mission_state({'event': 'flare_hit', 'color': self.ramming_flare_color})
                         self.ramming_flare = False
                         self.ramming_start_time = None
                         self.change_state(2)
@@ -982,6 +999,7 @@ class GuidedMove(Node):
                         self.get_logger().info(f'💥 FLARE {current_flare_name} LOCKED - CHARGING FULL 1.55 m/s SMASH!')
                         self.ramming_flare = True
                         self.ramming_start_time = current_time
+                        self.ramming_flare_color = current_flare_name.split(' ')[0].lower()
                         self.forward(FORWARD_SPEED_FLARE)
                         self.cmd.yaw_rate = 0.0
                         return
