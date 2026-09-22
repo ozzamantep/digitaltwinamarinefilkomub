@@ -1,4 +1,4 @@
-import { Topic, Service, ServiceRequest } from 'roslib';
+import { Topic, Service } from 'roslib';
 
 class TopicPublisher {
   constructor() {
@@ -105,7 +105,7 @@ class TopicPublisher {
       name: '/mavros/cmd/arming',
       serviceType: 'mavros_msgs/CommandBool',
     });
-    service.callService(new ServiceRequest({ value }), callback, (err) => {
+    service.callService({ value }, callback, (err) => {
       console.error('[TopicPublisher] Arm/disarm service call failed:', err);
     });
   }
@@ -122,7 +122,7 @@ class TopicPublisher {
       name: '/mavros/set_mode',
       serviceType: 'mavros_msgs/SetMode',
     });
-    service.callService(new ServiceRequest({ custom_mode: customMode }), callback, (err) => {
+    service.callService({ custom_mode: customMode }, callback, (err) => {
       console.error('[TopicPublisher] Set mode service call failed:', err);
     });
   }
