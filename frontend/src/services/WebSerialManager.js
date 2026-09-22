@@ -4,7 +4,7 @@
  * Provides:
  * 1. Direct Web Serial API connection to USB Microcontroller (Arduino/ESP32)
  * 2. Bi-directional data pipeline:
- *    - Digital -> Physical: Sends PWM commands (1300 - 1600 µs, safety-limited)
+ *    - Digital -> Physical: Sends PWM commands (1300 - 1700 µs, safety-limited)
  *    - Physical -> Digital: Receives live telemetry (RPM, Thrust, Current, Voltage)
  * 3. High-fidelity Virtual Hardware Simulator fallback for offline testing
  */
@@ -190,7 +190,7 @@ class WebSerialManager {
     try {
       const textEncoder = new TextEncoder();
       const writer = this.port.writable.getWriter();
-      const message = `PWM:${Math.max(1300, Math.min(1600, Math.round(pwm)))}\n`; // SAFETY: hard clamp 1300-1600 µs
+      const message = `PWM:${Math.max(1300, Math.min(1700, Math.round(pwm)))}\n`; // SAFETY: hard clamp 1300-1700 µs
       await writer.write(textEncoder.encode(message));
       writer.releaseLock();
     } catch (err) {

@@ -100,7 +100,10 @@ class GuidedMove(Node):
             Bool, '/leak_detected', self.leak_safety_callback, qos_profile
         )
         self.last_safety_reason = None
-        
+
+        # Reports the real onboard FSM state back to the Digital Twin (1:1 mission sync)
+        self.mission_state_pub = self.create_publisher(String, '/mission_state', qos_profile)
+
         # PositionTarget
         self.cmd = PositionTarget()
         self.cmd.coordinate_frame = PositionTarget.FRAME_BODY_NED
@@ -236,6 +239,13 @@ class GuidedMove(Node):
             5: '🏆 SURFACING AT DOCK'
         }
         self.get_logger().info(f'State Changed -> {state_names.get(new_state, new_state)}')
+        self.publish_mission_state({'activeTarget': f'[QUAL] {state_names.get(new_state, new_state)}'})
+
+    def publish_mission_state(self, payload):
+        """Sync a real mission event/state back to the Digital Twin"""
+        msg = String()
+        msg.data = json.dumps(payload)
+        self.mission_state_pub.publish(msg)
     
     def reset(self):
         self.cmd.velocity.x = 0.0
@@ -385,6 +395,13 @@ class GuidedMove(Node):
         self.vel_pub.publish(self.cmd)
 
 def main():
+    from sauvc26_code.control_lock import acquire_control_lock
+    try:
+        acquire_control_lock('qualification')
+    except RuntimeError as e:
+        print(f'[FATAL] {e}')
+        return
+
     sleep_duration = 0
     if len(sys.argv) > 1:
         try:

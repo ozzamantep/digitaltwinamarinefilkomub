@@ -22,7 +22,7 @@ export class ThrusterTwinEngine {
     this.breakawayRpm = 150; // Static friction: motor jumps to this speed once out of deadband
     // SAFETY: command limits (propeller pernah pecah di full range 1100-1900)
     this.minPwm = options.minPwm ?? 1300;
-    this.maxPwm = options.maxPwm ?? 1600;
+    this.maxPwm = options.maxPwm ?? 1700;
 
     // Nominal empirical coefficients for T200 @ 16V
     // Max forward thrust ~5.25 kgf (~51.5 N) @ 1900 µs (~3800 RPM)
@@ -117,7 +117,7 @@ export class ThrusterTwinEngine {
    * Step the Digital Twin forward in time by dt seconds
    * Incorporates first-order motor lag & produces full DT telemetry
    * 
-   * @param {number} pwm - Commanded PWM (clamped to safety limits 1300-1600 µs)
+   * @param {number} pwm - Commanded PWM (clamped to safety limits 1300-1700 µs)
    * @param {number} dt - Time step in seconds
    * @param {number|null} measuredThrust - Real physical thrust if available (for RLS)
    * @param {number|null} measuredRpm - Real measured RPM if available (fuses live load/medium effects, e.g. water resistance, into the twin's state)
@@ -133,12 +133,12 @@ export class ThrusterTwinEngine {
     const alpha = Math.min(1.0, dt / this.motorTimeConstant);
     this.currentRpm += alpha * (targetRpm - this.currentRpm);
 
-    // 2b. Sensor fusion: nudge the twin's RPM state toward the real measured RPM so
-    // unmodeled load (e.g. water resistance vs bench-calibrated air curve) is reflected,
-    // not just the open-loop PWM->RPM prediction. Falls back to pure model when no sensor.
+    // 2b. Sensor fusion: snap the twin's RPM state directly to the real measured RPM (no lag)
+    // so unmodeled load (e.g. water resistance vs bench-calibrated air curve) - or the prop
+    // being stopped by hand - is reflected instantly, not just the open-loop PWM->RPM prediction.
+    // Falls back to pure model when no sensor is connected (measuredRpm === null).
     if (measuredRpm !== null) {
-      const rpmCorrectionGain = 0.35;
-      this.currentRpm += rpmCorrectionGain * (measuredRpm - this.currentRpm);
+      this.currentRpm = measuredRpm;
     }
 
     // 3. Digital Twin predicted thrust

@@ -24,9 +24,9 @@ console.log(`Reverse 1300 µs: RPM = ${revRpm.toFixed(1)}, Thrust = ${revThrust.
 console.assert(revRpm < -1000 && revRpm > -2000, `Reverse RPM out of range: ${revRpm}`);
 console.assert(revThrust < -5.0 && revThrust > -15.0, `Reverse thrust out of range: ${revThrust}`);
 
-// 4. Test safety clamp: step() must limit commands to 1300-1600 µs
+// 4. Test safety clamp: step() must limit commands to 1300-1700 µs
 const clampedResult = engine.step(1900, 0.05);
-console.assert(clampedResult.pwm === 1600, `Expected step(1900) clamped to 1600, got ${clampedResult.pwm}`);
+console.assert(clampedResult.pwm === 1700, `Expected step(1900) clamped to 1700, got ${clampedResult.pwm}`);
 const clampedRev = engine.step(1100, 0.05);
 console.assert(clampedRev.pwm === 1300, `Expected step(1100) clamped to 1300, got ${clampedRev.pwm}`);
 

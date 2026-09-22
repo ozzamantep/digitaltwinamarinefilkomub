@@ -63,6 +63,19 @@ FLARE_STRATEGIES = {
     'y': 'TABRAK',       # Yellow flare: Ram and knockdown
 }
 
+# Human-readable state labels, mirrored to the Digital Twin via /mission_state for 1:1 FSM sync
+STATE_LABELS = {
+    0: 'Dive & Launch',
+    1: 'Scanning',
+    2: 'Forward Transit',
+    3: 'U-Turn',
+    4: 'Gate Transit',
+    5: 'Surfacing',
+    6: 'Obstacle Avoidance',
+    7: 'Drum Approach',
+    8: 'Flare Engagement',
+}
+
 class GuidedMove(Node):
     def __init__(self):
         super().__init__('final')
@@ -465,6 +478,8 @@ class GuidedMove(Node):
                 self.get_logger().info('Flare')
                 self.last_flare_time = self.get_clock().now()
                 self.flare_pid.reset()
+
+            self.publish_mission_state({'activeTarget': f'[FINAL] {STATE_LABELS.get(new_state, new_state)}'})
     
     def reset(self):
         """Set velocity command for stop"""
@@ -1025,6 +1040,13 @@ class GuidedMove(Node):
 
 
 def main():
+    from sauvc26_code.control_lock import acquire_control_lock
+    try:
+        acquire_control_lock('final')
+    except RuntimeError as e:
+        print(f'[FATAL] {e}')
+        return
+
     sleep_duration = 0
     if len(sys.argv) > 1:
         try:

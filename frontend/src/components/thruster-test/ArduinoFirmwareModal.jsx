@@ -20,7 +20,7 @@ export default function ArduinoFirmwareModal({ isOpen, onClose }) {
  * 7. Pin A3 (I)   -> ACS712 / INA219 (Optional for Current A)
  * 
  * Protocol:
- * - IN (Laptop -> Arduino):  "PWM:1550\\n" (1300 - 1600 us, safety-limited)
+ * - IN (Laptop -> Arduino):  "PWM:1550\\n" (1300 - 1700 us, safety-limited)
  * - OUT (Arduino -> Laptop): {"rpm":2410,"thrust":30.8,"current":3.8,"voltage":16.1}
  */
 
@@ -33,7 +33,7 @@ const int NEUTRAL_PWM = 1500;
 // Variables
 int currentPwm = NEUTRAL_PWM;
 unsigned long lastTelemetryTime = 0;
-const unsigned long TELEMETRY_INTERVAL_MS = 50; // 20 Hz telemetry stream
+const unsigned long TELEMETRY_INTERVAL_MS = 20; // 50 Hz telemetry stream (fast stop-detection)
 
 // ===== Mode Sensor RPM =====
 // 0 = DEMO   : RPM disimulasikan dari PWM (tanpa hardware tambahan)
@@ -116,8 +116,8 @@ void loop() {
 
     if (command.startsWith("PWM:")) {
       int pwmVal = command.substring(4).toInt();
-      // SAFETY: hard limit 1300 - 1600 us (full range dapat merusak propeller)
-      pwmVal = constrain(pwmVal, 1300, 1600);
+      // SAFETY: hard limit 1300 - 1700 us (full range dapat merusak propeller)
+      pwmVal = constrain(pwmVal, 1300, 1700);
       currentPwm = pwmVal;
       esc.writeMicroseconds(currentPwm);
     } else if (command == "STOP") {
@@ -130,7 +130,7 @@ void loop() {
   sampleBackEmf(); // sampling kontinu tiap iterasi loop (~9 kHz ADC)
 #endif
 
-  // 2. Transmit Telemetry back to Digital Twin at 20 Hz
+  // 2. Transmit Telemetry back to Digital Twin at 50 Hz
   unsigned long now = millis();
   if (now - lastTelemetryTime >= TELEMETRY_INTERVAL_MS) {
     lastTelemetryTime = now;
@@ -147,10 +147,10 @@ void loop() {
     unsigned long lastUs = lastPulseUs;
     interrupts();
 
-    if (periodUs > 0 && (micros() - lastUs) < 1000000UL) {
+    if (periodUs > 0 && (micros() - lastUs) < 150000UL) {
       measuredRpm = 60000000.0 / ((float)periodUs * PULSES_PER_REV);
     } else {
-      measuredRpm = 0; // >1 detik tanpa pulsa = propeller berhenti
+      measuredRpm = 0; // >150ms tanpa pulsa = propeller berhenti (dipercepat dari 1s untuk minim delay)
     }
     // Satu hall sensor tidak bisa deteksi arah: ambil arah dari perintah PWM
     if (currentPwm < 1476) measuredRpm = -measuredRpm;
@@ -159,11 +159,11 @@ void loop() {
 #elif RPM_MODE == 2
     // RPM NYATA dari back-EMF: motor BLDC yang diputar (oleh ESC ATAU jari)
     // menghasilkan tegangan sinus di kabel fasa → frekuensinya = kecepatan putar.
-    if (bemfPeriodUs > 0 && (micros() - bemfLastCrossUs) < 1000000UL) {
+    if (bemfPeriodUs > 0 && (micros() - bemfLastCrossUs) < 150000UL) {
       // RPM mekanik = 60e6 / (periode listrik us) / jumlah pole-pair
       measuredRpm = 60000000.0 / ((float)bemfPeriodUs * MOTOR_POLE_PAIRS);
     } else {
-      measuredRpm = 0; // >1 detik tanpa siklus = propeller berhenti
+      measuredRpm = 0; // >150ms tanpa siklus = propeller berhenti (dipercepat dari 1s untuk minim delay)
     }
     // Back-EMF 1 fasa tidak bisa deteksi arah: ambil arah dari perintah PWM
     if (currentPwm < 1476) measuredRpm = -measuredRpm;

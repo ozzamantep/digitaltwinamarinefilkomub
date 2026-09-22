@@ -7,7 +7,7 @@ This guide connects the desktop Digital Twin to the Jetson onboard the AUV using
 1. Keep the AUV disarmed before connecting the application.
 2. Keep a physical emergency stop and a battery disconnect accessible.
 3. Test commands with propellers removed or with the vehicle restrained before an in-water test.
-4. Run `backend/sauvc26_code/manual_bridge.py` on the Jetson for manual piloting - it is the node that subscribes `/cmd_vel` and `/gripper/command` and forwards them to MAVROS. Never run it at the same time as `final.py`/`qualification.py`; both publish to `/mavros/setpoint_raw/local` and will fight for control. Do not connect the dashboard directly to ESC outputs for the first test.
+4. Run `backend/sauvc26_code/manual_bridge.py` on the Jetson for manual piloting - it is the node that subscribes `/cmd_vel` and `/gripper/command` and forwards them to MAVROS. It cannot run at the same time as `final.py`/`qualification.py` - `control_lock.py` enforces this automatically (a PID lock file) and the second node will fail to start with a clear error instead of silently fighting for control. Do not connect the dashboard directly to ESC outputs for the first test.
 
 ## 2. Network Setup
 

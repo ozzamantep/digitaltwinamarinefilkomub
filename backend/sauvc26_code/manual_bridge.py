@@ -7,6 +7,8 @@ can actually drive the physical AUV, not just the simulated twin.
 
 Run this INSTEAD OF final.py/qualification.py - only one node should publish to
 /mavros/setpoint_raw/local at a time, or their commands will fight each other.
+This is enforced automatically by control_lock.py (PID lock file) - starting a
+second control node while another is alive will fail fast with a clear error.
 Vehicle must be in GUIDED mode (set via arm.py or QGroundControl) for setpoints
 to be obeyed.
 
@@ -114,6 +116,13 @@ class ManualBridge(Node):
 
 
 def main():
+    from sauvc26_code.control_lock import acquire_control_lock
+    try:
+        acquire_control_lock('manual_bridge')
+    except RuntimeError as e:
+        print(f'[FATAL] {e}')
+        return
+
     rclpy.init()
     node = ManualBridge()
     try:

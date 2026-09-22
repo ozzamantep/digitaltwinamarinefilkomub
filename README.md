@@ -127,7 +127,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 | **Identifikasi Sistem Box-Jenkins** | RLS pseudo-linear online (λ=0.985) mengadaptasi 6 parameter plant/noise | `src/services/SystemIdentificationEngine.js` |
 | **Competition Safety Supervisor** | Latch arah, active repulsion dinding/lantai, emergency surface, fail-safe sensor | `src/services/SafetySupervisor.js` |
 | **PID Flight Controller** | Depth hold, heading lock, stabilisasi attitude dengan anti-windup | `src/services/AUVMotionController.js` |
-| **Dinamika Thruster** | Lookup table T200, motor lag (τ=0.35s), voltage sag, PWM deadband, clamp misi 1200–1800 µs (bench in-air: 1300–1600) | `src/services/ThrusterDynamicsModel.js` |
+| **Dinamika Thruster** | Lookup table T200, motor lag (τ=0.35s), voltage sag, PWM deadband, clamp misi 1200–1800 µs (bench in-air: 1300–1700) | `src/services/ThrusterDynamicsModel.js` |
 | **HIL Single-Thruster Twin** | Model PWM→RPM→thrust T200 + RLS adaptif; state RPM di-*fusion* (nudge gain 0.35) ke RPM asli dari sensor Hall/back-EMF via Web Serial, sehingga beban nyata (mis. hambatan air) ikut tercermin, bukan hanya prediksi open-loop | `src/dt-core/ThrusterTwinEngine.js` |
 | **PINN Residual** | Physics-Informed Neural Network untuk kompensasi dinamika yang tak termodelkan | `src/dt-core/PINNResidual.js` |
 | **Model Lingkungan** | Densitas air UNESCO, turbulensi arus Gauss-Markov, tekanan kedalaman | `src/dt-core/EnvironmentModel.js` |
@@ -160,7 +160,7 @@ TAM = [  +0.707,  +0.707,  +0.707,  +0.707,   0.000,   0.000 ]  ← Surge (X)
 ### Kontrol Dua Arah (Digital ↔ Fisik)
 
 - **Misi otonom** (`final.py`, `qualification.py`) berjalan di Jetson dan menggerakkan kendaraan secara independen lewat `/mavros/setpoint_raw/local`; keduanya melaporkan event kembali lewat `/mission_state`.
-- **Manual pilot / gripper** dari dashboard dijembatani ke Pixhawk asli oleh `backend/sauvc26_code/manual_bridge.py`, yang subscribe ke `/cmd_vel` + `/gripper/command` lalu mempublish ulang setpoint MAVROS/panggilan servo. Jalankan node ini **sebagai pengganti** node misi otonom - jangan pernah keduanya berjalan bersamaan, karena setpoint-nya akan saling berebut.
+- **Manual pilot / gripper** dari dashboard dijembatani ke Pixhawk asli oleh `backend/sauvc26_code/manual_bridge.py`, yang subscribe ke `/cmd_vel` + `/gripper/command` lalu mempublish ulang setpoint MAVROS/panggilan servo. Jalankan node ini **sebagai pengganti** node misi otonom - `backend/sauvc26_code/control_lock.py` menegakkan ini secara otomatis (file-lock PID): node kedua yang mencoba start akan gagal dengan error jelas selama node kontrol pertama masih hidup, bukan cuma disiplin operator.
 - Tombol arm/disarm dan flight-mode memanggil service `/mavros/cmd/arming` dan `/mavros/set_mode` yang sebenarnya (via `TopicPublisher.armDisarm`/`setFlightMode`) setiap kali dashboard terhubung live (bukan demo/SITL).
 
 ### Keselamatan Tabrakan Fisik
