@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { computeFastestOrder } from '../services/RouteOptimizer.js';
 
 const useVehicleStore = create((set, get) => ({
   // Connection
@@ -327,6 +328,35 @@ const useVehicleStore = create((set, get) => ({
       };
     }
     return s;
+  }),
+
+  // Reorders the currently enabled, not-yet-completed obstacles/flares into the
+  // fastest sequence (shortest total travel distance) from the vehicle's current
+  // position, using RouteOptimizer's brute-force TSP search.
+  optimizeObstacleOrder: () => set((s) => {
+    const flaresFallen = s.flaresFallen || { red: false, blue: false, yellow: false, orange: false };
+    const flareColorByKey = { orange_flare: 'orange', blue_flare: 'blue', red_flare: 'red', yellow_flare: 'yellow' };
+
+    const pending = s.obstacleOrder.filter((key) => {
+      if (s.obstacleEnabled[key] === false) return false;
+      const color = flareColorByKey[key];
+      if (color && flaresFallen[color]) return false;
+      if (key === 'gate' && s.obstacles.gate?.passed) return false;
+      if (key === 'drum_red_tgt' && s.obstacles.drum_red_tgt?.dropped) return false;
+      return true;
+    });
+    const done = s.obstacleOrder.filter((key) => !pending.includes(key));
+
+    const targets = pending
+      .map((key) => {
+        const obstacle = s.obstacles[key];
+        if (!obstacle) return null;
+        return { key, x: obstacle.x, z: obstacle.z, strategy: s.flareStrategies[key] };
+      })
+      .filter(Boolean);
+
+    const fastestPending = computeFastestOrder(s.position, targets);
+    return { obstacleOrder: [...fastestPending, ...done] };
   }),
 
   // Dynamic Obstacle Map (World 3D Positions & Real-Time Sync)

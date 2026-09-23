@@ -1210,6 +1210,18 @@ export default function ControlPanel() {
                 🚪 Gate Dulu
               </button>
             </div>
+            <button
+              className="control-btn"
+              onClick={() => {
+                setSelectedOrderPreset(null);
+                useVehicleStore.getState().optimizeObstacleOrder();
+                topicPublisher.publishObstacleOrder(useVehicleStore.getState().obstacleOrder);
+              }}
+              title="Hitung urutan tercepat (jarak tempuh total terpendek) dari posisi kapal saat ini menggunakan pencarian TSP"
+              style={{ padding: '3px 2px', fontSize: '0.52rem', marginTop: '3px', width: '100%' }}
+            >
+              ⚡ Optimalkan (Tercepat)
+            </button>
           </div>
 
           {/* Dynamic Coordinate Sliders, Flare Action Mode & Task Reordering */}
