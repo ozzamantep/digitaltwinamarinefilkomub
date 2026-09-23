@@ -33,8 +33,8 @@ Digital Twin ini menghubungkan wahana fisik nyata (*Physical Twin*) dengan lingk
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                 PHYSICAL TWIN (HARDWARE / HIL)              │
-│  - Komputer Onboard: NVIDIA Jetson Nano                     │
-│  - Sensor: IMU 9-DOF, Barometer MS5837, DVL, Forward Cam   │
+│  - Komputer Onboard: NVIDIA Jetson Orin Nano                │
+│  - Sensor: IMU 9-DOF, Barometer MS5837, Sonar Depan, Forward Cam │
 │  - Aktuator: 6x BlueRobotics T200 Brushless ESC             │
 └──────────────────────────────┬──────────────────────────────┘
                                │

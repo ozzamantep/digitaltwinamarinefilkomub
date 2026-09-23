@@ -19,10 +19,10 @@
 ```
 ┌──────────────────────────────────────────────┐                ┌────────────────────────────────────────┐
 │         SUBSEA ROBOT / SIMULATOR             │                │       DIGITAL TWIN DESKTOP SOFTWARE    │
-│       (Jetson Nano / WSL2 Gazebo)            │                │         (Electron + React Three.js)    │
+│       (Jetson Orin Nano / WSL2 Gazebo)       │                │         (Electron + React Three.js)    │
 ├──────────────────────────────────────────────┤  WebSocket     ├────────────────────────────────────────┤
 │ • ROS 2 Humble / Jazzy Nodes                 │ ────────────►  │ • 3D CAD AUV Viewport & Thruster Viz  │
-│ • Sensor IMU, Depth (MS5837), DVL, Battery   │  (Port 9090)   │ • BJ / RLS Online Adaptive SysID      │
+│ • Sensor IMU, Depth (MS5837), Sonar Depan, Battery │  (Port 9090)   │ • BJ / RLS Online Adaptive SysID      │
 │ • Subsea Camera Feed (/camera/image_raw)     │                │ • Closed-Loop PID Flight Tuning       │
 │ • 6-Thruster Allocation Matrix (TAM)         │ ◄────────────  │ • 15-State EKF Sensor Fusion          │
 └──────────────────────────────────────────────┘   /cmd_vel     └────────────────────────────────────────┘
@@ -55,7 +55,7 @@ Sensor Data ──► EKF Predict ──► EKF Update ──► SysID (RLS) ─
 | **4× Thruster Horizontal Vektor** | T200 di sudut 45° untuk vektor surge, sway, dan yaw penuh |
 | **2× Thruster Vertikal Ducted** | Di dalam cowling hidung dan ekor aerodinamis untuk heave & pitch |
 | **Sistem Baterai** | 4× tabung tekanan silinder, disusun dua tingkat (4S LiPo 16V) |
-| **Elektronik** | Enclosure akrilik bening: Jetson Nano, flight controller, LED status |
+| **Elektronik** | Enclosure akrilik bening: Jetson Orin Nano, flight controller, LED status |
 | **Massa Kering** | 22.5 kg (nominal; dapat dikonfigurasi 20-25 kg) |
 | **Volume Displaced** | 22.54 L (0.02254345 m³, mendekati netral buoyancy) |
 | **Dimensi** | 540mm × 280mm × 240mm |
@@ -263,7 +263,7 @@ digitaltwin/
 | **State Estimation** | Extended Kalman Filter 15-State, Mahalanobis Gating |
 | **Robotika** | ROS 2 Humble / Jazzy, roslibjs, rosbridge_server |
 | **Simulasi** | Gazebo Classic (WSLg), UUV Simulator Plugins |
-| **Hardware** | NVIDIA Jetson Nano, BlueRobotics T200, MS5837, DVL |
+| **Hardware** | NVIDIA Jetson Orin Nano, BlueRobotics T200, MS5837, Pixhawk 2.4.8 |
 
 ---
 
