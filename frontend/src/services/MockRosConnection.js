@@ -53,7 +53,7 @@ class MockRosConnection {
     this.orbitSweptAngle = 0;
     this.orbitLastBearing = null;
     this.drumRetryUsed = false;
-    this.drumOrbitGuideOverride = null;
+    this.drumOrbitCmd = null;
     this.orangeInspectStartTime = 0;
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
@@ -88,7 +88,7 @@ class MockRosConnection {
     this.orbitSweptAngle = 0;
     this.orbitLastBearing = null;
     this.drumRetryUsed = false;
-    this.drumOrbitGuideOverride = null;
+    this.drumOrbitCmd = null;
     this.orangeInspectStartTime = 0;
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
@@ -218,7 +218,7 @@ class MockRosConnection {
     this.orbitSweptAngle = 0;
     this.orbitLastBearing = null;
     this.drumRetryUsed = false;
-    this.drumOrbitGuideOverride = null;
+    this.drumOrbitCmd = null;
     this.orangeInspectStartTime = 0;
     useVehicleStore.getState().resetPayload();
     useVehicleStore.getState().resetFlares();
@@ -741,9 +741,14 @@ class MockRosConnection {
             } else {
               this.drumHoldStartTime = null; // drifted off-line, restart the hold
             }
-          } else if (t - this.drumWaitTime > 0.8) {
-            this.missionStage++; // advance to the drum_orbit inspection waypoint
+          } else {
+            this.drumHolding = false; // already dropped - stop forcing a full stop, let it advance/orbit
+            if (t - this.drumWaitTime > 0.8) {
+              this.missionStage++; // advance to the drum_orbit inspection waypoint
+            }
           }
+        } else {
+          this.drumHolding = false; // only ever hold during the pre-drop alignment check
         }
 
         if (currentWp.id === 'drum_orbit') {
@@ -752,8 +757,16 @@ class MockRosConnection {
           const dx = this.simX - pivotX;
           const dz = this.simZ - pivotZ;
           let radius = Math.hypot(dx, dz);
-          if (radius < 0.05) radius = 0.6;
-          const bearing = Math.atan2(dz, dx);
+          let bearing;
+          if (radius < 0.05) {
+            // Vehicle is (almost) exactly at the pivot right after dropping - atan2 on a
+            // near-zero vector is numerically unstable (jitters wildly frame to frame), so
+            // pick a deterministic starting bearing from the current heading instead.
+            bearing = this.simHeading;
+            radius = 0.6;
+          } else {
+            bearing = Math.atan2(dz, dx);
+          }
           if (this.orbitLastBearing != null) {
             let dBearing = bearing - this.orbitLastBearing;
             while (dBearing > Math.PI) dBearing -= Math.PI * 2;
@@ -762,12 +775,31 @@ class MockRosConnection {
           }
           this.orbitLastBearing = bearing;
 
+          // Face the drum THE WHOLE TIME (not the direction of travel) and strafe
+          // sideways to trace the circle - otherwise the forward camera points along
+          // the path of motion and never actually sees the drum/ball during the loop.
           const ORBIT_RADIUS = 0.6;
-          const LEAD_ANGLE = 0.6; // rad ahead along the circle - drives the pursuit curve
-          const leadBearing = bearing + LEAD_ANGLE;
-          this.drumOrbitGuideOverride = {
-            x: pivotX + Math.cos(leadBearing) * ORBIT_RADIUS,
-            z: pivotZ + Math.sin(leadBearing) * ORBIT_RADIUS,
+          const ORBIT_TANGENT_SPEED = 0.35;
+          const RADIUS_KP = 0.8;
+          const outwardX = dx / radius;
+          const outwardZ = dz / radius;
+          const tangentX = -outwardZ;
+          const tangentZ = outwardX;
+          const radiusError = radius - ORBIT_RADIUS;
+          const worldVX = tangentX * ORBIT_TANGENT_SPEED - outwardX * radiusError * RADIUS_KP;
+          const worldVZ = tangentZ * ORBIT_TANGENT_SPEED - outwardZ * radiusError * RADIUS_KP;
+          const bodyVel = Kinematics.worldToBodyVelocity(
+            { x: worldVX, y: worldVZ, z: 0 },
+            { roll: 0, pitch: 0, yaw: this.simHeading }
+          );
+
+          const desiredYaw = Math.atan2(pivotZ - this.simZ, pivotX - this.simX);
+          const orbitYawCmd = this.computeSmoothSteering(desiredYaw, this.simHeading, 0.5, 0.02);
+
+          this.drumOrbitCmd = {
+            surge: Math.max(-0.5, Math.min(0.5, bodyVel.u)),
+            sway: Math.max(-0.5, Math.min(0.5, bodyVel.v)),
+            yaw: orbitYawCmd,
           };
 
           if (Math.abs(this.orbitSweptAngle) >= Math.PI * 2 - 0.05) {
@@ -780,16 +812,18 @@ class MockRosConnection {
               this.drumHoldStartTime = null;
               this.orbitSweptAngle = 0;
               this.orbitLastBearing = null;
-              this.drumOrbitGuideOverride = null;
+              this.drumOrbitCmd = null;
               this.missionStage--; // back to drum_drop for a retry approach
             } else {
               console.log(succeeded
                 ? '[MockROS] ✅ Inspection orbit complete: ball confirmed inside the drum.'
                 : '[MockROS] ⚠️ Inspection orbit complete: ball still missed after retry - continuing mission (no further automatic retrieval).');
-              this.drumOrbitGuideOverride = null;
+              this.drumOrbitCmd = null;
               this.missionStage++;
             }
           }
+        } else {
+          this.drumOrbitCmd = null;
         }
       }
 
@@ -841,10 +875,6 @@ class MockRosConnection {
       let guideX = currentWp.x;
       let guideZ = currentWp.z;
       let detourActive = false;
-      if (currentWp.id === 'drum_orbit' && this.drumOrbitGuideOverride) {
-        guideX = this.drumOrbitGuideOverride.x;
-        guideZ = this.drumOrbitGuideOverride.z;
-      }
       {
         const legX = currentWp.x - this.simX;
         const legZ = currentWp.z - this.simZ;
@@ -934,6 +964,16 @@ class MockRosConnection {
         cmdYaw = 0;
       }
 
+      // Inspection orbit: strafe sideways around the drum while facing it, instead of
+      // the usual car-like heading-toward-waypoint steering (which would point the
+      // camera along the direction of travel and never actually see the ball/drum).
+      let cmdSway = 0;
+      if (currentWp.id === 'drum_orbit' && this.drumOrbitCmd) {
+        cmdSurge = this.drumOrbitCmd.surge;
+        cmdSway = this.drumOrbitCmd.sway;
+        cmdYaw = this.drumOrbitCmd.yaw;
+      }
+
       let finalTarget = `[FINAL] ${currentWp.name}`;
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
         finalTarget = `[FINAL] ${waypoints.length}/${waypoints.length}: 🎯 BALL DROPPED INTO RED DRUM!`;
@@ -958,7 +998,7 @@ class MockRosConnection {
       } else {
         ctrl = auvMotionController.update(
           currentPose,
-          applySafety({ surge: cmdSurge, sway: 0, yaw: cmdYaw, heave: cmdHeave, turnBoost: isSharpTurn }),
+          applySafety({ surge: cmdSurge, sway: cmdSway, yaw: cmdYaw, heave: cmdHeave, turnBoost: isSharpTurn }),
           'MANUAL',
           true,
           dt,
