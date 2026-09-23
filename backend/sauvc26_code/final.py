@@ -34,6 +34,17 @@ MAV_CMD_DO_SET_SERVO = 183
 DROPPER_SERVO_CHANNEL = 9     # AUX output channel - calibrate to actual wiring
 DROPPER_SERVO_PWM_RELEASE = 1900  # PWM for open/release position - calibrate on bench
 
+# Precision drum drop: must stay centered and fully stopped this long before releasing
+DRUM_HOVER_CONFIRM_SEC = 0.8
+# Post-drop inspection orbit: circles the drop point once so every side is visible on
+# camera. There is no trained vision class for "ball in drum" yet, so a miss cannot be
+# detected automatically - this only brings the drum into view for operator confirmation.
+# The dropper servo is release-only (no calibrated grasp position), so automatic
+# retrieval of a missed ball is not possible with the current hardware.
+DRUM_ORBIT_RADIUS = 0.6       # m - inspection loop radius around the drop point
+DRUM_ORBIT_SPEED = 0.35       # m/s - tangential speed while orbiting
+DRUM_ORBIT_RADIUS_KP = 0.8    # proportional gain correcting radius drift
+
 # Tuned High-Stability PID Gains
 KP_DEPTH = 0.75
 KI_DEPTH = 0.12
@@ -74,6 +85,7 @@ STATE_LABELS = {
     6: 'Obstacle Avoidance',
     7: 'Drum Approach',
     8: 'Flare Engagement',
+    9: 'Drum Drop Inspection Orbit',
 }
 
 class GuidedMove(Node):
@@ -202,6 +214,10 @@ class GuidedMove(Node):
         self.last_drum_time = None
         self.close_to_drum = False
         self.deadzone_drum = False
+        self.drum_hover_start_time = None  # how long we've held centered+stopped above the drum
+        self.drum_world_position = None    # pose recorded at the moment of drop, orbit pivot
+        self.orbit_last_bearing = None
+        self.orbit_swept_angle = 0.0
         
         # flare tracking
         self.flare_coord = None
@@ -439,6 +455,7 @@ class GuidedMove(Node):
         self.deadzone_gate = False
         self.close_to_drum = False
         self.deadzone_drum = False
+        self.drum_hover_start_time = None
         self.close_to_flare = False
         self.deadzone_flare = False
         self.ramming_flare = False
@@ -478,6 +495,8 @@ class GuidedMove(Node):
                 self.get_logger().info('Flare')
                 self.last_flare_time = self.get_clock().now()
                 self.flare_pid.reset()
+            elif (new_state == 9):
+                self.get_logger().info('Drum drop inspection orbit')
 
             self.publish_mission_state({'activeTarget': f'[FINAL] {STATE_LABELS.get(new_state, new_state)}'})
     
@@ -736,7 +755,7 @@ class GuidedMove(Node):
                         self.gate_passed = True
                         self.forward_to_gate = False
                         self.change_state(1)  # Scan for Drum
-                elif self.prev_state == 7:
+                elif self.prev_state == 9:
                     if elapsed < FORWARD_DURATION_DRUM:
                         self.forward(FORWARD_SPEED_DRUM)
                     else:
@@ -908,11 +927,23 @@ class GuidedMove(Node):
                     return
                 
                 if self.close_to_drum:
-                    if self.deadzone_drum or (self.drum_coord is not None and abs(self.drum_coord.x) < 0.12):
-                        self.get_logger().info('🎯 Centered over Drum: Instant ball drop release!')
-                        self.drop_ball_payload()
-                        self.change_state(2)
+                    centered = self.deadzone_drum or (self.drum_coord is not None and abs(self.drum_coord.x) < 0.12)
+                    if centered:
+                        # Hold full stop directly above the drum - do not drop while still drifting
+                        self.reset()
+                        if self.drum_hover_start_time is None:
+                            self.drum_hover_start_time = current_time
+                            self.get_logger().info('🎯 Centered over Drum - holding still to confirm before drop...')
+                        hover_elapsed = (current_time - self.drum_hover_start_time).nanoseconds / 1e9
+                        if hover_elapsed >= DRUM_HOVER_CONFIRM_SEC:
+                            self.get_logger().info(f'✅ Held steady for {hover_elapsed:.1f}s directly above drum: releasing payload!')
+                            self.drop_ball_payload()
+                            self.drum_world_position = self.current_pose.pose.position if self.current_pose is not None else None
+                            self.orbit_last_bearing = None
+                            self.orbit_swept_angle = 0.0
+                            self.change_state(9)
                     else:
+                        self.drum_hover_start_time = None  # drifted off-center, restart the hold timer
                         self.track_drum()
                         self.forward(0.35)
                 else:
@@ -1022,8 +1053,53 @@ class GuidedMove(Node):
                         self.track_flare()
                         self.forward(approach_speed)
 
-            
-                
+            case 9: # Orbit around the drop point for visual inspection of ball placement.
+                # No trained vision class exists yet for "ball in drum", so success/failure
+                # cannot be detected automatically - this maneuver only brings the drum into
+                # camera view from every side; a human operator must confirm from the feed.
+                # The dropper servo is release-only (no calibrated grasp position), so a
+                # missed ball cannot be retrieved automatically with the current hardware.
+                self.maintain_depth()
+
+                if self.drum_world_position is None or self.current_pose is None:
+                    self.get_logger().warn('[DRUM-ORBIT] No drop position recorded, skipping inspection orbit')
+                    self.change_state(2)
+                    return
+
+                dx = self.current_pose.pose.position.x - self.drum_world_position.x
+                dy = self.current_pose.pose.position.y - self.drum_world_position.y
+                radius = math.hypot(dx, dy)
+                if radius < 0.05:
+                    # Too close to the pivot for a stable bearing - nudge outward first
+                    dx, dy, radius = DRUM_ORBIT_RADIUS, 0.0, DRUM_ORBIT_RADIUS
+
+                bearing = math.atan2(dy, dx)
+                if self.orbit_last_bearing is not None:
+                    self.orbit_swept_angle += self.normalize_angle(bearing - self.orbit_last_bearing)
+                self.orbit_last_bearing = bearing
+
+                if abs(self.orbit_swept_angle) >= 2 * math.pi:
+                    self.get_logger().info('🔄 Inspection orbit complete - confirm ball placement from the camera feed (no automatic retrieval possible). Continuing mission.')
+                    self.publish_mission_state({'event': 'drum_inspection_complete'})
+                    self.change_state(2)
+                    return
+
+                outward_x, outward_y = dx / radius, dy / radius
+                tangent_x, tangent_y = -outward_y, outward_x
+                radius_error = radius - DRUM_ORBIT_RADIUS
+                world_vx = tangent_x * DRUM_ORBIT_SPEED - outward_x * radius_error * DRUM_ORBIT_RADIUS_KP
+                world_vy = tangent_y * DRUM_ORBIT_SPEED - outward_y * radius_error * DRUM_ORBIT_RADIUS_KP
+
+                # Keep the camera trained on the drum throughout the loop
+                yaw = self.get_yaw()
+                desired_yaw = self.normalize_angle(bearing + math.pi)
+                yaw_error = self.normalize_angle(desired_yaw - yaw)
+                self.cmd.yaw_rate = max(-0.5, min(0.5, yaw_error * 1.2))
+
+                # World-frame orbit velocity -> body-frame (FRAME_BODY_NED) command
+                self.cmd.velocity.x = max(-DRUM_ORBIT_SPEED * 1.3, min(DRUM_ORBIT_SPEED * 1.3, math.cos(yaw) * world_vx + math.sin(yaw) * world_vy))
+                self.cmd.velocity.y = max(-DRUM_ORBIT_SPEED * 1.3, min(DRUM_ORBIT_SPEED * 1.3, -math.sin(yaw) * world_vx + math.cos(yaw) * world_vy))
+
         safety_reason = self.collision_safety.apply(self.cmd)
         if safety_reason != self.last_safety_reason:
             if safety_reason:
