@@ -197,6 +197,49 @@ const useVehicleStore = create((set, get) => ({
       drum_red_tgt: s.obstacles.drum_red_tgt ? { ...s.obstacles.drum_red_tgt, dropped: true } : s.obstacles.drum_red_tgt,
     },
   })),
+  // Autonomous drop with real success/failure based on the vehicle's actual position at the
+  // moment of release (unlike dropBallIntoDrum above, which always assumes a perfect hit) -
+  // used by the "stop, align, drop, then orbit to inspect" drum mission sequence.
+  attemptDrumDrop: (dropX, dropZ, drumX = 10.5, drumZ = 1.5) => set((s) => {
+    const distance = Math.hypot(dropX - drumX, dropZ - drumZ);
+    const inDrum = distance <= 0.45;
+    return {
+      gripperState: 'OPEN',
+      payloadState: {
+        ...s.payloadState,
+        loaded: false,
+        grasped: false,
+        dropped: true,
+        inDrum,
+        onFloor: !inDrum,
+        retrievalActive: !inDrum,
+        x: inDrum ? drumX : dropX,
+        y: inDrum ? 0.20 : 0.08,
+        z: inDrum ? drumZ : dropZ,
+      },
+      obstacles: {
+        ...s.obstacles,
+        drum_red_tgt: inDrum && s.obstacles.drum_red_tgt ? { ...s.obstacles.drum_red_tgt, dropped: true } : s.obstacles.drum_red_tgt,
+        ball_red_floor: inDrum ? undefined : { id: 'ball_red', name: 'BALL_RED', x: dropX, z: dropZ, y: 0.15, width: 0.2, height: 0.2, color: '#ef4444', detected: true },
+      },
+    };
+  }),
+  // Re-grasps a ball that missed the drum so the autonomous mission can retry the drop -
+  // only possible in simulation (ground-truth position); the real dropper servo is
+  // release-only with no calibrated grasp position, so this has no hardware equivalent yet.
+  retrieveFallenBall: () => set((s) => ({
+    gripperState: 'HOLDING',
+    payloadState: {
+      ...s.payloadState,
+      onFloor: false,
+      grasped: true,
+      retrievalActive: false,
+    },
+    obstacles: {
+      ...s.obstacles,
+      ball_red_floor: undefined,
+    },
+  })),
   dropPayload: (x = 10.5, z = 1.5) => set((s) => ({
     gripperState: 'OPEN',
     payloadState: { ...s.payloadState, loaded: false, dropped: true, inDrum: true, grasped: false, x, y: 0.20, z },

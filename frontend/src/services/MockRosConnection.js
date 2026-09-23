@@ -46,6 +46,14 @@ class MockRosConnection {
     this.missionComplete = false;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
+    this.drumHoldStartTime = null;
+    this.drumHolding = false;
+    this.drumDropAlignedX = null;
+    this.drumDropAlignedZ = null;
+    this.orbitSweptAngle = 0;
+    this.orbitLastBearing = null;
+    this.drumRetryUsed = false;
+    this.drumOrbitGuideOverride = null;
     this.orangeInspectStartTime = 0;
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
@@ -73,6 +81,14 @@ class MockRosConnection {
     this.missionComplete = false;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
+    this.drumHoldStartTime = null;
+    this.drumHolding = false;
+    this.drumDropAlignedX = null;
+    this.drumDropAlignedZ = null;
+    this.orbitSweptAngle = 0;
+    this.orbitLastBearing = null;
+    this.drumRetryUsed = false;
+    this.drumOrbitGuideOverride = null;
     this.orangeInspectStartTime = 0;
     this.lastFlareHitTime = 0;
     this.avoidInspectStartTime = null;
@@ -195,6 +211,14 @@ class MockRosConnection {
     this.lastFinalDepth = this.simDepth;
     this.drumDropTriggered = false;
     this.drumWaitTime = 0;
+    this.drumHoldStartTime = null;
+    this.drumHolding = false;
+    this.drumDropAlignedX = null;
+    this.drumDropAlignedZ = null;
+    this.orbitSweptAngle = 0;
+    this.orbitLastBearing = null;
+    this.drumRetryUsed = false;
+    this.drumOrbitGuideOverride = null;
     this.orangeInspectStartTime = 0;
     useVehicleStore.getState().resetPayload();
     useVehicleStore.getState().resetFlares();
@@ -645,6 +669,15 @@ class MockRosConnection {
             speed: 0.22,
             threshold: 0.65,
           });
+          rawWaypoints.push({
+            id: 'drum_orbit',
+            title: `[#${stepNum}] 🔄 Inspect Drop (Orbit Drum)`,
+            x: drumX,
+            z: drumZ,
+            targetDepth: 0.85,
+            speed: 0.35,
+            threshold: 0.65,
+          });
           stepNum++;
         }
       });
@@ -677,8 +710,11 @@ class MockRosConnection {
 
       // Flare knockdown is handled only by oriented 3D contact in SubseaCollisionEngine.
 
-      // Drum Approach & Instant Ball Drop
-      if (currentWp.id === 'drum_search' || currentWp.id === 'drum_drop') {
+      // Drum Approach: precision hover-hold before drop, then orbit to inspect placement.
+      // NOTE: unlike the real vehicle (no "ball" vision class, release-only servo), this
+      // simulator has ground-truth geometry, so it CAN check success and retry - the real
+      // Jetson code (final.py) can only orbit for a human operator to confirm visually.
+      if (currentWp.id === 'drum_search' || currentWp.id === 'drum_drop' || currentWp.id === 'drum_orbit') {
         if (distToWp < 2.0) {
           const tiltFactor = Math.min(1.0, (2.0 - distToWp) / 1.0);
           targetPitchAngle = -20.0 * tiltFactor;
@@ -686,14 +722,73 @@ class MockRosConnection {
 
         if (currentWp.id === 'drum_drop') {
           if (!this.drumDropTriggered) {
-            this.drumDropTriggered = true;
-            this.drumWaitTime = t;
-            store.setGripperState('OPEN');
-            store.dropBallIntoDrum(drumX, drumZ);
+            // Must be stopped exactly in line with the drum (tight lateral + longitudinal
+            // tolerance) continuously for 0.8s before releasing - not an instant drop.
+            const lateralOffset = Math.abs(this.simZ - drumZ);
+            const longitudinalOffset = Math.abs(this.simX - drumX);
+            const isAligned = lateralOffset < 0.15 && longitudinalOffset < 0.35;
+            this.drumHolding = isAligned;
+            if (isAligned) {
+              if (this.drumHoldStartTime == null) this.drumHoldStartTime = t;
+              if (t - this.drumHoldStartTime > 0.8) {
+                this.drumDropTriggered = true;
+                this.drumWaitTime = t;
+                this.drumDropAlignedX = this.simX;
+                this.drumDropAlignedZ = this.simZ;
+                store.setGripperState('OPEN');
+                store.attemptDrumDrop(this.simX, this.simZ, drumX, drumZ);
+              }
+            } else {
+              this.drumHoldStartTime = null; // drifted off-line, restart the hold
+            }
+          } else if (t - this.drumWaitTime > 0.8) {
+            this.missionStage++; // advance to the drum_orbit inspection waypoint
           }
+        }
 
-          if (t - this.drumWaitTime > 0.8) {
-            this.missionStage++;
+        if (currentWp.id === 'drum_orbit') {
+          const pivotX = this.drumDropAlignedX ?? drumX;
+          const pivotZ = this.drumDropAlignedZ ?? drumZ;
+          const dx = this.simX - pivotX;
+          const dz = this.simZ - pivotZ;
+          let radius = Math.hypot(dx, dz);
+          if (radius < 0.05) radius = 0.6;
+          const bearing = Math.atan2(dz, dx);
+          if (this.orbitLastBearing != null) {
+            let dBearing = bearing - this.orbitLastBearing;
+            while (dBearing > Math.PI) dBearing -= Math.PI * 2;
+            while (dBearing < -Math.PI) dBearing += Math.PI * 2;
+            this.orbitSweptAngle += dBearing;
+          }
+          this.orbitLastBearing = bearing;
+
+          const ORBIT_RADIUS = 0.6;
+          const LEAD_ANGLE = 0.6; // rad ahead along the circle - drives the pursuit curve
+          const leadBearing = bearing + LEAD_ANGLE;
+          this.drumOrbitGuideOverride = {
+            x: pivotX + Math.cos(leadBearing) * ORBIT_RADIUS,
+            z: pivotZ + Math.sin(leadBearing) * ORBIT_RADIUS,
+          };
+
+          if (Math.abs(this.orbitSweptAngle) >= Math.PI * 2 - 0.05) {
+            const succeeded = !!store.payloadState?.inDrum;
+            if (!succeeded && !this.drumRetryUsed) {
+              console.log('[MockROS] ⚠️ Inspection orbit complete: ball missed the drum - retrieving and retrying the drop.');
+              this.drumRetryUsed = true;
+              store.retrieveFallenBall();
+              this.drumDropTriggered = false;
+              this.drumHoldStartTime = null;
+              this.orbitSweptAngle = 0;
+              this.orbitLastBearing = null;
+              this.drumOrbitGuideOverride = null;
+              this.missionStage--; // back to drum_drop for a retry approach
+            } else {
+              console.log(succeeded
+                ? '[MockROS] ✅ Inspection orbit complete: ball confirmed inside the drum.'
+                : '[MockROS] ⚠️ Inspection orbit complete: ball still missed after retry - continuing mission (no further automatic retrieval).');
+              this.drumOrbitGuideOverride = null;
+              this.missionStage++;
+            }
           }
         }
       }
@@ -724,6 +819,7 @@ class MockRosConnection {
 
       if (
         currentWp.id !== 'drum_drop' &&
+        currentWp.id !== 'drum_orbit' &&
         canAdvance &&
         this.missionStage < waypoints.length - 1
       ) {
@@ -745,6 +841,10 @@ class MockRosConnection {
       let guideX = currentWp.x;
       let guideZ = currentWp.z;
       let detourActive = false;
+      if (currentWp.id === 'drum_orbit' && this.drumOrbitGuideOverride) {
+        guideX = this.drumOrbitGuideOverride.x;
+        guideZ = this.drumOrbitGuideOverride.z;
+      }
       {
         const legX = currentWp.x - this.simX;
         const legZ = currentWp.z - this.simZ;
@@ -827,9 +927,22 @@ class MockRosConnection {
       const legSpeed = detourActive ? Math.min(currentWp.speed, 0.85) : currentWp.speed;
       let cmdSurge = legSpeed * forwardDrive;
 
+      // Force a genuine full stop while holding position above the drum for the
+      // pre-drop alignment confirmation (not just a slow crawl).
+      if (this.drumHolding) {
+        cmdSurge = 0;
+        cmdYaw = 0;
+      }
+
       let finalTarget = `[FINAL] ${currentWp.name}`;
       if (currentWp.id === 'drum_drop' && this.drumDropTriggered) {
         finalTarget = `[FINAL] ${waypoints.length}/${waypoints.length}: 🎯 BALL DROPPED INTO RED DRUM!`;
+      }
+      if (currentWp.id === 'drum_drop' && this.drumHolding) {
+        finalTarget = `[FINAL] Holding position over drum to confirm alignment...`;
+      }
+      if (currentWp.id === 'drum_orbit') {
+        finalTarget = `[FINAL] 🔄 Orbiting drum to inspect ball placement...`;
       }
       if (this.missionComplete) {
         finalTarget = '[FINAL] ✅ MISSION COMPLETE — Docked at pool edge, thrusters OFF';
