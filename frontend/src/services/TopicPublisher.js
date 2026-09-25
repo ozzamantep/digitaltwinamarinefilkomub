@@ -120,9 +120,12 @@ class TopicPublisher {
     const service = new Service({
       ros: this.ros,
       name: '/mavros/set_mode',
-      serviceType: 'mavros_msgs/SetMode',
+      serviceType: 'mavros_msgs/srv/SetMode',
     });
-    service.callService({ custom_mode: customMode }, callback, (err) => {
+    service.callService({ base_mode: 0, custom_mode: customMode }, (res) => {
+      console.log(`[TopicPublisher] Flight mode set to ${customMode}:`, res);
+      callback(res);
+    }, (err) => {
       console.error('[TopicPublisher] Set mode service call failed:', err);
     });
   }

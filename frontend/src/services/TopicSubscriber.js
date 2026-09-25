@@ -1,4 +1,5 @@
 import { Topic } from 'roslib';
+import * as THREE from 'three';
 import useVehicleStore from '../store/vehicleStore';
 import sysIdEngine from './SystemIdentificationEngine';
 
@@ -23,10 +24,13 @@ class TopicSubscriber {
       const y3D = 2.0 - currentDepth;
 
       const surgeVelocity = msg.twist.twist.linear.x;
+      const store = useVehicleStore.getState();
+      store.setLastOdomTime(Date.now());
 
-      useVehicleStore.getState().updatePose({
+      const hasRecentImu = Date.now() - (store.lastImuTime || 0) < 3000;
+      store.updatePose({
         position: { x: pos.x, y: y3D, z: pos.y },
-        orientation: { x: ori.x, y: ori.z, z: -ori.y, w: ori.w },
+        ...(hasRecentImu ? {} : { orientation: { x: ori.x, y: ori.z, z: -ori.y, w: ori.w } }),
         depth: currentDepth,
         speed: {
           linear: Math.sqrt(msg.twist.twist.linear.x ** 2 + msg.twist.twist.linear.y ** 2),
@@ -62,7 +66,17 @@ class TopicSubscriber {
       const cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
       const yaw = Math.atan2(siny_cosp, cosy_cosp) * (180 / Math.PI);
 
-      useVehicleStore.getState().updateIMU({
+      const rollRad = (roll * Math.PI) / 180;
+      const pitchRad = (pitch * Math.PI) / 180;
+      const yawRad = (yaw * Math.PI) / 180;
+
+      // 6-DOF Three.js Quaternion (Y is Up: roll, -yaw around Y, pitch)
+      const eulerThree = new THREE.Euler(rollRad, -yawRad, pitchRad, 'YXZ');
+      const quat = new THREE.Quaternion().setFromEuler(eulerThree);
+
+      const store = useVehicleStore.getState();
+      store.setLastImuTime(Date.now());
+      store.updateIMU({
         roll,
         pitch,
         yaw: (yaw + 360) % 360,
@@ -70,17 +84,35 @@ class TopicSubscriber {
         accelY: msg.linear_acceleration.y,
         accelZ: msg.linear_acceleration.z,
       });
+
+      // Synchronize 3D orientation directly from real Pixhawk IMU
+      store.updateOrientation({
+        x: quat.x,
+        y: quat.y,
+        z: quat.z,
+        w: quat.w,
+      });
+      store.setHeadingRad(yawRad);
     });
 
     // 3. Depth & Pressure Sensor (MS5837 Barometer)
     this.subscribe(ros, '/depth', 'sensor_msgs/msg/FluidPressure', (msg) => {
       const pressureKPa = msg.fluid_pressure / 1000;
       const depthMeters = (msg.fluid_pressure - 101325) / (997 * 9.81);
-      useVehicleStore.getState().updateDepthSensor({
-        depth: Math.max(0, depthMeters),
+      const safeDepth = Math.max(0, depthMeters);
+      const store = useVehicleStore.getState();
+      store.updateDepthSensor({
+        depth: safeDepth,
         pressure: pressureKPa,
         temperature: 26.5,
       });
+      // Synchronize 3D depth in pool (Y = 2.0 - depth)
+      if (Date.now() - (store.lastOdomTime || 0) > 1000) {
+        store.updatePosition({
+          ...store.position,
+          y: Math.max(0.15, Math.min(1.95, 2.0 - safeDepth)),
+        });
+      }
     });
 
     // 4. DVL / Sonar Altitude to Bottom
@@ -115,16 +147,48 @@ class TopicSubscriber {
       }
     );
 
-    // 7. Live Real-World Thruster Feedback (PWM / Efforts from Jetson / Micro-ROS)
+    // 7. Live Real-World Thruster Feedback (/thruster_outputs dari manual_bridge.py)
+    // Format: Float64MultiArray dengan data -1.0..+1.0 per thruster (6 channel)
     this.subscribe(
       ros,
       '/thruster_outputs',
       'std_msgs/msg/Float64MultiArray',
       (msg) => {
         if (msg.data && msg.data.length >= 6) {
-          // Convert normalized -1.0..+1.0 back to -100..+100 percentage
-          const thrusterEfforts = msg.data.map((val) => Math.round(val * 100));
-          useVehicleStore.getState().updateThrusters(thrusterEfforts);
+          // Convert normalized -1.0..+1.0 → -100..+100 %, PRESERVE SIGN for direction
+          const thrusterEfforts = msg.data.map((val) => {
+            const v = Number(val) || 0;
+            return Math.max(-100, Math.min(100, Math.round(v * 100)));
+          });
+          // RPM is always positive magnitude; direction carried by effortSign in BlueROV2Model
+          const thrusterRPMs = thrusterEfforts.map((eff) => Math.round(Math.abs(eff) * 35));
+          console.debug('[TopicSubscriber] /thruster_outputs →', thrusterEfforts);
+          useVehicleStore.getState().updateThrusters(thrusterEfforts, thrusterRPMs);
+        }
+      }
+    );
+
+    // 7b. Direct MAVROS Physical ESC PWM (/mavros/rc/out)
+    // NOTE: mavros_msgs/msg/RCOut may NOT be registered in rosbridge by default.
+    // If this subscription silently fails, /thruster_outputs above (published by
+    // manual_bridge.py's rc_out_callback) is the reliable fallback.
+    this.subscribe(
+      ros,
+      '/mavros/rc/out',
+      'mavros_msgs/msg/RCOut',
+      (msg) => {
+        if (msg.channels && msg.channels.length >= 6) {
+          // T200 PWM: 1100 = full reverse, 1500 = stop, 1900 = full forward
+          const thrusterEfforts = msg.channels.slice(0, 6).map((pwm) => {
+            const val = Number(pwm) || 1500;
+            // Guard: channels reporting 0 means "not active" — treat as neutral
+            if (val === 0) return 0;
+            const effort = (val - 1500) / 400; // -1.0 to +1.0
+            return Math.max(-100, Math.min(100, Math.round(effort * 100)));
+          });
+          const thrusterRPMs = thrusterEfforts.map((eff) => Math.round(Math.abs(eff) * 35));
+          console.debug('[TopicSubscriber] /mavros/rc/out →', thrusterEfforts);
+          useVehicleStore.getState().updateThrusters(thrusterEfforts, thrusterRPMs);
         }
       }
     );

@@ -302,7 +302,137 @@ export default function JetsonTerminalBox() {
         </button>
       </div>
 
-      {/* Preset Quick Tabs */}
+      {/* Quick Command Presets */}
+      <div style={{ marginBottom: '8px' }}>
+        <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', letterSpacing: '0.05em' }}>
+          ⚡ QUICK COMMANDS
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+
+          {/* 1. Restart manual_bridge */}
+          <button
+            id="btn-restart-bridge"
+            onClick={() => {
+              const cmd = 'pkill -f manual_bridge.py; sleep 2; cd ~/digitaltwinamarinefilkomub && source /opt/ros/humble/setup.bash && python3 backend/sauvc26_code/manual_bridge.py';
+              setCommand(cmd);
+              navigator.clipboard.writeText(cmd).catch(() => {});
+              appendLog('📋 Loaded: Restart manual_bridge.py', 'info');
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,240,255,0.12) 0%, rgba(0,80,180,0.15) 100%)',
+              border: '1px solid rgba(0,240,255,0.3)',
+              borderRadius: '5px',
+              padding: '5px 4px',
+              color: '#00f0ff',
+              fontSize: '0.62rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              textAlign: 'left',
+              lineHeight: '1.3',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,240,255,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0,240,255,0.12) 0%, rgba(0,80,180,0.15) 100%)'}
+            title="pkill -f manual_bridge.py && python3 backend/sauvc26_code/manual_bridge.py"
+          >
+            🔄 Restart Bridge
+            <div style={{ fontSize: '0.55rem', color: 'rgba(0,240,255,0.6)', fontWeight: '400' }}>manual_bridge.py</div>
+          </button>
+
+          {/* 2. Launch backend digital twin */}
+          <button
+            id="btn-launch-backend"
+            onClick={() => {
+              const cmd = 'cd ~/digitaltwinamarinefilkomub && source /opt/ros/humble/setup.bash && python3 backend/launch_digitaltwin.launch.py';
+              setCommand(cmd);
+              navigator.clipboard.writeText(cmd).catch(() => {});
+              appendLog('📋 Loaded: Launch Digital Twin backend', 'info');
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(0,255,136,0.1) 0%, rgba(0,120,80,0.15) 100%)',
+              border: '1px solid rgba(0,255,136,0.3)',
+              borderRadius: '5px',
+              padding: '5px 4px',
+              color: '#00ff88',
+              fontSize: '0.62rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              textAlign: 'left',
+              lineHeight: '1.3',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,255,136,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0,255,136,0.1) 0%, rgba(0,120,80,0.15) 100%)'}
+            title="Launch digital twin backend + rosbridge"
+          >
+            🚀 Launch Backend
+            <div style={{ fontSize: '0.55rem', color: 'rgba(0,255,136,0.6)', fontWeight: '400' }}>launch_digitaltwin</div>
+          </button>
+
+          {/* 3. Echo /cmd_vel */}
+          <button
+            id="btn-echo-cmdvel"
+            onClick={() => {
+              const cmd = 'ros2 topic echo /cmd_vel';
+              setCommand(cmd);
+              navigator.clipboard.writeText(cmd).catch(() => {});
+              appendLog('📋 Loaded: ros2 topic echo /cmd_vel', 'info');
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(250,204,21,0.1) 0%, rgba(150,100,0,0.15) 100%)',
+              border: '1px solid rgba(250,204,21,0.3)',
+              borderRadius: '5px',
+              padding: '5px 4px',
+              color: '#facc15',
+              fontSize: '0.62rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              textAlign: 'left',
+              lineHeight: '1.3',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(250,204,21,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(250,204,21,0.1) 0%, rgba(150,100,0,0.15) 100%)'}
+            title="ros2 topic echo /cmd_vel"
+          >
+            📡 Echo cmd_vel
+            <div style={{ fontSize: '0.55rem', color: 'rgba(250,204,21,0.6)', fontWeight: '400' }}>/cmd_vel monitor</div>
+          </button>
+
+          {/* 4. Check MAVROS nodes */}
+          <button
+            id="btn-check-mavros"
+            onClick={() => {
+              const cmd = 'ros2 node list | grep mavros';
+              setCommand(cmd);
+              navigator.clipboard.writeText(cmd).catch(() => {});
+              appendLog('📋 Loaded: ros2 node list | grep mavros', 'info');
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(80,0,150,0.15) 100%)',
+              border: '1px solid rgba(168,85,247,0.3)',
+              borderRadius: '5px',
+              padding: '5px 4px',
+              color: '#a855f7',
+              fontSize: '0.62rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              textAlign: 'left',
+              lineHeight: '1.3',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(80,0,150,0.15) 100%)'}
+            title="ros2 node list | grep mavros"
+          >
+            🔍 Cek MAVROS
+            <div style={{ fontSize: '0.55rem', color: 'rgba(168,85,247,0.6)', fontWeight: '400' }}>node list mavros</div>
+          </button>
+
+        </div>
+      </div>
+
+      {/* Preset Classic Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
         <button
           onClick={() => setCommand(defaultCmd)}

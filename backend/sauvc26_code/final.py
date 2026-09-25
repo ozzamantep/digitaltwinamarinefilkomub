@@ -7,6 +7,11 @@ import math
 import sys
 import json
 
+import os
+# Add backend/ to path so sauvc26_code package is found — append (not insert)
+# so real ROS2 packages from /opt/ros/humble always take priority over stubs.
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from geometry_msgs.msg import PoseStamped, Point
 from sensor_msgs.msg import BatteryState, Imu, Range
 from std_msgs.msg import Bool, String

@@ -7,6 +7,18 @@ import mockRos from '../../services/MockRosConnection';
 import sysIdEngine from '../../services/SystemIdentificationEngine';
 import DigitalTwinPanel from './DigitalTwinPanel';
 
+function computeThrustersFromVelocity(surge = 0, sway = 0, heave = 0, yaw = 0) {
+  const t1 = Math.max(-100, Math.min(100, Math.round((surge + yaw - sway) * 100)));
+  const t2 = Math.max(-100, Math.min(100, Math.round((surge - yaw + sway) * 100)));
+  const t3 = Math.max(-100, Math.min(100, Math.round((surge + yaw + sway) * 100)));
+  const t4 = Math.max(-100, Math.min(100, Math.round((surge - yaw - sway) * 100)));
+  const t5 = Math.max(-100, Math.min(100, Math.round(heave * 100)));
+  const t6 = Math.max(-100, Math.min(100, Math.round(heave * 100)));
+  const thrusters = [t1, t2, t3, t4, t5, t6];
+  const rpms = thrusters.map((v) => Math.round(Math.abs(v) * 32));
+  return { thrusters, rpms };
+}
+
 function VirtualSubseaJoystick() {
   const areaRef = useRef(null);
   const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
@@ -39,7 +51,9 @@ function VirtualSubseaJoystick() {
       const sway = dx / maxRadius;
 
       setControlInput({ surge, sway });
-      topicPublisher.publishVelocity(surge, 0);
+      const { thrusters, rpms } = computeThrustersFromVelocity(surge, sway, 0, 0);
+      useVehicleStore.getState().updateThrusters(thrusters, rpms);
+      topicPublisher.publishVelocity(surge, sway, 0, 0);
     },
     [setControlInput]
   );
@@ -61,7 +75,8 @@ function VirtualSubseaJoystick() {
     setIsDragging(false);
     setKnobPos({ x: 0, y: 0 });
     setControlInput({ surge: 0, sway: 0 });
-    topicPublisher.publishVelocity(0, 0);
+    useVehicleStore.getState().updateThrusters([0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]);
+    topicPublisher.publishVelocity(0, 0, 0, 0);
   };
 
   return (
@@ -204,7 +219,7 @@ export default function ControlPanel() {
     let animFrame;
     const DEADZONE = 0.12;
     const applyDeadzone = (val) => Math.abs(val) < DEADZONE ? 0 : (val - Math.sign(val) * DEADZONE) / (1 - DEADZONE);
-    const flightModes = ['MANUAL', 'STABILIZE', 'ALT_HOLD'];
+    const flightModes = ['MANUAL', 'STABILIZE', 'ALT_HOLD', 'GUIDED'];
 
     const pollGamepad = () => {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -233,7 +248,13 @@ export default function ControlPanel() {
           // Only update if any stick is active
           if (currentArmed && (Math.abs(surge) > 0 || Math.abs(sway) > 0 || Math.abs(yaw) > 0 || Math.abs(heave) > 0)) {
             store.setControlInput({ surge, sway, yaw, heave });
-            topicPublisher.publishVelocity(surge, yaw);
+            const { thrusters, rpms } = computeThrustersFromVelocity(surge, sway, heave, yaw);
+            store.updateThrusters(thrusters, rpms);
+            topicPublisher.publishVelocity(surge, sway, heave, yaw);
+          } else if (currentArmed && gp.axes.some((a) => Math.abs(a) > 0.05)) {
+            // Neutral stick release
+            const { thrusters, rpms } = computeThrustersFromVelocity(0, 0, 0, 0);
+            store.updateThrusters(thrusters, rpms);
           }
         }
 
@@ -387,11 +408,13 @@ export default function ControlPanel() {
       if (keysPressed.current['KeyA']) sway -= 1; // Lateral Kiri
       if (keysPressed.current['KeyE']) yaw += 1;  // Putar Kanan (Yaw)
       if (keysPressed.current['KeyQ']) yaw -= 1;  // Putar Kiri (Yaw)
-      if (keysPressed.current['Space']) heave -= 1; // Surface (Naik)
-      if (keysPressed.current['ShiftLeft']) heave += 1; // Dive (Selam)
+      if (keysPressed.current['Space'])     heave += 1; // Dive (Selam/Turun) — cocok dengan fisik
+      if (keysPressed.current['ShiftLeft']) heave -= 1; // Surface (Naik) — cocok dengan fisik
 
       setControlInput({ surge, sway, yaw, heave });
-      topicPublisher.publishVelocity(surge, yaw);
+      const { thrusters, rpms } = computeThrustersFromVelocity(surge, sway, heave, yaw);
+      useVehicleStore.getState().updateThrusters(thrusters, rpms);
+      topicPublisher.publishVelocity(surge, sway, heave, yaw);
     },
     [armed, activeTab, flightMode, setControlInput]
   );
@@ -411,11 +434,13 @@ export default function ControlPanel() {
       if (keysPressed.current['KeyA']) sway -= 1;
       if (keysPressed.current['KeyE']) yaw += 1;
       if (keysPressed.current['KeyQ']) yaw -= 1;
-      if (keysPressed.current['Space']) heave -= 1;
-      if (keysPressed.current['ShiftLeft']) heave += 1;
+      if (keysPressed.current['Space'])     heave += 1; // Dive
+      if (keysPressed.current['ShiftLeft']) heave -= 1; // Surface
 
       setControlInput({ surge, sway, yaw, heave });
-      topicPublisher.publishVelocity(surge, yaw);
+      const { thrusters, rpms } = computeThrustersFromVelocity(surge, sway, heave, yaw);
+      useVehicleStore.getState().updateThrusters(thrusters, rpms);
+      topicPublisher.publishVelocity(surge, sway, heave, yaw);
     },
     [setControlInput]
   );
@@ -547,8 +572,8 @@ export default function ControlPanel() {
       {activeTab === 'pilot' && (
         <>
           {/* Standard Flight Modes */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginBottom: '6px' }}>
-            {['MANUAL', 'STABILIZE', 'ALT_HOLD'].map((m) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+            {['MANUAL', 'STABILIZE', 'ALT_HOLD', 'GUIDED'].map((m) => (
               <button
                 key={m}
                 className={`control-btn ${flightMode === m ? 'active' : ''}`}
@@ -556,9 +581,23 @@ export default function ControlPanel() {
                   setFlightMode(m);
                   if (connectionStatus === 'connected') topicPublisher.setFlightMode(m);
                 }}
-                style={{ padding: '6px 2px', fontSize: '0.62rem' }}
+                style={{
+                  padding: '6px 2px',
+                  fontSize: '0.62rem',
+                  ...(m === 'GUIDED' && {
+                    background: flightMode === 'GUIDED'
+                      ? 'linear-gradient(135deg, rgba(0,240,255,0.35), rgba(0,128,255,0.35))'
+                      : 'rgba(0,240,255,0.05)',
+                    border: flightMode === 'GUIDED'
+                      ? '1px solid #00f0ff'
+                      : '1px solid rgba(0,240,255,0.3)',
+                    color: '#00f0ff',
+                    fontWeight: 700,
+                    boxShadow: flightMode === 'GUIDED' ? '0 0 10px rgba(0,240,255,0.4)' : 'none',
+                  }),
+                }}
               >
-                {m}
+                {m === 'GUIDED' ? '⚡ GUIDED' : m}
               </button>
             ))}
           </div>

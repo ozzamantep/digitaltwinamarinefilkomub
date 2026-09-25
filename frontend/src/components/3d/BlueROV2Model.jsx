@@ -207,6 +207,8 @@ export default function BlueROV2Model({ onFrame }) {
     const speed = liveState.speed;
     const thrusters = liveState.thrusters;
     const thrusterRPMs = liveState.thrusterRPMs || [];
+    // FIX: declare controlInput FIRST so dead-reckoning block below can safely read it
+    const controlInput = liveState.controlInput || {};
     if (onFrame) onFrame();
 
     const t = state.clock.elapsedTime;
@@ -230,44 +232,96 @@ export default function BlueROV2Model({ onFrame }) {
       groupRef.current.quaternion.slerp(targetQuaternionRef.current, positionAlpha);
     }
 
-    // Dynamic propeller spin driven by actual per-thruster RPM. A pure spot-turn
-    // commands each side at only ~modest effort (differential torque only, no
-    // forward thrust), so a fast hull rotation used to look mismatched against
-    // a slow-looking prop. Fix: derive visual spin from whichever is FASTER —
-    // the raw motor RPM (ramped, physically real) or the instantaneous commanded
-    // effort (unlagged) — then add an angular-rate boost so the props visibly
-    // spin up during hard turns, matching how fast the hull is actually rotating.
-    propRefs.forEach((ref, idx) => {
-      if (ref.current) {
-        if (armed) {
-          const effort = thrusters[idx] || 0;
-          const motorRPM = thrusterRPMs[idx] || 0;
-          if (Math.abs(effort) > 2 || Math.abs(motorRPM) > 40) {
-            const horizontalSpeed = Math.hypot(speed.surge || 0, speed.sway || 0);
-            const angularSpeed = Math.abs(speed.angular || 0);
-            // Horizontal (vectored) thrusters visibly spin up with hull turn rate;
-            // vertical thrusters only care about heave/pitch motion, not yaw.
-            const motionVisualBoost = idx < 4
-              ? 1 + Math.min(1.40, horizontalSpeed * 0.70) + Math.min(1.80, angularSpeed * 1.30)
-              : 1;
-            const rpmRate = (motorRPM * Math.PI * 2 / 60) * 0.10;
-            const effortRate = (effort / 100) * 32.0;
-            // Use whichever signal shows the stronger commanded intent so a hard
-            // spot-turn (high effort, RPM still ramping) never looks slower than
-            // straight-line cruising at the same effort level.
-            const baseRPM = Math.abs(rpmRate) >= Math.abs(effortRate) ? rpmRate : effortRate;
-            const finalRPM = THREE.MathUtils.clamp(baseRPM * motionVisualBoost, -60, 60) * delta;
+    // Live Dead Reckoning Kinematics when real vehicle has no active /odom topic
+    const isLiveWithoutOdom = liveState.mode === 'live' && (Date.now() - (liveState.lastOdomTime || 0) > 800);
+    if (isLiveWithoutOdom && liveState.armed) {
+      const surgeVel = (controlInput.surge || 0) * 1.1;
+      const swayVel = (controlInput.sway || 0) * 0.6;
+      const heaveVel = (controlInput.heave || 0) * 0.4;
+      const yawRate = (controlInput.yaw || 0) * 0.85;
 
-            if (idx >= 4) {
-              // 4 & 5: Vertical thrusters in yellow cowls rotate around vertical Y-axis
-              ref.current.rotation.y += finalRPM;
-            } else {
-              // 0, 1, 2, 3: Horizontal corner thrusters rotate around local shaft Z-axis
-              ref.current.rotation.z += finalRPM;
-            }
-          }
+      let heading = liveState.headingRad || 0;
+      if (Math.abs(yawRate) > 0.01) {
+        heading = (heading + yawRate * delta) % (Math.PI * 2);
+        liveState.setHeadingRad(heading);
+        // Only synthesize flat orientation if IMU is genuinely absent for over 5s
+        const hasActiveImu = liveState.lastImuTime && (Date.now() - liveState.lastImuTime < 5000);
+        if (!hasActiveImu) {
+          const eulerThree = new THREE.Euler(0, -heading, 0, 'YXZ');
+          const quat = new THREE.Quaternion().setFromEuler(eulerThree);
+          liveState.updateOrientation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w });
         }
       }
+
+      const cosH = Math.cos(heading);
+      const sinH = Math.sin(heading);
+      const dx = (surgeVel * cosH - swayVel * sinH) * delta;
+      const dz = (surgeVel * sinH + swayVel * cosH) * delta;
+      const dy = -heaveVel * delta;
+
+      if (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001 || Math.abs(dy) > 0.0001) {
+        const nextX = Math.max(-12.0, Math.min(12.0, position.x + dx));
+        const nextZ = Math.max(-5.5, Math.min(5.5, position.z + dz));
+        const nextY = Math.max(0.15, Math.min(1.95, position.y + dy));
+        liveState.updatePosition({ x: nextX, y: nextY, z: nextZ });
+      }
+    }
+
+    // ─── PROPELLER ANIMATION ────────────────────────────────────────────
+    // Priority: Real ESC telemetry (thrusters store) > controlInput fallback
+    // thrusters[] = efforts in -100..+100 % (filled by /thruster_outputs or /mavros/rc/out)
+    const hasThrusterTelemetry = Array.isArray(thrusters) && thrusters.some((eff) => Math.abs(eff || 0) > 1);
+
+    const activeThrusters = hasThrusterTelemetry
+      ? thrusters
+      : [
+          (controlInput.surge || 0) + (controlInput.yaw || 0) - (controlInput.sway || 0),
+          (controlInput.surge || 0) - (controlInput.yaw || 0) + (controlInput.sway || 0),
+          (controlInput.surge || 0) + (controlInput.yaw || 0) + (controlInput.sway || 0),
+          (controlInput.surge || 0) - (controlInput.yaw || 0) - (controlInput.sway || 0),
+          controlInput.heave || 0,
+          controlInput.heave || 0,
+        ].map((v) => Math.max(-100, Math.min(100, v * 100)));
+
+    // BlueROV2 contra-rotating map: T1/T4 CW (+1), T2/T3 CCW (-1), T5 CW, T6 CCW
+    const PROP_DIR = [1, -1, -1, 1, 1, -1];
+
+    const isArmed = liveState.armed;
+    propRefs.forEach((ref, idx) => {
+      if (!ref.current) return;
+
+      const effort = Number(activeThrusters[idx]) || 0;
+      const absEffort = Math.abs(effort);
+
+      // Use real RPM telemetry when available, otherwise estimate from effort%
+      // FIX: keep sign of motorRPM via effortSign, not absEffort
+      const motorRPM = Number(thrusterRPMs[idx]) || 0;
+      const effectiveRPM = motorRPM > 0 ? motorRPM : absEffort * 35;
+
+      // FIX: threshold lowered to 0.5% so auto-level small corrections also show
+      const shouldSpin = absEffort > 0.5 || effectiveRPM > 10;
+
+      if (shouldSpin && isArmed) {
+        const effortSign = Math.sign(effort) || 1;
+        const propDir = PROP_DIR[idx] || 1;
+
+        // Scale to visual rad/s: 100% effort ≈ 3500 RPM ≈ 36 rad/s on screen
+        const rpmVisualRate = (effectiveRPM / 3500) * 36.0;
+        const effortVisualRate = (absEffort / 100) * 36.0;
+        // FIX: no forced minimum — propellers stop when effort == 0
+        const visualSpeed = Math.max(rpmVisualRate, effortVisualRate);
+
+        const finalRotationStep = Math.min(50, visualSpeed) * effortSign * propDir * delta;
+
+        if (idx >= 4) {
+          // Vertical thrusters (T5/T6): rotate around Y-axis (vertical shaft)
+          ref.current.rotation.y += finalRotationStep;
+        } else {
+          // Horizontal thrusters (T1-T4): rotate around Z-axis (shaft axis)
+          ref.current.rotation.z += finalRotationStep;
+        }
+      }
+      // When shouldSpin is false the ref.current.rotation is NOT touched → propeller stays still
     });
 
     // Subsea Gripper Jaws Animation (Smooth damped articulation)

@@ -140,7 +140,7 @@ export default function ThrusterBubbles() {
       const effort = Math.abs(signedEffort);
       const effortSign = Math.sign(signedEffort);
       const config = THRUSTER_CONFIG[tIdx_i];
-      const isActive = armed && effort > 2;
+      const isActive = (armed || effort > 2) && effort > 2;
 
       if (config.isVertical && safetyInterlocks.floor) {
         arr[i * 3 + 1] = -20;
