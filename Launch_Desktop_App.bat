@@ -29,6 +29,7 @@ if not exist "frontend\dist\index.html" (
 :: 3. Launch Native Electron Desktop Application Window
 echo [3/3] Launching Native Desktop Window...
 echo.
+taskkill /F /IM electron.exe >nul 2>&1
 call npm run desktop
 
 echo.

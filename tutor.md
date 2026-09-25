@@ -33,19 +33,21 @@ Run this once on the Jetson:
 
 ```bash
 source /opt/ros/$ROS_DISTRO/setup.bash
-cd ~/digitaltwin
+cd ~/digitaltwinamarinefilkomub   # the folder where this repo was cloned - check with `pwd`/`ls ~` if unsure
 bash backend/setup_rosbridge.sh
 ```
 
 The script installs `rosbridge_server` and compressed image transport.
+
+**Note:** this repo is a plain set of scripts/launch files, NOT an installed ROS 2 package - there is no `colcon build` step and no package named `digitaltwin` registered with `ros2`. Every command below is run either as a direct Python script (`python3 ...`) or a path-based `ros2 launch <file>.launch.py` (both work without building/sourcing an install workspace). Do NOT use `ros2 run digitaltwin ...` - it will fail with `Package 'digitaltwin' not found`.
 
 ## 3b. Start the MAVROS Telemetry Bridge (REQUIRED for position, battery, depth & front sonar sync)
 
 `/odom`, `/battery_state`, `/depth`, and `/sonar/front/range` have no publisher on the real vehicle by default - MAVROS only exposes `/mavros/local_position/pose`, `/velocity_local`, `/mavros/battery`, `/mavros/imu/static_pressure`, and the distance-sensor topic. Without this node running, the Digital Twin's 3D position never moves, the real low-battery emergency-surface safety check never sees real voltage, and the real depth/front-sonar safety checks never see real sensor data:
 
 ```bash
-ros2 run digitaltwin odom_bridge
-# or directly:
+cd ~/digitaltwinamarinefilkomub
+source /opt/ros/$ROS_DISTRO/setup.bash
 python3 backend/sauvc26_code/odom_bridge.py
 ```
 
@@ -56,6 +58,7 @@ This is a read-only telemetry bridge (no actuation) - safe to run alongside any 
 `/camera/image_raw/compressed` has no publisher yet on the real vehicle. Use the standard ROS2 `v4l2_camera` driver + `image_transport` republish (no custom code needed):
 
 ```bash
+cd ~/digitaltwinamarinefilkomub
 bash backend/start_camera.sh /dev/video0
 ```
 
@@ -66,8 +69,9 @@ Pass a different device path as the first argument if the camera isn't `/dev/vid
 Each time the AUV system is used, start ROS 2 and the bridge:
 
 ```bash
+cd ~/digitaltwinamarinefilkomub
 source /opt/ros/$ROS_DISTRO/setup.bash
-ros2 launch digitaltwin digitaltwin.launch.py
+ros2 launch backend/launch_digitaltwin.launch.py
 ```
 
 The default endpoint is:
@@ -202,6 +206,10 @@ Check the Jetson IP, network reachability, and rosbridge port:
 ping JETSON_IP
 ss -lnt | grep 9090
 ```
+
+### `Package 'digitaltwin' not found`
+
+This repo has no installed ROS 2 package named `digitaltwin` - `ros2 run digitaltwin ...` will always fail with this error. Use the path-based/direct-script forms shown in this guide instead: `ros2 launch backend/launch_digitaltwin.launch.py` (not `ros2 launch digitaltwin digitaltwin.launch.py`) and `python3 backend/sauvc26_code/odom_bridge.py` (not `ros2 run digitaltwin odom_bridge`). Both must be run from the repo's root folder (`cd ~/digitaltwinamarinefilkomub` or wherever it was cloned).
 
 ### Telemetry is not updating
 

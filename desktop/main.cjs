@@ -22,7 +22,7 @@ ipcMain.handle('jetson:start-rosbridge', async (_, { host, user }) => {
   if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
   if (jetsonSshProcess && !jetsonSshProcess.killed) return { ok: true, alreadyRunning: true };
 
-  const command = 'source /opt/ros/$ROS_DISTRO/setup.bash && cd ~/digitaltwin && ros2 launch digitaltwin digitaltwin.launch.py';
+  const command = 'bash -c "source /opt/ros/humble/setup.bash && ros2 launch rosbridge_server rosbridge_websocket_launch.xml"';
   jetsonSshProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
     windowsHide: true,
   });
@@ -41,6 +41,110 @@ ipcMain.handle('jetson:stop-rosbridge', () => {
   if (jetsonSshProcess && !jetsonSshProcess.killed) jetsonSshProcess.kill();
   jetsonSshProcess = null;
   return { ok: true };
+});
+
+let jetsonOdomProcess = null;
+
+ipcMain.handle('jetson:odom-status', () => ({ running: Boolean(jetsonOdomProcess && !jetsonOdomProcess.killed) }));
+
+ipcMain.handle('jetson:start-odom-bridge', async (_, { host, user }) => {
+  if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
+  if (jetsonOdomProcess && !jetsonOdomProcess.killed) return { ok: true, alreadyRunning: true };
+
+  const command = 'bash -c "source /opt/ros/humble/setup.bash && cd ~/digitaltwinamarinefilkomub && python3 backend/sauvc26_code/odom_bridge.py"';
+  jetsonOdomProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+    windowsHide: true,
+  });
+  let error = '';
+  jetsonOdomProcess.stderr.on('data', (chunk) => { error += chunk.toString(); });
+  jetsonOdomProcess.on('error', (spawnError) => { error = spawnError.message; });
+  jetsonOdomProcess.on('close', () => { jetsonOdomProcess = null; });
+
+  return await new Promise((resolve) => setTimeout(() => {
+    if (error) resolve({ ok: false, error: error.trim() });
+    else resolve({ ok: Boolean(jetsonOdomProcess), error: '' });
+  }, 900));
+});
+
+ipcMain.handle('jetson:stop-odom-bridge', () => {
+  if (jetsonOdomProcess && !jetsonOdomProcess.killed) jetsonOdomProcess.kill();
+  jetsonOdomProcess = null;
+  return { ok: true };
+});
+
+let jetsonCameraProcess = null;
+
+ipcMain.handle('jetson:camera-status', () => ({ running: Boolean(jetsonCameraProcess && !jetsonCameraProcess.killed) }));
+
+ipcMain.handle('jetson:start-camera', async (_, { host, user, device }) => {
+  if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
+  if (device && !/^\/dev\/[a-zA-Z0-9_-]+$/.test(device)) return { ok: false, error: 'Invalid camera device path.' };
+  if (jetsonCameraProcess && !jetsonCameraProcess.killed) return { ok: true, alreadyRunning: true };
+
+  const command = `cd ~/digitaltwin && bash backend/start_camera.sh ${device || '/dev/video0'}`;
+  jetsonCameraProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+    windowsHide: true,
+  });
+  let error = '';
+  jetsonCameraProcess.stderr.on('data', (chunk) => { error += chunk.toString(); });
+  jetsonCameraProcess.on('error', (spawnError) => { error = spawnError.message; });
+  jetsonCameraProcess.on('close', () => { jetsonCameraProcess = null; });
+
+  return await new Promise((resolve) => setTimeout(() => {
+    if (error) resolve({ ok: false, error: error.trim() });
+    else resolve({ ok: Boolean(jetsonCameraProcess), error: '' });
+  }, 900));
+});
+
+ipcMain.handle('jetson:stop-camera', () => {
+  if (jetsonCameraProcess && !jetsonCameraProcess.killed) jetsonCameraProcess.kill();
+  jetsonCameraProcess = null;
+  return { ok: true };
+});
+
+// --- Disconnect All: kill every active SSH child process at once ---
+ipcMain.handle('jetson:disconnect-all', () => {
+  if (jetsonSshProcess && !jetsonSshProcess.killed) jetsonSshProcess.kill();
+  jetsonSshProcess = null;
+  if (jetsonOdomProcess && !jetsonOdomProcess.killed) jetsonOdomProcess.kill();
+  jetsonOdomProcess = null;
+  if (jetsonCameraProcess && !jetsonCameraProcess.killed) jetsonCameraProcess.kill();
+  jetsonCameraProcess = null;
+  return { ok: true };
+});
+
+// --- Shutdown Jetson via SSH ---
+ipcMain.handle('jetson:shutdown', async (_, { host, user }) => {
+  if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
+
+  // First kill all running processes
+  if (jetsonSshProcess && !jetsonSshProcess.killed) jetsonSshProcess.kill();
+  jetsonSshProcess = null;
+  if (jetsonOdomProcess && !jetsonOdomProcess.killed) jetsonOdomProcess.kill();
+  jetsonOdomProcess = null;
+  if (jetsonCameraProcess && !jetsonCameraProcess.killed) jetsonCameraProcess.kill();
+  jetsonCameraProcess = null;
+
+  return new Promise((resolve) => {
+    const proc = spawn('ssh', [
+      '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=8',
+      `${user}@${host}`,
+      'sudo /sbin/shutdown -h now || sudo /sbin/poweroff || sudo shutdown -h now',
+    ], { windowsHide: true });
+
+    let error = '';
+    proc.stderr.on('data', (chunk) => { error += chunk.toString(); });
+    proc.on('error', (spawnError) => { error = spawnError.message; });
+    proc.on('close', (code) => {
+      // code 255 is expected because SSH disconnects when remote shuts down
+      if (code === 0 || code === 255) resolve({ ok: true });
+      else resolve({ ok: false, error: error.trim() || `Exit code ${code}` });
+    });
+
+    // Timeout fallback - shutdown usually cuts the connection quickly
+    setTimeout(() => resolve({ ok: true }), 5000);
+  });
 });
 
 // Helper to quickly check if Vite dev server is running on port 5173

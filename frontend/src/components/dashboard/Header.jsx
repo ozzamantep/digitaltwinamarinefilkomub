@@ -22,6 +22,8 @@ export default function Header() {
   const [time, setTime] = useState(new Date());
   const [sshUser, setSshUser] = useState('amarine');
   const [sshState, setSshState] = useState('idle');
+  const [odomState, setOdomState] = useState('idle');
+  const [cameraState, setCameraState] = useState('idle');
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -34,12 +36,28 @@ export default function Header() {
     return () => mockRos.stop();
   }, []);
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (mode === 'demo') {
       mockRos.stop();
     }
     setJetsonIp(ipInput);
     setMode('live');
+    rosConnection.isManualDisconnect = false;
+
+    // If Electron desktop app, start rosbridge on Jetson via SSH first
+    if (window.jetsonSsh && sshState !== 'running') {
+      setSshState('starting');
+      const result = await window.jetsonSsh.startRosbridge(ipInput, sshUser);
+      setSshState(result.ok ? 'running' : 'error');
+      if (result.ok) {
+        // Wait for rosbridge to fully start before connecting WebSocket
+        await new Promise((r) => setTimeout(r, 2000));
+      } else {
+        alert(`❌ Gagal menyalakan ROS di Jetson via SSH:\n${result.error || 'Pastikan SSH key sudah terpasang atau jalankan rosbridge manual di Jetson.'}`);
+      }
+    }
+
+    // Connect WebSocket to rosbridge
     const ros = rosConnection.connect(ipInput);
     topicSubscriber.subscribeAll(ros);
     topicPublisher.init(ros);
@@ -59,6 +77,83 @@ export default function Header() {
     if (!window.jetsonSsh) return;
     await window.jetsonSsh.stopRosbridge();
     setSshState('idle');
+  };
+
+  const handleStartOdomBridge = async () => {
+    if (!window.jetsonSsh) {
+      setOdomState('desktop-only');
+      return;
+    }
+    setOdomState('starting');
+    const result = await window.jetsonSsh.startOdomBridge(ipInput, sshUser);
+    setOdomState(result.ok ? 'running' : 'error');
+  };
+
+  const handleStopOdomBridge = async () => {
+    if (!window.jetsonSsh) return;
+    await window.jetsonSsh.stopOdomBridge();
+    setOdomState('idle');
+  };
+
+  const handleStartCamera = async () => {
+    if (!window.jetsonSsh) {
+      setCameraState('desktop-only');
+      return;
+    }
+    setCameraState('starting');
+    const result = await window.jetsonSsh.startCamera(ipInput, sshUser, '/dev/video0');
+    setCameraState(result.ok ? 'running' : 'error');
+  };
+
+  const handleStopCamera = async () => {
+    if (!window.jetsonSsh) return;
+    await window.jetsonSsh.stopCamera();
+    setCameraState('idle');
+  };
+
+  const handleDisconnectJetson = async () => {
+    // Stop all SSH processes
+    if (window.jetsonSsh) {
+      await window.jetsonSsh.disconnectAll();
+    }
+    setSshState('idle');
+    setOdomState('idle');
+    setCameraState('idle');
+    // Disconnect ROS WebSocket
+    rosConnection.disconnect();
+    topicSubscriber.unsubscribeAll();
+    topicPublisher.cleanup();
+    setMode('demo');
+    mockRos.start();
+  };
+
+  const handleShutdownJetson = async () => {
+    const confirmed = window.confirm(
+      '⚠️ SHUTDOWN JETSON?\n\nJetson Orin akan dimatikan sepenuhnya.\nKamu perlu nyalakan ulang secara fisik.\n\nLanjutkan?'
+    );
+    if (!confirmed) return;
+
+    // 1. Send shutdown command via active ROS2 WebSocket link
+    topicPublisher.shutdownVehicle();
+
+    // 2. Also attempt SSH shutdown if running inside Electron desktop app
+    if (window.jetsonSsh) {
+      window.jetsonSsh.shutdown(ipInput, sshUser).catch(() => {});
+    }
+
+    // 3. Cleanup local state & switch to demo
+    setSshState('idle');
+    setOdomState('idle');
+    setCameraState('idle');
+    setTimeout(() => {
+      rosConnection.disconnect();
+      topicSubscriber.unsubscribeAll();
+      topicPublisher.cleanup();
+      setMode('demo');
+      mockRos.start();
+    }, 1500);
+
+    alert('✅ Sinyal shutdown terkirim ke Jetson!\nJetson akan mati dalam beberapa detik.');
   };
 
   const handleSwitchMode = (newMode) => {
@@ -265,14 +360,64 @@ export default function Header() {
             >
               {sshState === 'running' ? 'Stop ROS' : sshState === 'starting' ? 'Starting' : 'Start ROS'}
             </button>
+            <button
+              className="ip-connect-btn"
+              onClick={odomState === 'running' ? handleStopOdomBridge : handleStartOdomBridge}
+              title="Start or stop the MAVROS telemetry bridge (odom/battery/depth/front sonar) on Jetson via SSH"
+            >
+              {odomState === 'running' ? 'Stop Bridge' : odomState === 'starting' ? 'Starting' : 'Start Bridge'}
+            </button>
+            <button
+              className="ip-connect-btn"
+              onClick={cameraState === 'running' ? handleStopCamera : handleStartCamera}
+              title="Start or stop the camera driver (/dev/video0) on Jetson via SSH"
+            >
+              {cameraState === 'running' ? 'Stop Cam' : cameraState === 'starting' ? 'Starting' : 'Start Cam'}
+            </button>
+
+            {/* Separator */}
+            <div style={{
+              width: '1px',
+              height: '18px',
+              background: 'rgba(255, 255, 255, 0.15)',
+              margin: '0 2px',
+            }} />
+
+            {/* Disconnect Jetson */}
+            <button
+              className="ip-connect-btn"
+              onClick={handleDisconnectJetson}
+              title="Disconnect semua: matikan ROS bridge, odom bridge, camera, dan putus koneksi WebSocket"
+              style={{
+                background: 'rgba(255, 170, 0, 0.15)',
+                border: '1px solid rgba(255, 170, 0, 0.4)',
+                color: '#ffaa00',
+              }}
+            >
+              ⛓️‍💥 Disconnect
+            </button>
+
+            {/* Shutdown Jetson */}
+            <button
+              className="ip-connect-btn"
+              onClick={handleShutdownJetson}
+              title="Shutdown Jetson Orin sepenuhnya (perlu nyalakan ulang secara fisik)"
+              style={{
+                background: 'rgba(255, 59, 92, 0.15)',
+                border: '1px solid rgba(255, 59, 92, 0.4)',
+                color: '#ff3b5c',
+              }}
+            >
+              ⏻ Shutdown
+            </button>
           </div>
         )}
       </div>
 
       <div className="header-right">
-        <div className={`connection-status ${connectionStatus}`}>
+        <div className={`connection-status ${mode === 'demo' ? 'demo' : connectionStatus}`}>
           <span className="status-dot"></span>
-          {statusLabel[connectionStatus] || 'UNKNOWN'}
+          {mode === 'demo' ? 'SAUVC SIMULATION' : (statusLabel[connectionStatus] || 'UNKNOWN')}
         </div>
         <div className="header-time">
           {time.toLocaleTimeString('en-US', { hour12: false })}

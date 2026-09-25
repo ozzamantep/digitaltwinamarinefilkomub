@@ -133,6 +133,20 @@ class TopicPublisher {
     console.log('[TopicPublisher] 🛑 EMERGENCY STOP SENT: All 6 thrusters halted!');
   }
 
+  /**
+   * Send shutdown command to Jetson via ROS2 topic /system/command
+   */
+  shutdownVehicle() {
+    if (!this.ros) return;
+    const shutdownTopic = new Topic({
+      ros: this.ros,
+      name: '/system/command',
+      messageType: 'std_msgs/msg/String',
+    });
+    shutdownTopic.publish({ data: 'shutdown' });
+    console.log('[TopicPublisher] ⏻ Published shutdown command to /system/command');
+  }
+
   cleanup() {
     if (this.cmdVelTopic) {
       this.cmdVelTopic.unadvertise();

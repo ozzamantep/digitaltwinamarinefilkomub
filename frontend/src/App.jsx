@@ -1,5 +1,6 @@
 import Header from './components/dashboard/Header';
 import SensorPanel from './components/dashboard/SensorPanel';
+import JetsonTerminalBox from './components/dashboard/JetsonTerminalBox';
 import VehicleScene from './components/3d/VehicleScene';
 import ChartPanel from './components/dashboard/ChartPanel';
 import CameraFeed from './components/dashboard/CameraFeed';
@@ -19,9 +20,10 @@ export default function App() {
         <ThrusterTestbed />
       ) : (
         <div className="app-body">
-          {/* Left Sidebar - Sensor Data */}
+          {/* Left Sidebar - Sensor Data & Terminal Command Box */}
           <div className="left-sidebar">
             <SensorPanel />
+            <JetsonTerminalBox />
           </div>
 
           {/* Center - 3D Viewport + Charts */}

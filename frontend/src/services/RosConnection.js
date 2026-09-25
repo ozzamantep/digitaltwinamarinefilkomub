@@ -20,7 +20,9 @@ class RosConnection {
 
     this.ros.on('connection', () => {
       console.log('[ROS] Connected!');
-      useVehicleStore.getState().setConnectionStatus('connected');
+      if (useVehicleStore.getState().mode === 'live') {
+        useVehicleStore.getState().setConnectionStatus('connected');
+      }
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
@@ -33,14 +35,19 @@ class RosConnection {
 
     this.ros.on('close', () => {
       console.log('[ROS] Connection closed.');
-      useVehicleStore.getState().setConnectionStatus('disconnected');
-      this.scheduleReconnect(jetsonIp, port);
+      if (useVehicleStore.getState().mode === 'live') {
+        useVehicleStore.getState().setConnectionStatus('disconnected');
+        if (!this.isManualDisconnect) {
+          this.scheduleReconnect(jetsonIp, port);
+        }
+      }
     });
 
     return this.ros;
   }
 
   disconnect() {
+    this.isManualDisconnect = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -53,15 +60,22 @@ class RosConnection {
       }
       this.ros = null;
     }
-    useVehicleStore.getState().setConnectionStatus('disconnected');
+    if (useVehicleStore.getState().mode === 'live') {
+      useVehicleStore.getState().setConnectionStatus('disconnected');
+    }
   }
 
   scheduleReconnect(jetsonIp, port) {
+    if (this.isManualDisconnect || useVehicleStore.getState().mode !== 'live') {
+      return;
+    }
     if (!this.reconnectTimer) {
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
-        console.log('[ROS] Attempting reconnect...');
-        this.connect(jetsonIp, port);
+        if (useVehicleStore.getState().mode === 'live' && !this.isManualDisconnect) {
+          console.log('[ROS] Attempting reconnect...');
+          this.connect(jetsonIp, port);
+        }
       }, this.reconnectInterval);
     }
   }
