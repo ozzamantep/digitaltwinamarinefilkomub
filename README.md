@@ -269,11 +269,37 @@ digitaltwin/
 
 ## 📚 Referensi
 
-1. T. I. Fossen, *"Handbook of Marine Craft Hydrodynamics and Motion Control"*, 2nd ed., Wiley, 2021.
-2. Berg, V., *"Development and Commissioning of a DP System for ROV SF 30k"*, NTNU, 2012.
-3. Wu, G., *"Identification of Hydrodynamic Coefficients for an ROV"*, J. Ocean Engineering, 2018.
-4. Blue Robotics, *"T200 Thruster Performance Data"*, bluerobotics.com, 2019.
-5. UNESCO, *"International Equation of State of Seawater"*, Tech. Papers No. 36, 1980.
+### Referensi Utama Proyek
+
+1. T. I. Fossen, *"Handbook of Marine Craft Hydrodynamics and Motion Control"*, 2nd ed., Wiley, 2021. [DOI: 10.1002/9781119994138](https://doi.org/10.1002/9781119994138)
+2. V. Berg, *"Development and Commissioning of a DP System for ROV SF 30k"*, Master's Thesis, NTNU, 2012. [URN: nbn:no:ntnu:diva-18559](http://urn.kb.se/resolve?urn=urn:nbn:no:ntnu:diva-18559)
+3. G. Wu, *"Identification of Hydrodynamic Coefficients for an ROV"*, J. Ocean Engineering, 2018.
+4. Blue Robotics, *"T200 Thruster Performance Data"*, 2019. [bluerobotics.com](https://bluerobotics.com/store/thrusters/t100-t200-thrusters/t200-thruster-r2-rp/)
+5. UNESCO, *"International Equation of State of Seawater"*, Tech. Papers in Marine Science No. 36, 1981.
+
+### Literatur Terkait — Digital Twin & AUV
+
+6. X. Li, L. Geng, K. Liu, Y. Zhao, W. Du, *"Motion control of autonomous underwater vehicle based on physics-informed offline reinforcement learning"*, Ocean Engineering, Vol. 313, 2024. [DOI: 10.1016/j.oceaneng.2024.119432](https://doi.org/10.1016/j.oceaneng.2024.119432)
+7. Y. H. Lin et al., *"Intelligent docking control of autonomous underwater vehicles using deep reinforcement learning and a digital twin system"*, Expert Systems with Applications, Vol. 296, 2026. [DOI: 10.1016/j.eswa.2025.129085](https://doi.org/10.1016/j.eswa.2025.129085)
+8. B. J. De Kruif, E. Ypma, *"Self-Propulsion Parameter Identification for Control of Marin's AUV"*, IEEE AUV 2020. [DOI: 10.1109/AUV50043.2020.9267906](https://doi.org/10.1109/AUV50043.2020.9267906)
+9. Y. H. Lin et al., *"Simultaneous Depth and Heading Control for Autonomous Underwater Vehicle Docking Maneuvers Using Deep Reinforcement Learning within a Digital Twin System"*, CMC, 2025. [DOI: 10.32604/cmc.2025.065995](https://doi.org/10.32604/cmc.2025.065995)
+10. K. Kiss-Nagy, G. Simongáti, *"Digital twin of USV thruster based on CFD simulations and towing tank experiments"*, Brodogradnja, Vol. 76(4), 2025. [DOI: 10.21278/brod76403](https://doi.org/10.21278/brod76403)
+11. P. Ściegienka, M. Blachnik, *"On the Development of an Acoustic Image Dataset for Unexploded Ordnance Classification Using Front-Looking Sonar and Transfer Learning Methods"*, Sensors, 24(18), 5946, 2024. [DOI: 10.3390/s24185946](https://doi.org/10.3390/s24185946)
+12. J. Liu, T. Zhang, J. Fan, S. Lang, *"Applications of Digital Twin Technology in AUV"*, IEEE ICCSNT 2023. [DOI: 10.1109/ICCSNT58790.2023.10334615](https://doi.org/10.1109/ICCSNT58790.2023.10334615)
+13. W. Gan, K. Guo, L. Qiao, *"An Adaptive AUV Hunting Strategy for High-Mobility Target With Hierarchical MADRL"*, IEEE Trans. Aerospace and Electronic Systems, 2025.
+14. Z. Nie et al., *"System-Level Optimization of AUV Swarm Control and Perception: An Energy-Aware Federated Meta-Transfer Learning Framework with Digital Twin Validation"*, J. Marine Science and Engineering, 14(4), 384, 2026. [DOI: 10.3390/jmse14040384](https://doi.org/10.3390/jmse14040384)
+15. J. Rodriguez-Cortegoso, A. Romero, F. Orjales, A. Deibe, V. Diaz-Casas, *"Improving the hydrodynamic characterization of autonomous underwater vehicles through deep learning"*, Proc. ISOPE-2023, Ottawa, Canada, ISOPE-I-23-258.
+16. V. V. Prokopovich et al., *"Assessment of Motion Safety of a Large Autonomous Underwater Vehicle"*, 2024. [DOI: 10.37102/1992-4429_2024_47_01_07](https://doi.org/10.37102/1992-4429_2024_47_01_07)
+17. W. Gan, K. Guo, L. Qiao, *"Sim2Real Transfer for AUV Games via MADRL and Digital Twins"*, IFAC-PapersOnLine, 59(22), pp. 336–341, 2025. [DOI: 10.1016/j.ifacol.2025.11.655](https://doi.org/10.1016/j.ifacol.2025.11.655)
+18. M. Staffa, E. Izzo, P. Barra, *"Leveraging the RoboMaker Service on AWS Cloud Platform for Marine Drone Digital Twin Construction"*, in Social Robotics (LNCS), Springer, 2023. [DOI: 10.1007/978-3-031-47781-2_52](https://doi.org/10.1007/978-3-031-47781-2_52)
+19. D. Lu, Y. Ning, J. Wang, K. Du, C. Song, *"Research on Model Reduction of AUV Underwater Support Platform Based on Digital Twin"*, J. Marine Science and Engineering, 12(9), 1673, 2024. [DOI: 10.3390/jmse12091673](https://doi.org/10.3390/jmse12091673)
+20. L. Yu, L. Qiao, *"Six-Dimensional Digital Twin System for Autonomous Underwater Vehicles: Conceptualization and Twin Experiments"*, J. Field Robotics, 2026. [DOI: 10.1002/rob.70220](https://doi.org/10.1002/rob.70220)
+21. M. Mahgoli et al., *"Learning Ocean Channel Cartography: A Digital Twin Approach to Communication-Aware Autonomy for Maritime 6G"*, IEEE Trans. Communications, 2026. [DOI: 10.1109/TCOMM.2026.3712573](https://doi.org/10.1109/TCOMM.2026.3712573)
+22. W. Gan, K. Guo, L. Qiao, *"Scalable Many-to-Many AUV Hunt-Evasion Game via MADRL With Phased Objectives"*, 2026.
+23. X. Wang, L. Chen, D. Xue, C. Chen, P. Wang, *"Digital Twins for Marine Robotic Platforms: Architectures, Applications, and Challenges Across AUVs, ROVs, USVs, Underwater Gliders, and Emerging Platforms"*, J. Marine Science and Engineering, 14(15), 1393, 2026. [DOI: 10.3390/jmse14151393](https://doi.org/10.3390/jmse14151393)
+24. *Proceedings of 2021 International Conference on Autonomous Unmanned Systems (ICAUS 2021)*, Springer. [DOI: 10.1007/978-981-16-9492-9](https://doi.org/10.1007/978-981-16-9492-9)
+25. S. Tiwari et al., *"Poster: Physics Based Digital Twin Framework for an Autonomous Underwater Vehicle"*, 2025. [DOI: 10.1145/3812835.3814858](https://doi.org/10.1145/3812835.3814858)
+26. M. Pilon, B. Zerr, *"Digital Twin-Driven Navigation of AUVs Through Sensor Space Matching"*, IEEE OCEANS 2025. [DOI: 10.1109/OCEANS58557.2025.11104664](https://doi.org/10.1109/OCEANS58557.2025.11104664)
 
 ---
 
