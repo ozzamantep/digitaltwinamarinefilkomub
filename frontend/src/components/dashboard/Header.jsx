@@ -17,6 +17,8 @@ export default function Header() {
   const setJetsonIp = useVehicleStore((s) => s.setJetsonIp);
   const setMode = useVehicleStore((s) => s.setMode);
   const setArmed = useVehicleStore((s) => s.setArmed);
+  const monitorState = useVehicleStore((s) => s.monitorState);
+  const setMonitorState = useVehicleStore((s) => s.setMonitorState);
 
   const [ipInput, setIpInput] = useState(jetsonIp);
   const [time, setTime] = useState(new Date());
@@ -111,6 +113,36 @@ export default function Header() {
     setCameraState('idle');
   };
 
+  const handleStartMonitor = async () => {
+    if (!window.jetsonSsh) {
+      setMonitorState('desktop-only');
+      const cmd = 'python3 ~/digitaltwin/backend/sauvc26_code/jetson_monitor_node.py';
+      try {
+        await navigator.clipboard.writeText(cmd);
+        alert(`📋 Mode Browser: Perintah Jetson Monitor telah disalin ke clipboard:\n${cmd}\n\nJalankan di terminal Jetson (atau gunakan aplikasi desktop untuk eksekusi langsung 1-klik).`);
+      } catch {
+        alert(`Jalankan di terminal Jetson:\n${cmd}`);
+      }
+      setTimeout(() => setMonitorState('idle'), 3500);
+      return;
+    }
+    setMonitorState('starting');
+    const result = await window.jetsonSsh.startMonitor(ipInput, sshUser);
+    setMonitorState(result.ok ? 'running' : 'error');
+    if (!result.ok && result.error) {
+      alert(`❌ Gagal menjalankan Jetson Monitor Node via SSH:\n${result.error}`);
+    }
+  };
+
+  const handleStopMonitor = async () => {
+    if (!window.jetsonSsh) {
+      setMonitorState('idle');
+      return;
+    }
+    await window.jetsonSsh.stopMonitor();
+    setMonitorState('idle');
+  };
+
   const handleDisconnectJetson = async () => {
     // Stop all SSH processes
     if (window.jetsonSsh) {
@@ -119,6 +151,7 @@ export default function Header() {
     setSshState('idle');
     setOdomState('idle');
     setCameraState('idle');
+    setMonitorState('idle');
     // Disconnect ROS WebSocket
     rosConnection.disconnect();
     topicSubscriber.unsubscribeAll();
@@ -145,6 +178,7 @@ export default function Header() {
     setSshState('idle');
     setOdomState('idle');
     setCameraState('idle');
+    setMonitorState('idle');
     setTimeout(() => {
       rosConnection.disconnect();
       topicSubscriber.unsubscribeAll();
@@ -373,6 +407,18 @@ export default function Header() {
               title="Start or stop the camera driver (/dev/video0) on Jetson via SSH"
             >
               {cameraState === 'running' ? 'Stop Cam' : cameraState === 'starting' ? 'Starting' : 'Start Cam'}
+            </button>
+            <button
+              className="ip-connect-btn"
+              onClick={monitorState === 'running' ? handleStopMonitor : handleStartMonitor}
+              title="Start or stop Jetson Monitor Node (jetson_monitor_node.py) via SSH untuk telemetri CPU/GPU/RAM asli"
+              style={{
+                background: monitorState === 'running' ? 'rgba(0, 255, 200, 0.2)' : undefined,
+                borderColor: monitorState === 'running' ? '#00ffc8' : undefined,
+                color: monitorState === 'running' ? '#00ffc8' : undefined,
+              }}
+            >
+              {monitorState === 'running' ? 'Stop Mon' : monitorState === 'starting' ? 'Starting' : 'Start Mon'}
             </button>
 
             {/* Separator */}

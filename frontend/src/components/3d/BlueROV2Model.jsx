@@ -233,14 +233,22 @@ export default function BlueROV2Model({ onFrame }) {
     }
 
     // Live Dead Reckoning Kinematics when real vehicle has no active /odom topic
+    // Also runs in demo/simulation mode so keyboard/joystick lateral & yaw moves work in 3D
     const isLiveWithoutOdom = liveState.mode === 'live' && (Date.now() - (liveState.lastOdomTime || 0) > 800);
-    if (isLiveWithoutOdom && liveState.armed) {
+    const isDemo = liveState.mode === 'demo' || liveState.mode === 'simulation';
+    const shouldDeadReckon = (isLiveWithoutOdom || isDemo) && liveState.armed;
+
+    if (shouldDeadReckon) {
       const surgeVel = (controlInput.surge || 0) * 1.1;
-      const swayVel = (controlInput.sway || 0) * 0.6;
+      // FIX: sway now properly drives lateral (strafe) movement in 3D viewport
+      // Previously only surge was integrated → belok kiri/kanan & lateral tidak bergerak di digital
+      const swayVel = (controlInput.sway || 0) * 0.75;
       const heaveVel = (controlInput.heave || 0) * 0.4;
       const yawRate = (controlInput.yaw || 0) * 0.85;
 
       let heading = liveState.headingRad || 0;
+
+      // Update yaw heading and 3D orientation when rotating
       if (Math.abs(yawRate) > 0.01) {
         heading = (heading + yawRate * delta) % (Math.PI * 2);
         liveState.setHeadingRad(heading);
@@ -253,13 +261,16 @@ export default function BlueROV2Model({ onFrame }) {
         }
       }
 
+      // Body-frame to world-frame: surge along heading, sway perpendicular to heading
+      // This makes lateral (sway) and forward/backward (surge) both move the 3D model
       const cosH = Math.cos(heading);
       const sinH = Math.sin(heading);
       const dx = (surgeVel * cosH - swayVel * sinH) * delta;
       const dz = (surgeVel * sinH + swayVel * cosH) * delta;
+      // Heave: positive = dive (vehicle descends), Y decreases in pool coordinate
       const dy = -heaveVel * delta;
 
-      if (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001 || Math.abs(dy) > 0.0001) {
+      if (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001 || Math.abs(dy) > 0.0001 || Math.abs(yawRate) > 0.001) {
         const nextX = Math.max(-12.0, Math.min(12.0, position.x + dx));
         const nextZ = Math.max(-5.5, Math.min(5.5, position.z + dz));
         const nextY = Math.max(0.15, Math.min(1.95, position.y + dy));
@@ -284,7 +295,15 @@ export default function BlueROV2Model({ onFrame }) {
         ].map((v) => Math.max(-100, Math.min(100, v * 100)));
 
     // BlueROV2 contra-rotating map: T1/T4 CW (+1), T2/T3 CCW (-1), T5 CW, T6 CCW
+    // PHYSICAL MATCH: heave +1 = dive (thruster pushes DOWN → vehicle goes DOWN in real)
+    // In 3D: vehicle Y increases = goes up in pool. heave positive = dive = Y decreases.
+    // Vertical thruster visual direction is INVERTED vs heave sign to match real behavior:
+    // when heave > 0 (dive command), propeller spins to push water UP → vehicle sinks.
     const PROP_DIR = [1, -1, -1, 1, 1, -1];
+    // FIX: Invert vertical thruster visual spin to match real-world physical direction.
+    // Real T5/T6: positive effort = propeller pushes water UP = vehicle DESCENDS.
+    // Previously was backwards (digital went up visually when real went down).
+    const VERTICAL_INVERT = -1;
 
     const isArmed = liveState.armed;
     propRefs.forEach((ref, idx) => {
@@ -294,11 +313,10 @@ export default function BlueROV2Model({ onFrame }) {
       const absEffort = Math.abs(effort);
 
       // Use real RPM telemetry when available, otherwise estimate from effort%
-      // FIX: keep sign of motorRPM via effortSign, not absEffort
       const motorRPM = Number(thrusterRPMs[idx]) || 0;
       const effectiveRPM = motorRPM > 0 ? motorRPM : absEffort * 35;
 
-      // FIX: threshold lowered to 0.5% so auto-level small corrections also show
+      // threshold lowered to 0.5% so auto-level small corrections also show
       const shouldSpin = absEffort > 0.5 || effectiveRPM > 10;
 
       if (shouldSpin && isArmed) {
@@ -308,14 +326,14 @@ export default function BlueROV2Model({ onFrame }) {
         // Scale to visual rad/s: 100% effort ≈ 3500 RPM ≈ 36 rad/s on screen
         const rpmVisualRate = (effectiveRPM / 3500) * 36.0;
         const effortVisualRate = (absEffort / 100) * 36.0;
-        // FIX: no forced minimum — propellers stop when effort == 0
         const visualSpeed = Math.max(rpmVisualRate, effortVisualRate);
 
         const finalRotationStep = Math.min(50, visualSpeed) * effortSign * propDir * delta;
 
         if (idx >= 4) {
           // Vertical thrusters (T5/T6): rotate around Y-axis (vertical shaft)
-          ref.current.rotation.y += finalRotationStep;
+          // INVERTED to match real physical direction: positive heave = vehicle descends
+          ref.current.rotation.y += finalRotationStep * VERTICAL_INVERT;
         } else {
           // Horizontal thrusters (T1-T4): rotate around Z-axis (shaft axis)
           ref.current.rotation.z += finalRotationStep;

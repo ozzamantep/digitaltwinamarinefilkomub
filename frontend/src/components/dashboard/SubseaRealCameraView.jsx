@@ -83,12 +83,23 @@ export default function SubseaRealCameraView() {
     const projVec = new THREE.Vector3();
 
     // Read live dynamic obstacles from vehicleStore on every frame
+    // DIGITAL TWIN CAMERA RULE: Only show objects that the REAL camera (YOLO) is actually detecting.
+    // If detected: false (no YOLO detection) → do NOT render bounding box in digital.
+    // If detected: true (came via /yolo_target_coord ROS topic) → show bounding box.
+    // This makes the digital camera a true mirror of the physical vehicle camera.
     const store = useVehicleStore.getState();
     const obstacles = store.obstacles || {};
     const flaresFallen = store.flaresFallen || {};
+    const isLiveMode = store.mode === 'live';
 
     const targets = Object.values(obstacles)
-      .filter((obs) => !!obs && typeof obs === 'object' && typeof obs.id === 'string')
+      .filter((obs) => {
+        if (!obs || typeof obs !== 'object' || typeof obs.id !== 'string') return false;
+        // In LIVE mode: only show objects that the real YOLO camera has detected
+        // In DEMO/simulation mode: show all objects for training/demonstration purposes
+        if (isLiveMode && !obs.detected) return false;
+        return true;
+      })
       .map((obs) => ({
         id: obs.id,
         name: obs.name,

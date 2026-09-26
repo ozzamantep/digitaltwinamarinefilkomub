@@ -493,6 +493,8 @@ const useVehicleStore = create((set, get) => ({
     dvlStatus: 'LOCKED',
     errors: [],
   },
+  monitorState: 'idle', // 'idle' | 'starting' | 'running' | 'error' | 'desktop-only'
+  setMonitorState: (monitorState) => set({ monitorState }),
 
   cameraViewMode: 'tpp', // 'tpp' | 'chase' | 'fpv' | 'orbit'
   cameraResetTrigger: 0,

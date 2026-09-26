@@ -219,6 +219,34 @@ cd simulator
 
 ---
 
+## 🤖 Panduan Menghubungkan ke Robot Fisik (Jetson Orin)
+
+Digital Twin ini terintegrasi penuh dengan komputer onboard **NVIDIA Jetson Orin** pada robot fisik AUV melalui jaringan ROS 2 dan rosbridge WebSocket.
+
+### 🧭 Urutan Langkah Klik Startup (1-2-3-4 Workflow)
+
+Gunakan panduan nomor urutan berikut pada kotak **Jetson Command Line** (sidebar kiri) atau toolbar Header:
+
+```
+[1] Launch Backend  ➔  [2] Jalankan & Konek  ➔  [3] Monitor Node  ➔  [4] Pilot Bridge
+```
+
+| No | Tombol / Fitur | Lokasi | Fungsi & Alur Operasional |
+|:--:|:----------------|:-------|:--------------------------|
+| **1** | **`🚀 [1] Launch Backend`** *(atau Tab `[1] Rosbridge`)* | Kotak Terminal Jetson | **Wajib Pertama**: Menjalankan rosbridge server di Jetson sehingga port **9090** aktif dan siap menerima koneksi WebSocket. |
+| **2** | **`⚡ [2] Jalankan & Konek`** | Kotak Terminal Jetson | Menghubungkan WebSocket dashboard ke `ws://<JETSON_IP>:9090`. Status koneksi di kanan atas berubah menjadi **`● PORT 9090 LINKED`**. |
+| **3** | **`📊 [3] Jalankan Jetson Monitor Node`** | Kotak Terminal / Header / Health Panel | Menjalankan `jetson_monitor_node.py` via SSH 1-klik untuk membaca metrik real-time hardware Jetson (**CPU %, GPU CUDA %, RAM LPDDR5 %, ROS2 Nodes, & Uptime**) ke panel *System Health*. |
+| **4** | **`🔄 [4] Pilot Bridge`** *(manual_bridge.py)* | Kotak Terminal Jetson | Mengaktifkan jembatan penerusan perintah kemudi (joystick virtual / gamepad `/cmd_vel`) dan gripper ke MAVROS AUV. |
+
+### 🛠️ Fitur Tambahan & Alat Diagnostik
+- **`Start Cam / Stop Cam`**: Menjalankan driver kamera USB Jetson (`start_camera.sh /dev/video0`) untuk streaming visual bawah air.
+- **`Start Bridge / Stop Bridge`**: Menjalankan `odom_bridge.py` untuk mensinkronkan odometri, orientasi IMU, kedalaman MS5837, sonar depan, dan persentase baterai ke model 3D AUV.
+- **`🔍 Cek MAVROS`**: Mengecek kesehatan koneksi node ROS 2 MAVROS di Jetson.
+- **`📡 Echo cmd_vel`**: Memantau paket data kendali thruster secara langsung.
+- **`⏻ Mati`**: Shutdown jarak jauh Jetson Orin secara aman (*remote poweroff*) setelah pengujian selesai.
+
+---
+
 ## 📁 Struktur Proyek
 
 ```

@@ -102,6 +102,35 @@ ipcMain.handle('jetson:stop-camera', () => {
   return { ok: true };
 });
 
+let jetsonMonitorProcess = null;
+
+ipcMain.handle('jetson:monitor-status', () => ({ running: Boolean(jetsonMonitorProcess && !jetsonMonitorProcess.killed) }));
+
+ipcMain.handle('jetson:start-monitor', async (_, { host, user }) => {
+  if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
+  if (jetsonMonitorProcess && !jetsonMonitorProcess.killed) return { ok: true, alreadyRunning: true };
+
+  const command = 'bash -c "source /opt/ros/humble/setup.bash 2>/dev/null; (cd ~/digitaltwin 2>/dev/null || cd ~/digitaltwinamarinefilkomub 2>/dev/null); python3 backend/sauvc26_code/jetson_monitor_node.py"';
+  jetsonMonitorProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+    windowsHide: true,
+  });
+  let error = '';
+  jetsonMonitorProcess.stderr.on('data', (chunk) => { error += chunk.toString(); });
+  jetsonMonitorProcess.on('error', (spawnError) => { error = spawnError.message; });
+  jetsonMonitorProcess.on('close', () => { jetsonMonitorProcess = null; });
+
+  return await new Promise((resolve) => setTimeout(() => {
+    if (error) resolve({ ok: false, error: error.trim() });
+    else resolve({ ok: Boolean(jetsonMonitorProcess), error: '' });
+  }, 900));
+});
+
+ipcMain.handle('jetson:stop-monitor', () => {
+  if (jetsonMonitorProcess && !jetsonMonitorProcess.killed) jetsonMonitorProcess.kill();
+  jetsonMonitorProcess = null;
+  return { ok: true };
+});
+
 // --- Disconnect All: kill every active SSH child process at once ---
 ipcMain.handle('jetson:disconnect-all', () => {
   if (jetsonSshProcess && !jetsonSshProcess.killed) jetsonSshProcess.kill();
@@ -110,6 +139,8 @@ ipcMain.handle('jetson:disconnect-all', () => {
   jetsonOdomProcess = null;
   if (jetsonCameraProcess && !jetsonCameraProcess.killed) jetsonCameraProcess.kill();
   jetsonCameraProcess = null;
+  if (jetsonMonitorProcess && !jetsonMonitorProcess.killed) jetsonMonitorProcess.kill();
+  jetsonMonitorProcess = null;
   return { ok: true };
 });
 
@@ -124,6 +155,8 @@ ipcMain.handle('jetson:shutdown', async (_, { host, user }) => {
   jetsonOdomProcess = null;
   if (jetsonCameraProcess && !jetsonCameraProcess.killed) jetsonCameraProcess.kill();
   jetsonCameraProcess = null;
+  if (jetsonMonitorProcess && !jetsonMonitorProcess.killed) jetsonMonitorProcess.kill();
+  jetsonMonitorProcess = null;
 
   return new Promise((resolve) => {
     const proc = spawn('ssh', [

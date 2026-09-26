@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('jetsonSsh', {
   cameraStatus: () => ipcRenderer.invoke('jetson:camera-status'),
   startCamera: (host, user, device) => ipcRenderer.invoke('jetson:start-camera', { host, user, device }),
   stopCamera: () => ipcRenderer.invoke('jetson:stop-camera'),
+  monitorStatus: () => ipcRenderer.invoke('jetson:monitor-status'),
+  startMonitor: (host, user) => ipcRenderer.invoke('jetson:start-monitor', { host, user }),
+  stopMonitor: () => ipcRenderer.invoke('jetson:stop-monitor'),
   disconnectAll: () => ipcRenderer.invoke('jetson:disconnect-all'),
   shutdown: (host, user) => ipcRenderer.invoke('jetson:shutdown', { host, user }),
 });

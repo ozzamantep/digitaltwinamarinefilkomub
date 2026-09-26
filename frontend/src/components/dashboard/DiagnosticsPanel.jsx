@@ -37,6 +37,37 @@ export default function DiagnosticsPanel() {
   const connectionStatus = useVehicleStore((s) => s.connectionStatus);
   const leakDetected = useVehicleStore((s) => s.leakDetected);
   const safety = useVehicleStore((s) => s.safetySupervisor);
+  const monitorState = useVehicleStore((s) => s.monitorState);
+  const setMonitorState = useVehicleStore((s) => s.setMonitorState);
+  const jetsonIp = useVehicleStore((s) => s.jetsonIp);
+
+  const handleToggleMonitor = async () => {
+    if (monitorState === 'running') {
+      if (window.jetsonSsh) {
+        await window.jetsonSsh.stopMonitor();
+      }
+      setMonitorState('idle');
+      return;
+    }
+
+    if (!window.jetsonSsh) {
+      const cmd = 'python3 ~/digitaltwin/backend/sauvc26_code/jetson_monitor_node.py';
+      try {
+        await navigator.clipboard.writeText(cmd);
+        alert(`📋 Perintah Jetson Monitor telah disalin ke clipboard:\n${cmd}\n\nJalankan di Jetson Orin Anda!`);
+      } catch {
+        alert(`Jalankan di Jetson:\n${cmd}`);
+      }
+      return;
+    }
+
+    setMonitorState('starting');
+    const res = await window.jetsonSsh.startMonitor(jetsonIp || 'localhost', 'amarine');
+    setMonitorState(res.ok ? 'running' : 'error');
+    if (!res.ok && res.error) {
+      alert(`❌ Gagal menyalakan jetson_monitor_node via SSH:\n${res.error}`);
+    }
+  };
 
   const getStatusClass = (value, warnThreshold = 70, errorThreshold = 90) => {
     if (value >= errorThreshold) return 'error';
@@ -124,6 +155,71 @@ export default function DiagnosticsPanel() {
         >
           {connectionStatus === 'demo' ? 'SIMULATION' : 'JETSON ORIN'}
         </div>
+      </div>
+
+      {/* Quick Jetson Monitor Node Button */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'rgba(0, 240, 255, 0.05)',
+          border: '1px solid rgba(0, 240, 255, 0.18)',
+          borderRadius: '6px',
+          padding: '5px 8px',
+          margin: '0 0 10px 0',
+          fontSize: '0.65rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span
+            style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              background:
+                monitorState === 'running'
+                  ? '#00ff88'
+                  : monitorState === 'starting'
+                  ? '#ffaa00'
+                  : 'rgba(255,255,255,0.3)',
+              boxShadow:
+                monitorState === 'running'
+                  ? '0 0 6px #00ff88'
+                  : 'none',
+            }}
+          />
+          <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Node: jetson_monitor
+          </span>
+        </div>
+        <button
+          onClick={handleToggleMonitor}
+          title="Klik untuk menyalakan/mematikan node pemantau CPU/GPU/RAM di Jetson"
+          style={{
+            background:
+              monitorState === 'running'
+                ? 'rgba(255, 59, 92, 0.2)'
+                : 'linear-gradient(135deg, rgba(0, 240, 255, 0.25) 0%, rgba(0, 128, 255, 0.25) 100%)',
+            border:
+              monitorState === 'running'
+                ? '1px solid rgba(255, 59, 92, 0.5)'
+                : '1px solid rgba(0, 240, 255, 0.4)',
+            color: monitorState === 'running' ? '#ff3b5c' : '#00f0ff',
+            borderRadius: '4px',
+            padding: '3px 8px',
+            fontSize: '0.63rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          {monitorState === 'running'
+            ? '⏹ Stop Node'
+            : monitorState === 'starting'
+            ? '⏳ Starting...'
+            : '▶️ Run Monitor'}
+        </button>
       </div>
 
       <div className="diag-list">
