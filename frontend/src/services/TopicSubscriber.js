@@ -132,8 +132,16 @@ class TopicSubscriber {
       });
     });
 
-    // 6. Subsea Forward Camera (Compressed Stream)
+    // 6. Subsea Forward Camera (Compressed Streams)
     this.subscribe(ros, '/camera/image_raw/compressed', 'sensor_msgs/msg/CompressedImage', (msg) => {
+      const imageData = `data:image/jpeg;base64,${msg.data}`;
+      useVehicleStore.getState().setCameraFrame(imageData);
+    });
+    this.subscribe(ros, '/yolo_result/compressed', 'sensor_msgs/msg/CompressedImage', (msg) => {
+      const imageData = `data:image/jpeg;base64,${msg.data}`;
+      useVehicleStore.getState().setCameraFrame(imageData);
+    });
+    this.subscribe(ros, '/front_camera/compressed', 'sensor_msgs/msg/CompressedImage', (msg) => {
       const imageData = `data:image/jpeg;base64,${msg.data}`;
       useVehicleStore.getState().setCameraFrame(imageData);
     });

@@ -8,10 +8,16 @@ class RosConnection {
     this.reconnectInterval = 3000;
   }
 
-  connect(jetsonIp = '192.168.1.100', port = 9090) {
+  connect(jetsonIp, port = 9090) {
+    // Always read the latest IP from store if not explicitly provided
+    if (!jetsonIp) {
+      jetsonIp = useVehicleStore.getState().jetsonIp || '10.28.19.190';
+    }
+
     if (this.ros) {
       this.disconnect();
     }
+    this.isManualDisconnect = false;
 
     const url = `ws://${jetsonIp}:${port}`;
     console.log(`[ROS] Connecting to ${url}...`);
@@ -19,7 +25,7 @@ class RosConnection {
     this.ros = new Ros({ url });
 
     this.ros.on('connection', () => {
-      console.log('[ROS] Connected!');
+      console.log(`[ROS] ✅ Connected to ${url}!`);
       if (useVehicleStore.getState().mode === 'live') {
         useVehicleStore.getState().setConnectionStatus('connected');
       }
@@ -30,11 +36,11 @@ class RosConnection {
     });
 
     this.ros.on('error', (error) => {
-      console.error('[ROS] Error:', error);
+      console.error(`[ROS] ❌ WebSocket error on ${url}:`, error);
     });
 
     this.ros.on('close', () => {
-      console.log('[ROS] Connection closed.');
+      console.log(`[ROS] Connection closed (${url}).`);
       if (useVehicleStore.getState().mode === 'live') {
         useVehicleStore.getState().setConnectionStatus('disconnected');
         if (!this.isManualDisconnect) {

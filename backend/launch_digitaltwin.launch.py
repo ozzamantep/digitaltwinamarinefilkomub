@@ -53,3 +53,12 @@ def generate_launch_description():
         port,
         rosbridge_node,
     ])
+
+
+if __name__ == '__main__':
+    import sys
+    from launch import LaunchService
+
+    ls = LaunchService()
+    ls.include_launch_description(generate_launch_description())
+    sys.exit(ls.run())

@@ -60,6 +60,12 @@ export default function JetsonTerminalBox() {
     }
   }, [logs]);
 
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      appendLog('🟢 [WS] TERHUBUNG! Jetson Digital Twin Link Aktif di port 9090!', 'success');
+    }
+  }, [connectionStatus]);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(command);
     setCopied(true);
@@ -69,7 +75,7 @@ export default function JetsonTerminalBox() {
 
   const handleExecuteAndLink = async () => {
     setIsExecuting(true);
-    appendLog(`🚀 Running: ${command}`, 'warn');
+    appendLog(`🚀 Menjalankan: ${command}`, 'warn');
 
     // Switch to live mode
     if (mode === 'demo') {
@@ -81,14 +87,14 @@ export default function JetsonTerminalBox() {
 
     // Check if running inside Electron Desktop App
     if (window.jetsonSsh) {
-      appendLog(`[SSH] Connecting to ${user}@${jetsonIp} via native SSH...`, 'info');
+      appendLog(`[SSH] Menghubungkan ke ${user}@${jetsonIp} via SSH...`, 'info');
       try {
         const result = await window.jetsonSsh.startRosbridge(jetsonIp, user);
         if (result.ok) {
-          appendLog(`[SSH] ✅ Rosbridge launched on Jetson! Waiting 2s for port 9090...`, 'success');
+          appendLog(`[SSH] ✅ Rosbridge aktif di Jetson! Menunggu port 9090...`, 'success');
           await new Promise((r) => setTimeout(r, 2000));
         } else {
-          appendLog(`[SSH] ⚠️ SSH warning: ${result.error || 'Failed to launch automatically'}`, 'error');
+          appendLog(`[SSH] ⚠️ SSH: ${result.error || 'Gagal otomatis. Jalankan rosbridge manual di Jetson.'}`, 'error');
         }
       } catch (err) {
         appendLog(`[SSH] ❌ Error: ${err.message}`, 'error');
@@ -97,28 +103,42 @@ export default function JetsonTerminalBox() {
       // In Browser: copy command automatically for convenience
       try {
         await navigator.clipboard.writeText(command);
-        appendLog(`[Browser] 📋 Command auto-copied to clipboard! Pastikan sudah dijalankan di terminal Jetson.`, 'info');
+        appendLog(`[Browser] 📋 Perintah disalin ke clipboard. Pastikan rosbridge sudah jalan di Jetson.`, 'info');
       } catch {
         // Ignore clipboard failure
       }
     }
 
     // Connect WebSocket
-    appendLog(`[WS] Connecting WebSocket to ws://${jetsonIp}:9090 ...`, 'info');
+    appendLog(`[WS] Menghubungkan WebSocket ke ws://${jetsonIp}:9090 ...`, 'info');
     const ros = rosConnection.connect(jetsonIp);
     topicSubscriber.subscribeAll(ros);
     topicPublisher.init(ros);
 
-    // Watch status
-    setTimeout(() => {
+    ros.on('connection', () => {
+      appendLog(`[WS] 🟢 TERHUBUNG! Jetson Digital Twin Link Aktif!`, 'success');
+      setIsExecuting(false);
+    });
+
+    ros.on('error', (err) => {
+      appendLog(`[WS] ❌ WebSocket Error ke ws://${jetsonIp}:9090`, 'error');
+    });
+
+    // Fallback status check
+    const checkConnection = (attempt) => {
       const isConn = rosConnection.isConnected();
       if (isConn) {
-        appendLog(`[WS] 🟢 CONNECTED! Jetson Orin Digital Twin Link Active!`, 'success');
+        setIsExecuting(false);
+      } else if (attempt < 2) {
+        setTimeout(() => checkConnection(attempt + 1), 3000);
       } else {
-        appendLog(`[WS] ⏳ Connecting in progress... Pastikan terminal Jetson sudah menjalankan rosbridge di port 9090.`, 'warn');
+        if (!rosConnection.isConnected()) {
+          appendLog(`[WS] ⚠️ Masih mencoba menghubungkan ke ws://${jetsonIp}:9090. Auto-reconnect aktif di latar belakang.`, 'warn');
+        }
+        setIsExecuting(false);
       }
-      setIsExecuting(false);
-    }, 1500);
+    };
+    setTimeout(() => checkConnection(0), 2000);
   };
 
   const handleShutdownDaemon = () => {
@@ -368,10 +388,10 @@ export default function JetsonTerminalBox() {
           <button
             id="btn-launch-backend"
             onClick={() => {
-              const cmd = 'cd ~/digitaltwinamarinefilkomub && source /opt/ros/humble/setup.bash && python3 backend/launch_digitaltwin.launch.py';
+              const cmd = 'source /opt/ros/humble/setup.bash && ros2 launch rosbridge_server rosbridge_websocket_launch.xml';
               setCommand(cmd);
               navigator.clipboard.writeText(cmd).catch(() => {});
-              appendLog('📋 [Langkah 1] Dimuat: Launch Digital Twin backend & Rosbridge', 'info');
+              appendLog('📋 [Langkah 1] Dimuat: Jalankan di terminal Jetson (rosbridge port 9090)', 'info');
             }}
             style={{
               background: 'linear-gradient(135deg, rgba(0,255,136,0.15) 0%, rgba(0,120,80,0.2) 100%)',

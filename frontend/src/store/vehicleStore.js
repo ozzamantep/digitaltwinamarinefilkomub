@@ -4,7 +4,7 @@ import { computeFastestOrder } from '../services/RouteOptimizer.js';
 const useVehicleStore = create((set, get) => ({
   // Connection
   connectionStatus: 'disconnected', // 'connected' | 'disconnected' | 'demo'
-  jetsonIp: '192.168.1.100',
+  jetsonIp: typeof window !== 'undefined' ? (localStorage.getItem('jetson_ip') || '10.28.19.190') : '10.28.19.190',
   mode: 'demo', // 'live' | 'demo'
   activePage: 'mission', // 'mission' | 'thruster_test'
   setActivePage: (page) => set({ activePage: page }),
@@ -512,7 +512,12 @@ const useVehicleStore = create((set, get) => ({
 
   // Actions
   setConnectionStatus: (status) => set({ connectionStatus: status }),
-  setJetsonIp: (ip) => set({ jetsonIp: ip }),
+  setJetsonIp: (ip) => {
+    if (typeof window !== 'undefined' && ip) {
+      try { localStorage.setItem('jetson_ip', ip); } catch (_) {}
+    }
+    set({ jetsonIp: ip });
+  },
   setMode: (mode) => set({ mode }),
   setCameraViewMode: (cameraViewMode) => set({ cameraViewMode }),
   setCameraFrame: (cameraFrame) => set({ cameraFrame, cameraActive: true }),

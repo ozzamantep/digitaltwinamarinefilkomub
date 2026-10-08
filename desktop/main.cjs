@@ -12,6 +12,25 @@ app.commandLine.appendSwitch('enable-zero-copy');
 let mainWindow = null;
 let jetsonSshProcess = null;
 
+function checkPortOpen(host, port = 22, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const socket = new net.Socket();
+    let called = false;
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => {
+      if (!called) { called = true; socket.destroy(); resolve(true); }
+    });
+    socket.on('timeout', () => {
+      if (!called) { called = true; socket.destroy(); resolve(false); }
+    });
+    socket.on('error', () => {
+      if (!called) { called = true; socket.destroy(); resolve(false); }
+    });
+    socket.connect(port, host);
+  });
+}
+
 function validateSshTarget(host, user) {
   return /^[a-zA-Z0-9.-]+$/.test(host) && /^[a-zA-Z0-9_-]+$/.test(user);
 }
@@ -22,8 +41,13 @@ ipcMain.handle('jetson:start-rosbridge', async (_, { host, user }) => {
   if (!validateSshTarget(host, user)) return { ok: false, error: 'Invalid Jetson host or username.' };
   if (jetsonSshProcess && !jetsonSshProcess.killed) return { ok: true, alreadyRunning: true };
 
+  const isReachable = await checkPortOpen(host, 22, 1500);
+  if (!isReachable) {
+    return { ok: false, error: `Jetson di ${host} OFFLINE (Port 22 SSH tidak merespons). Pastikan Jetson menyala dan terhubung ke Wi-Fi.` };
+  }
+
   const command = 'bash -c "source /opt/ros/humble/setup.bash && ros2 launch rosbridge_server rosbridge_websocket_launch.xml"';
-  jetsonSshProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+  jetsonSshProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
     windowsHide: true,
   });
   let error = '';
@@ -52,7 +76,7 @@ ipcMain.handle('jetson:start-odom-bridge', async (_, { host, user }) => {
   if (jetsonOdomProcess && !jetsonOdomProcess.killed) return { ok: true, alreadyRunning: true };
 
   const command = 'bash -c "source /opt/ros/humble/setup.bash && cd ~/digitaltwinamarinefilkomub && python3 backend/sauvc26_code/odom_bridge.py"';
-  jetsonOdomProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+  jetsonOdomProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
     windowsHide: true,
   });
   let error = '';
@@ -82,7 +106,7 @@ ipcMain.handle('jetson:start-camera', async (_, { host, user, device }) => {
   if (jetsonCameraProcess && !jetsonCameraProcess.killed) return { ok: true, alreadyRunning: true };
 
   const command = `cd ~/digitaltwin && bash backend/start_camera.sh ${device || '/dev/video0'}`;
-  jetsonCameraProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+  jetsonCameraProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
     windowsHide: true,
   });
   let error = '';
@@ -111,7 +135,7 @@ ipcMain.handle('jetson:start-monitor', async (_, { host, user }) => {
   if (jetsonMonitorProcess && !jetsonMonitorProcess.killed) return { ok: true, alreadyRunning: true };
 
   const command = 'bash -c "source /opt/ros/humble/setup.bash 2>/dev/null; (cd ~/digitaltwin 2>/dev/null || cd ~/digitaltwinamarinefilkomub 2>/dev/null); python3 backend/sauvc26_code/jetson_monitor_node.py"';
-  jetsonMonitorProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
+  jetsonMonitorProcess = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=8', `${user}@${host}`, command], {
     windowsHide: true,
   });
   let error = '';
@@ -161,6 +185,7 @@ ipcMain.handle('jetson:shutdown', async (_, { host, user }) => {
   return new Promise((resolve) => {
     const proc = spawn('ssh', [
       '-o', 'BatchMode=yes',
+      '-o', 'StrictHostKeyChecking=accept-new',
       '-o', 'ConnectTimeout=8',
       `${user}@${host}`,
       'sudo /sbin/shutdown -h now || sudo /sbin/poweroff || sudo shutdown -h now',

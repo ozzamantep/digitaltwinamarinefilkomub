@@ -28,6 +28,10 @@ export default function Header() {
   const [cameraState, setCameraState] = useState('idle');
 
   useEffect(() => {
+    if (jetsonIp) setIpInput(jetsonIp);
+  }, [jetsonIp]);
+
+  useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -291,7 +295,13 @@ export default function Header() {
       <div className="header-center">
         {/* AUV Arm/Disarm Status Badge */}
         <div
-          onClick={() => setArmed(!armed)}
+          onClick={() => {
+            const next = !armed;
+            setArmed(next);
+            if (connectionStatus === 'connected') {
+              topicPublisher.armDisarm(next);
+            }
+          }}
           style={{
             cursor: 'pointer',
             display: 'flex',
