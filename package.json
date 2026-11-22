@@ -13,7 +13,9 @@
     "test:safety-supervisor": "node tests/test_safety_supervisor.js",
     "preview": "vite preview frontend",
     "desktop": "electron .",
-    "start": "vite frontend --port 5173"
+    "start": "vite frontend --port 5173",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "devDependencies": {
     "electron": "^44.0.0",
@@ -21,6 +23,9 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "framer-motion": "^13.1.1",

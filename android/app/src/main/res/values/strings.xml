@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Amarine Digital Twin</string>
+    <string name="title_activity_main">Amarine Digital Twin</string>
+    <string name="package_name">id.ac.ub.amarine.digitaltwin</string>
+    <string name="custom_url_scheme">id.ac.ub.amarine.digitaltwin</string>
+</resources>

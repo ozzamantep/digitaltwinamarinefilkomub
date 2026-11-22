@@ -7,6 +7,7 @@ class TopicPublisher {
     this.thrusterCmdTopic = null;
     this.obstacleOrderTopic = null;
     this.gripperCommandTopic = null;
+    this.autoLevelTopic = null;
   }
 
   init(ros) {
@@ -40,7 +41,13 @@ class TopicPublisher {
       messageType: 'std_msgs/msg/String',
     });
 
-    console.log('[TopicPublisher] Advertised /cmd_vel, /thruster_commands & /mission_obstacle_order on ROS2');
+    this.autoLevelTopic = new Topic({
+      ros,
+      name: '/manual/auto_level',
+      messageType: 'std_msgs/msg/Bool',
+    });
+
+    console.log('[TopicPublisher] Advertised /cmd_vel, /thruster_commands, /mission_obstacle_order & /manual/auto_level on ROS2');
   }
 
   /**
@@ -93,6 +100,11 @@ class TopicPublisher {
   publishGripperCommand(command) {
     if (!this.gripperCommandTopic) return;
     this.gripperCommandTopic.publish({ data: command });
+  }
+
+  publishAutoLevel(enabled) {
+    if (!this.autoLevelTopic) return;
+    this.autoLevelTopic.publish({ data: Boolean(enabled) });
   }
 
   /**
@@ -166,6 +178,10 @@ class TopicPublisher {
     if (this.gripperCommandTopic) {
       this.gripperCommandTopic.unadvertise();
       this.gripperCommandTopic = null;
+    }
+    if (this.autoLevelTopic) {
+      this.autoLevelTopic.unadvertise();
+      this.autoLevelTopic = null;
     }
   }
 }

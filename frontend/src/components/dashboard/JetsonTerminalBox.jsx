@@ -245,6 +245,23 @@ export default function JetsonTerminalBox() {
         </div>
       </div>
 
+      {!window.jetsonSsh && (
+        <div
+          style={{
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            borderRadius: '8px',
+            padding: '8px 10px',
+            marginBottom: '8px',
+            fontSize: '0.68rem',
+            lineHeight: '1.45',
+            color: '#fde68a',
+          }}
+        >
+          <strong>📱 Mode Android / Browser:</strong> Tombol SSH otomatis hanya aktif di aplikasi Desktop. Jalankan node Jetson (<code>rosbridge</code>, <code>odom_bridge.py</code>, <code>manual_bridge.py</code>) lewat SSH/Termius terlebih dahulu, lalu tekan <strong>Connect</strong> di bar atas.
+        </div>
+      )}
+
       {/* Target Info */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
         <input

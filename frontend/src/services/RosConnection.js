@@ -11,7 +11,7 @@ class RosConnection {
   connect(jetsonIp, port = 9090) {
     // Always read the latest IP from store if not explicitly provided
     if (!jetsonIp) {
-      jetsonIp = useVehicleStore.getState().jetsonIp || '10.28.19.190';
+      jetsonIp = useVehicleStore.getState().jetsonIp || '100.121.102.102';
     }
 
     if (this.ros) {

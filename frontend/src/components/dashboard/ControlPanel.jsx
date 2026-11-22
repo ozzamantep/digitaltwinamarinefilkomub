@@ -118,6 +118,8 @@ export default function ControlPanel() {
   const setFlightMode = useVehicleStore((s) => s.setFlightMode);
   const lightsIntensity = useVehicleStore((s) => s.lightsIntensity);
   const setLightsIntensity = useVehicleStore((s) => s.setLightsIntensity);
+  const autoLevelEnabled = useVehicleStore((s) => s.autoLevelEnabled);
+  const setAutoLevelEnabled = useVehicleStore((s) => s.setAutoLevelEnabled);
   const setControlInput = useVehicleStore((s) => s.setControlInput);
   const activeTarget = useVehicleStore((s) => s.activeTarget);
   const depth = useVehicleStore((s) => s.depth);
@@ -652,6 +654,51 @@ export default function ControlPanel() {
           </div>
 
           {/* Subsea Lumen Lights Dimmer */}
+          {/* Auto-Leveling (Penyeimbang IMU) Toggle */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'var(--bg-tertiary)',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              marginBottom: '8px',
+              border: autoLevelEnabled
+                ? '1px solid rgba(0, 255, 136, 0.25)'
+                : '1px solid rgba(250, 204, 21, 0.25)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                ⚖️ Penyeimbang (Auto-Level)
+              </div>
+              <div style={{ fontSize: '0.56rem', color: 'var(--text-tertiary)' }}>
+                {autoLevelEnabled ? 'Aktif mengikuti IMU Pixhawk' : 'Nonaktif (Ch1/Ch2 passthrough)'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !autoLevelEnabled;
+                setAutoLevelEnabled(next);
+                topicPublisher.publishAutoLevel(next);
+              }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '4px',
+                border: 'none',
+                fontSize: '0.62rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                background: autoLevelEnabled ? 'rgba(0, 255, 136, 0.2)' : 'rgba(250, 204, 21, 0.2)',
+                color: autoLevelEnabled ? 'var(--accent-green)' : '#facc15',
+              }}
+            >
+              {autoLevelEnabled ? 'AKTIF' : 'NONAKTIF'}
+            </button>
+          </div>
+
           <div
             style={{
               background: 'var(--bg-tertiary)',

@@ -1,0 +1,9 @@
+{
+  "appId": "id.ac.ub.amarine.digitaltwin",
+  "appName": "Amarine Digital Twin",
+  "webDir": "frontend/dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

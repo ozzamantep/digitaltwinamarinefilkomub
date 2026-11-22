@@ -38,7 +38,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 import math
 from geometry_msgs.msg import Twist
-from std_msgs.msg import String, Float64MultiArray
+from std_msgs.msg import Bool, String, Float64MultiArray
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 from mavros_msgs.msg import OverrideRCIn, RCOut
@@ -104,6 +104,9 @@ class ManualBridge(Node):
         )
         self.gripper_sub = self.create_subscription(
             String, '/gripper/command', self.gripper_callback, qos
+        )
+        self.auto_level_sub = self.create_subscription(
+            Bool, '/manual/auto_level', self.auto_level_callback, qos
         )
         self.servo_client = self.create_client(CommandLong, '/mavros/cmd/command')
         self.set_mode_client = self.create_client(SetMode, '/mavros/set_mode')
@@ -202,6 +205,12 @@ class ManualBridge(Node):
             )
 
     # ------------------------------------------------------------------
+    def auto_level_callback(self, msg: Bool):
+        self.auto_level_enabled = bool(msg.data)
+        state_label = 'ENABLED' if self.auto_level_enabled else 'DISABLED (RC passthrough)'
+        self.get_logger().info(f'[ManualBridge] Active Auto-Leveling {state_label}')
+
+    # ------------------------------------------------------------------
     def cmd_vel_callback(self, msg: Twist):
         self.target_surge = float(msg.linear.x)
         self.target_sway  = float(msg.linear.y)
@@ -236,8 +245,8 @@ class ManualBridge(Node):
                 roll_effort  = max(-0.85, min(0.85, -self.current_roll * kp_roll - self.gyro_x * kd_roll))
 
         if timeout:
-            channels[0] = to_pwm(pitch_effort)  # Ch1 Pitch: Keep auto-leveling even when pilot is idle!
-            channels[1] = to_pwm(roll_effort)   # Ch2 Roll:  Keep auto-leveling even when pilot is idle!
+            channels[0] = to_pwm(pitch_effort) if self.auto_level_enabled else RC_PASSTHROUGH  # Ch1 Pitch
+            channels[1] = to_pwm(roll_effort) if self.auto_level_enabled else RC_PASSTHROUGH   # Ch2 Roll
             channels[2] = PWM_NEUTRAL           # Ch3 Heave
             channels[3] = PWM_NEUTRAL           # Ch4 Yaw
             channels[4] = PWM_NEUTRAL           # Ch5 Surge
@@ -247,8 +256,8 @@ class ManualBridge(Node):
             heave = 0.0
             yaw   = 0.0
         else:
-            channels[0] = to_pwm(pitch_effort)        # Ch1: Pitch auto-leveling
-            channels[1] = to_pwm(roll_effort)         # Ch2: Roll auto-leveling
+            channels[0] = to_pwm(pitch_effort) if self.auto_level_enabled else RC_PASSTHROUGH  # Ch1 Pitch
+            channels[1] = to_pwm(roll_effort) if self.auto_level_enabled else RC_PASSTHROUGH   # Ch2 Roll
             channels[2] = to_pwm(self.target_heave)   # Ch3: Throttle / Heave
             channels[3] = to_pwm(self.target_yaw)     # Ch4: Yaw
             channels[4] = to_pwm(self.target_surge)   # Ch5: Forward / Surge

@@ -4,7 +4,7 @@ import { computeFastestOrder } from '../services/RouteOptimizer.js';
 const useVehicleStore = create((set, get) => ({
   // Connection
   connectionStatus: 'disconnected', // 'connected' | 'disconnected' | 'demo'
-  jetsonIp: typeof window !== 'undefined' ? (localStorage.getItem('jetson_ip') || '10.28.19.190') : '10.28.19.190',
+  jetsonIp: typeof window !== 'undefined' ? (localStorage.getItem('jetson_ip') || '100.121.102.102') : '100.121.102.102',
   mode: 'demo', // 'live' | 'demo'
   activePage: 'mission', // 'mission' | 'thruster_test'
   setActivePage: (page) => set({ activePage: page }),
@@ -65,6 +65,7 @@ const useVehicleStore = create((set, get) => ({
   leakDetected: false,
   battery: { level: 92, voltage: 16.2, current: 4.2, temperature: 28.5 },
   lightsIntensity: 80, // % 0-100
+  autoLevelEnabled: true, // Active Pitch/Roll auto-leveling in manual_bridge.py
 
   // Digital Twin Core & Physical-Virtual Shadow Telemetry
   dtHealth: {
@@ -540,6 +541,7 @@ const useVehicleStore = create((set, get) => ({
     });
   },
   setLightsIntensity: (intensity) => set({ lightsIntensity: intensity }),
+  setAutoLevelEnabled: (autoLevelEnabled) => set({ autoLevelEnabled }),
 
   setControlInput: (input) => {
     const prev = get().controlInput;
