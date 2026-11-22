@@ -536,38 +536,30 @@ export default function ControlPanel() {
         <button
           className={`chart-tab ${activeTab === 'pilot' ? 'active' : ''}`}
           onClick={() => setActiveTab('pilot')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '5px 2px' }}
         >
-          🕹️ Pilot
+          PILOT
         </button>
         <button
           className={`chart-tab ${activeTab === 'pid' ? 'active' : ''}`}
           onClick={() => setActiveTab('pid')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '5px 2px' }}
         >
-          ⚙️ PID
+          PID
         </button>
         <button
           className={`chart-tab ${activeTab === 'sysid' ? 'active' : ''}`}
           onClick={() => setActiveTab('sysid')}
-          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '4px 2px' }}
+          style={{ flex: 1, textAlign: 'center', fontSize: '0.62rem', padding: '5px 2px' }}
         >
-          📊 SysID
+          SYSID
         </button>
         <button
           className={`chart-tab ${activeTab === 'sync' ? 'active' : ''}`}
           onClick={() => setActiveTab('sync')}
-          style={{
-            flex: 1.25,
-            textAlign: 'center',
-            fontSize: '0.62rem',
-            padding: '4px 2px',
-            background: activeTab === 'sync' ? 'rgba(0, 255, 136, 0.2)' : undefined,
-            borderColor: activeTab === 'sync' ? 'var(--accent-green)' : undefined,
-            color: activeTab === 'sync' ? 'var(--accent-green)' : undefined,
-          }}
+          style={{ flex: 1.15, textAlign: 'center', fontSize: '0.62rem', padding: '5px 2px' }}
         >
-          🌐 Twin Sync
+          TWIN SYNC
         </button>
       </div>
 
@@ -583,98 +575,65 @@ export default function ControlPanel() {
                   setFlightMode(m);
                   if (connectionStatus === 'connected') topicPublisher.setFlightMode(m);
                 }}
-                style={{
-                  padding: '6px 2px',
-                  fontSize: '0.62rem',
-                  ...(m === 'GUIDED' && {
-                    background: flightMode === 'GUIDED'
-                      ? 'linear-gradient(135deg, rgba(0,240,255,0.35), rgba(0,128,255,0.35))'
-                      : 'rgba(0,240,255,0.05)',
-                    border: flightMode === 'GUIDED'
-                      ? '1px solid #00f0ff'
-                      : '1px solid rgba(0,240,255,0.3)',
-                    color: '#00f0ff',
-                    fontWeight: 700,
-                    boxShadow: flightMode === 'GUIDED' ? '0 0 10px rgba(0,240,255,0.4)' : 'none',
-                  }),
-                }}
+                style={{ padding: '6px 4px', fontSize: '0.64rem', fontWeight: 700 }}
               >
-                {m === 'GUIDED' ? '⚡ GUIDED' : m}
+                {m}
               </button>
             ))}
           </div>
 
           {/* Autonomous SAUVC Mission Buttons (QUALIFIKASI & FINAL) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '8px' }}>
             <button
               id="btn-mission-qual"
               onClick={handleStartQualification}
+              className={`control-btn ${flightMode === 'QUALIFIKASI' ? 'active' : ''}`}
               style={{
-                padding: '8px 4px',
-                fontSize: '0.68rem',
+                padding: '7px 4px',
+                fontSize: '0.64rem',
                 fontWeight: '700',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                border: flightMode === 'QUALIFIKASI' ? '2px solid #22c55e' : '1px solid rgba(34, 197, 94, 0.4)',
-                background: flightMode === 'QUALIFIKASI' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(10, 30, 20, 0.8)',
-                color: '#4ade80',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                boxShadow: flightMode === 'QUALIFIKASI' ? '0 0 12px rgba(34, 197, 94, 0.5)' : 'none',
-                transition: 'all 0.2s ease',
+                borderColor: flightMode === 'QUALIFIKASI' ? 'var(--accent-green)' : 'var(--border-glass)',
+                color: flightMode === 'QUALIFIKASI' ? 'var(--accent-green)' : 'var(--text-primary)',
               }}
             >
-              🏁 QUALIFIKASI
+              QUALIFIKASI
             </button>
 
             <button
               id="btn-mission-final"
               onClick={handleStartFinal}
+              className={`control-btn ${flightMode === 'FINAL' ? 'active' : ''}`}
               style={{
-                padding: '8px 4px',
-                fontSize: '0.68rem',
+                padding: '7px 4px',
+                fontSize: '0.64rem',
                 fontWeight: '700',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                border: flightMode === 'FINAL' ? '2px solid #00f0ff' : '1px solid rgba(0, 240, 255, 0.4)',
-                background: flightMode === 'FINAL' ? 'rgba(0, 240, 255, 0.3)' : 'rgba(5, 25, 45, 0.8)',
-                color: '#38bdf8',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                boxShadow: flightMode === 'FINAL' ? '0 0 12px rgba(0, 240, 255, 0.5)' : 'none',
-                transition: 'all 0.2s ease',
+                borderColor: flightMode === 'FINAL' ? 'var(--accent-green)' : 'var(--border-glass)',
+                color: flightMode === 'FINAL' ? 'var(--accent-green)' : 'var(--text-primary)',
               }}
             >
-              🏆 FINAL MISSION
+              FINAL MISSION
             </button>
           </div>
 
-          {/* Subsea Lumen Lights Dimmer */}
           {/* Auto-Leveling (Penyeimbang IMU) Toggle */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              background: 'var(--bg-tertiary)',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              marginBottom: '8px',
-              border: autoLevelEnabled
-                ? '1px solid rgba(0, 255, 136, 0.25)'
-                : '1px solid rgba(250, 204, 21, 0.25)',
+              background: 'var(--bg-card)',
+              padding: '6px 8px',
+              borderRadius: '2px',
+              marginBottom: '6px',
+              border: '1px solid var(--border-glass)',
             }}
           >
             <div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                ⚖️ Penyeimbang (Auto-Level)
+              <div style={{ fontSize: '0.64rem', color: 'var(--text-primary)', fontWeight: '700' }}>
+                AUTO-LEVEL (PENYEIMBANG)
               </div>
               <div style={{ fontSize: '0.56rem', color: 'var(--text-tertiary)' }}>
-                {autoLevelEnabled ? 'Aktif mengikuti IMU Pixhawk' : 'Nonaktif (Ch1/Ch2 passthrough)'}
+                {autoLevelEnabled ? 'IMU Pixhawk aktif' : 'Nonaktif (Ch1/Ch2 passthrough)'}
               </div>
             </div>
             <button
@@ -686,13 +645,13 @@ export default function ControlPanel() {
               }}
               style={{
                 padding: '4px 10px',
-                borderRadius: '4px',
-                border: 'none',
+                borderRadius: '2px',
+                border: `1px solid ${autoLevelEnabled ? 'var(--accent-green)' : 'var(--accent-orange)'}`,
                 fontSize: '0.62rem',
                 fontWeight: '700',
                 cursor: 'pointer',
-                background: autoLevelEnabled ? 'rgba(0, 255, 136, 0.2)' : 'rgba(250, 204, 21, 0.2)',
-                color: autoLevelEnabled ? 'var(--accent-green)' : '#facc15',
+                background: autoLevelEnabled ? 'var(--accent-green-dim)' : 'var(--accent-orange-dim)',
+                color: autoLevelEnabled ? 'var(--accent-green)' : 'var(--accent-orange)',
               }}
             >
               {autoLevelEnabled ? 'AKTIF' : 'NONAKTIF'}
@@ -701,15 +660,16 @@ export default function ControlPanel() {
 
           <div
             style={{
-              background: 'var(--bg-tertiary)',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              marginBottom: '8px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-glass)',
+              padding: '6px 8px',
+              borderRadius: '2px',
+              marginBottom: '6px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', marginBottom: '4px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>💡 Lumen Subsea Lights</span>
-              <span style={{ color: 'var(--accent-cyan)', fontWeight: '600' }}>{lightsIntensity}%</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.64rem', marginBottom: '4px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: '600' }}>LUMEN LIGHTS</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{lightsIntensity}%</span>
             </div>
             <input
               type="range"
@@ -717,7 +677,7 @@ export default function ControlPanel() {
               max="100"
               value={lightsIntensity}
               onChange={(e) => setLightsIntensity(Number(e.target.value))}
-              style={{ width: '100%', accentColor: 'var(--accent-cyan)' }}
+              style={{ width: '100%', accentColor: 'var(--accent-green)' }}
             />
           </div>
 
@@ -725,71 +685,68 @@ export default function ControlPanel() {
           <div
             style={{
               padding: '6px 8px',
-              background: 'rgba(0, 240, 255, 0.05)',
-              border: '1px solid rgba(0, 240, 255, 0.25)',
-              borderRadius: '6px',
-              marginBottom: '8px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '2px',
+              marginBottom: '6px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                🗜️ Capit Robotik (Gripper)
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.64rem', color: 'var(--text-primary)', fontWeight: '700' }}>
+                GRIPPER
               </span>
               <span
                 style={{
-                  fontSize: '0.60rem',
+                  fontSize: '0.58rem',
                   fontWeight: '700',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
+                  padding: '1px 6px',
+                  borderRadius: '2px',
+                  border: `1px solid ${
+                    gripperState === 'OPEN'
+                      ? 'var(--accent-orange)'
+                      : payloadState?.grasped
+                      ? 'var(--accent-red)'
+                      : 'var(--accent-green)'
+                  }`,
                   background:
                     gripperState === 'OPEN'
-                      ? 'rgba(234, 179, 8, 0.2)'
+                      ? 'var(--accent-orange-dim)'
                       : payloadState?.grasped
-                      ? 'rgba(239, 68, 68, 0.2)'
-                      : 'rgba(0, 255, 136, 0.2)',
+                      ? 'var(--accent-red-dim)'
+                      : 'var(--accent-green-dim)',
                   color:
                     gripperState === 'OPEN'
-                      ? '#facc15'
+                      ? 'var(--accent-orange)'
                       : payloadState?.grasped
-                      ? '#ef4444'
+                      ? 'var(--accent-red)'
                       : 'var(--accent-green)',
                 }}
               >
-                {payloadState?.grasped ? '🔴 MENCAPIT BOLA' : gripperState === 'OPEN' ? 'TERBUKA' : 'TERTUTUP'}
+                {payloadState?.grasped ? 'HOLDING BALL' : gripperState === 'OPEN' ? 'OPEN' : 'CLOSED'}
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
               <button
                 id="btn-toggle-gripper"
                 onClick={handleToggleGripper}
-                style={{
-                  padding: '5px 4px',
-                  fontSize: '0.62rem',
-                  fontWeight: '700',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  border: '1px solid rgba(0, 240, 255, 0.4)',
-                  background: gripperState === 'OPEN' ? 'rgba(0, 240, 255, 0.25)' : 'rgba(15, 23, 42, 0.8)',
-                  color: '#38bdf8',
-                }}
+                className="control-btn"
+                style={{ padding: '5px 4px', fontSize: '0.62rem', fontWeight: '700' }}
               >
-                {gripperState === 'OPEN' ? '🔒 Tutup Gripper' : '🔓 Buka Gripper'} (◯/B)
+                {gripperState === 'OPEN' ? 'TUTUP' : 'BUKA'} (B)
               </button>
               <button
                 id="btn-test-grasp"
                 onClick={handleReleaseOrGrasp}
+                className="control-btn"
                 style={{
                   padding: '5px 4px',
                   fontSize: '0.62rem',
                   fontWeight: '700',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  background: payloadState?.grasped ? 'rgba(239, 68, 68, 0.3)' : 'rgba(15, 23, 42, 0.8)',
-                  color: '#f87171',
+                  borderColor: payloadState?.grasped ? 'var(--accent-red)' : 'var(--border-glass)',
+                  color: payloadState?.grasped ? 'var(--accent-red)' : 'var(--text-primary)',
                 }}
               >
-                {payloadState?.grasped ? 'Lepas Bola (✕/A)' : 'Capit Bola (✕/A)'}
+                {payloadState?.grasped ? 'LEPAS (A)' : 'CAPIT (A)'}
               </button>
             </div>
           </div>

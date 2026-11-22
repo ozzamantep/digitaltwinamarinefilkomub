@@ -218,47 +218,20 @@ export default function JetsonTerminalBox() {
         </div>
       </div>
 
-      {/* Visual Step Guide Banner */}
-      <div
-        style={{
-          background: 'rgba(0, 240, 255, 0.08)',
-          border: '1px solid rgba(0, 240, 255, 0.25)',
-          borderRadius: '6px',
-          padding: '6px 8px',
-          marginBottom: '8px',
-          fontSize: '0.64rem',
-          lineHeight: '1.4',
-        }}
-      >
-        <div style={{ color: '#00f0ff', fontWeight: '700', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span>🧭</span>
-          <span>URUTAN KLIK DARI AWAL:</span>
-        </div>
-        <div style={{ color: '#94a3b8', fontSize: '0.6rem', display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
-          <span style={{ background: 'rgba(0,255,136,0.15)', color: '#00ff88', padding: '1px 5px', borderRadius: '3px', fontWeight: '700' }}>① Launch Backend</span>
-          <span>➔</span>
-          <span style={{ background: 'rgba(0,240,255,0.15)', color: '#00f0ff', padding: '1px 5px', borderRadius: '3px', fontWeight: '700' }}>② Jalankan & Konek</span>
-          <span>➔</span>
-          <span style={{ background: 'rgba(0,255,200,0.15)', color: '#00ffc8', padding: '1px 5px', borderRadius: '3px', fontWeight: '700' }}>③ Monitor Node</span>
-          <span>➔</span>
-          <span style={{ background: 'rgba(250,204,21,0.15)', color: '#facc15', padding: '1px 5px', borderRadius: '3px', fontWeight: '700' }}>④ Pilot Bridge</span>
-        </div>
-      </div>
-
       {!window.jetsonSsh && (
         <div
           style={{
-            background: 'rgba(245, 158, 11, 0.12)',
-            border: '1px solid rgba(245, 158, 11, 0.35)',
-            borderRadius: '8px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--accent-orange)',
+            borderRadius: '2px',
             padding: '8px 10px',
             marginBottom: '8px',
             fontSize: '0.68rem',
             lineHeight: '1.45',
-            color: '#fde68a',
+            color: 'var(--accent-orange)',
           }}
         >
-          <strong>📱 Mode Android / Browser:</strong> Tombol SSH otomatis hanya aktif di aplikasi Desktop. Jalankan node Jetson (<code>rosbridge</code>, <code>odom_bridge.py</code>, <code>manual_bridge.py</code>) lewat SSH/Termius terlebih dahulu, lalu tekan <strong>Connect</strong> di bar atas.
+          <strong>MOBILE / BROWSER:</strong> SSH otomatis hanya berjalan di Desktop. Jalankan node Jetson (<code>rosbridge</code>, <code>odom_bridge.py</code>, <code>manual_bridge.py</code>) via SSH/Termius lalu tekan <strong>CONNECT</strong>.
         </div>
       )}
 
@@ -270,12 +243,12 @@ export default function JetsonTerminalBox() {
           onChange={(e) => setUser(e.target.value)}
           placeholder="user"
           style={{
-            width: '68px',
-            background: 'rgba(15, 23, 42, 0.8)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
-            color: '#94a3b8',
-            padding: '3px 6px',
+            width: '72px',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-glass)',
+            borderRadius: '2px',
+            color: 'var(--text-secondary)',
+            padding: '4px 6px',
             fontSize: '0.7rem',
           }}
           title="Jetson SSH User"
@@ -287,11 +260,11 @@ export default function JetsonTerminalBox() {
           placeholder="Jetson IP"
           style={{
             flex: 1,
-            background: 'rgba(15, 23, 42, 0.8)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
-            borderRadius: '4px',
-            color: '#00f0ff',
-            padding: '3px 6px',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-glass)',
+            borderRadius: '2px',
+            color: 'var(--text-primary)',
+            padding: '4px 8px',
             fontSize: '0.7rem',
             fontWeight: '600',
           }}
@@ -306,7 +279,7 @@ export default function JetsonTerminalBox() {
             position: 'absolute',
             left: '8px',
             top: '6px',
-            color: '#00f0ff',
+            color: 'var(--accent-green)',
             fontWeight: 'bold',
             userSelect: 'none',
           }}
@@ -319,13 +292,13 @@ export default function JetsonTerminalBox() {
           onChange={(e) => setCommand(e.target.value)}
           style={{
             width: '100%',
-            background: 'rgba(5, 10, 20, 0.9)',
-            border: '1px solid rgba(0, 240, 255, 0.3)',
-            borderRadius: '6px',
-            color: '#00ff88',
-            fontFamily: 'monospace',
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border-glass)',
+            borderRadius: '2px',
+            color: 'var(--accent-green)',
+            fontFamily: 'var(--font-mono)',
             fontSize: '0.68rem',
-            lineHeight: '1.3',
+            lineHeight: '1.35',
             padding: '6px 8px 6px 20px',
             resize: 'none',
             outline: 'none',
@@ -341,63 +314,60 @@ export default function JetsonTerminalBox() {
           disabled={isExecuting}
           style={{
             flex: 2,
-            background: isExecuting
-              ? 'rgba(0, 240, 255, 0.2)'
-              : 'linear-gradient(135deg, rgba(0, 240, 255, 0.3) 0%, rgba(0, 128, 255, 0.3) 100%)',
-            border: '1px solid #00f0ff',
-            color: '#00f0ff',
-            borderRadius: '6px',
+            background: isExecuting ? 'var(--bg-tertiary)' : 'var(--accent-green-dim)',
+            border: '1px solid var(--accent-green)',
+            color: 'var(--accent-green)',
+            borderRadius: '2px',
             padding: '6px 8px',
             fontWeight: '700',
-            fontSize: '0.72rem',
+            fontSize: '0.7rem',
+            letterSpacing: '0.04em',
             cursor: isExecuting ? 'wait' : 'pointer',
-            boxShadow: '0 0 10px rgba(0, 240, 255, 0.2)',
-            transition: 'all 0.2s ease',
           }}
         >
-          {isExecuting ? '⏳ Menghubungkan...' : '⚡ [2] Jalankan & Konek'}
+          {isExecuting ? 'CONNECTING...' : '[2] RUN & LINK'}
         </button>
 
         <button
           onClick={handleCopy}
           style={{
             flex: 1,
-            background: copied ? 'rgba(0, 255, 136, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-            border: `1px solid ${copied ? '#00ff88' : 'rgba(255, 255, 255, 0.2)'}`,
-            color: copied ? '#00ff88' : '#e2e8f0',
-            borderRadius: '6px',
+            background: copied ? 'var(--accent-green-dim)' : 'var(--bg-tertiary)',
+            border: `1px solid ${copied ? 'var(--accent-green)' : 'var(--border-glass)'}`,
+            color: copied ? 'var(--accent-green)' : 'var(--text-primary)',
+            borderRadius: '2px',
             padding: '6px 8px',
-            fontSize: '0.7rem',
+            fontSize: '0.68rem',
             fontWeight: '600',
             cursor: 'pointer',
           }}
         >
-          {copied ? '✓ Tersalin!' : '📋 Salin'}
+          {copied ? 'COPIED' : 'COPY'}
         </button>
 
         <button
           onClick={handleBoxShutdown}
           style={{
             flex: 1,
-            background: 'rgba(255, 59, 92, 0.2)',
-            border: '1px solid rgba(255, 59, 92, 0.5)',
-            color: '#ff3b5c',
-            borderRadius: '6px',
+            background: 'var(--accent-red-dim)',
+            border: '1px solid var(--accent-red)',
+            color: 'var(--accent-red)',
+            borderRadius: '2px',
             padding: '6px 8px',
-            fontSize: '0.7rem',
+            fontSize: '0.68rem',
             fontWeight: '700',
             cursor: 'pointer',
           }}
           title="Matikan Jetson Orin"
         >
-          ⏻ Mati
+          POWEROFF
         </button>
       </div>
 
       {/* Quick Command Presets */}
       <div style={{ marginBottom: '8px' }}>
-        <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', letterSpacing: '0.05em' }}>
-          ⚡ QUICK COMMANDS (KLIK BERURUTAN)
+        <div style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', marginBottom: '4px', letterSpacing: '0.06em' }}>
+          SEQUENCE: 1 LAUNCH -&gt; 2 LINK -&gt; 3 MONITOR -&gt; 4 PILOT
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
 
@@ -408,29 +378,25 @@ export default function JetsonTerminalBox() {
               const cmd = 'source /opt/ros/humble/setup.bash && ros2 launch rosbridge_server rosbridge_websocket_launch.xml';
               setCommand(cmd);
               navigator.clipboard.writeText(cmd).catch(() => {});
-              appendLog('📋 [Langkah 1] Dimuat: Jalankan di terminal Jetson (rosbridge port 9090)', 'info');
+              appendLog('[1] Loaded: rosbridge port 9090 launch command', 'info');
             }}
+            className="control-btn"
             style={{
-              background: 'linear-gradient(135deg, rgba(0,255,136,0.15) 0%, rgba(0,120,80,0.2) 100%)',
-              border: '1px solid rgba(0,255,136,0.4)',
-              borderRadius: '5px',
-              padding: '6px 6px',
-              color: '#00ff88',
-              fontSize: '0.62rem',
-              fontWeight: '700',
-              cursor: 'pointer',
+              padding: '6px 8px',
               textAlign: 'left',
-              lineHeight: '1.3',
-              transition: 'all 0.15s',
+              lineHeight: '1.35',
               gridColumn: 'span 2',
+              justifyContent: 'flex-start',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,255,136,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0,255,136,0.15) 0%, rgba(0,120,80,0.2) 100%)'}
             title="Langkah 1 (Wajib Pertama): Menyalakan backend ROS 2 & Rosbridge server port 9090 di Jetson"
           >
-            🚀 [1] Launch Backend (KLIK PERTAMA)
-            <div style={{ fontSize: '0.55rem', color: 'rgba(0,255,136,0.7)', fontWeight: '400' }}>
-              Buka gerbang port 9090 Jetson (launch_digitaltwin.launch.py)
+            <div style={{ fontSize: '0.64rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+              [1] LAUNCH BACKEND (ROSBRIDGE :9090)
+            </div>
+            <div style={{ fontSize: '0.56rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>
+              launch_digitaltwin.launch.py
             </div>
           </button>
 
@@ -438,29 +404,25 @@ export default function JetsonTerminalBox() {
           <button
             id="btn-jetson-monitor"
             onClick={handleRunMonitorNode}
+            className="control-btn"
             style={{
-              background: monitorState === 'running'
-                ? 'linear-gradient(135deg, rgba(0,255,136,0.2) 0%, rgba(0,180,120,0.25) 100%)'
-                : 'linear-gradient(135deg, rgba(0,240,255,0.14) 0%, rgba(0,150,220,0.18) 100%)',
-              border: monitorState === 'running' ? '1px solid #00ff88' : '1px solid rgba(0,240,255,0.4)',
-              borderRadius: '5px',
-              padding: '6px 6px',
-              color: monitorState === 'running' ? '#00ff88' : '#00f0ff',
-              fontSize: '0.62rem',
-              fontWeight: '600',
-              cursor: 'pointer',
+              padding: '6px 8px',
               textAlign: 'left',
-              lineHeight: '1.3',
-              transition: 'all 0.15s',
+              lineHeight: '1.35',
               gridColumn: 'span 2',
+              justifyContent: 'flex-start',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              borderColor: monitorState === 'running' ? 'var(--accent-green)' : 'var(--border-glass)',
+              background: monitorState === 'running' ? 'var(--accent-green-dim)' : undefined,
             }}
-            onMouseEnter={e => e.currentTarget.style.background = monitorState === 'running' ? 'rgba(0,255,136,0.3)' : 'rgba(0,240,255,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = monitorState === 'running' ? 'linear-gradient(135deg, rgba(0,255,136,0.2) 0%, rgba(0,180,120,0.25) 100%)' : 'linear-gradient(135deg, rgba(0,240,255,0.14) 0%, rgba(0,150,220,0.18) 100%)'}
             title="Langkah 3: Jalankan jetson_monitor_node.py untuk streaming live CPU/GPU/RAM asli"
           >
-            📊 [3] {monitorState === 'running' ? '⏹ Stop Jetson Monitor Node' : monitorState === 'starting' ? '⏳ Starting Monitor Node...' : 'Jalankan Jetson Monitor Node'}
-            <div style={{ fontSize: '0.55rem', color: monitorState === 'running' ? '#00ff88' : 'rgba(0,240,255,0.7)', fontWeight: '400' }}>
-              python3 ~/digitaltwin/backend/sauvc26_code/jetson_monitor_node.py {monitorState === 'running' ? '● RUNNING' : ''}
+            <div style={{ fontSize: '0.64rem', fontWeight: '700', color: monitorState === 'running' ? 'var(--accent-green)' : 'var(--text-primary)' }}>
+              [3] {monitorState === 'running' ? 'STOP JETSON MONITOR' : monitorState === 'starting' ? 'STARTING MONITOR...' : 'JETSON MONITOR NODE'}
+            </div>
+            <div style={{ fontSize: '0.56rem', color: monitorState === 'running' ? 'var(--accent-green)' : 'var(--text-tertiary)', fontWeight: '400' }}>
+              jetson_monitor_node.py {monitorState === 'running' ? '[RUNNING]' : ''}
             </div>
           </button>
 
@@ -471,28 +433,26 @@ export default function JetsonTerminalBox() {
               const cmd = 'pkill -f manual_bridge.py; sleep 2; cd ~/digitaltwinamarinefilkomub && source /opt/ros/humble/setup.bash && python3 backend/sauvc26_code/manual_bridge.py';
               setCommand(cmd);
               navigator.clipboard.writeText(cmd).catch(() => {});
-              appendLog('📋 [Langkah 4] Dimuat: Restart manual_bridge.py', 'info');
+              appendLog('[4] Loaded: manual_bridge.py', 'info');
             }}
+            className="control-btn"
             style={{
-              background: 'linear-gradient(135deg, rgba(250,204,21,0.12) 0%, rgba(150,100,0,0.15) 100%)',
-              border: '1px solid rgba(250,204,21,0.35)',
-              borderRadius: '5px',
-              padding: '6px 6px',
-              color: '#facc15',
-              fontSize: '0.62rem',
-              fontWeight: '600',
-              cursor: 'pointer',
+              padding: '6px 8px',
               textAlign: 'left',
-              lineHeight: '1.3',
-              transition: 'all 0.15s',
+              lineHeight: '1.35',
               gridColumn: 'span 2',
+              justifyContent: 'flex-start',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(250,204,21,0.22)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(250,204,21,0.12) 0%, rgba(150,100,0,0.15) 100%)'}
             title="Langkah 4: Jalankan bridge kontrol manual (cmd_vel & gripper ke MAVROS)"
           >
-            🔄 [4] Pilot Bridge (manual_bridge.py)
-            <div style={{ fontSize: '0.55rem', color: 'rgba(250,204,21,0.7)', fontWeight: '400' }}>Aktifkan kontrol joystick AUV</div>
+            <div style={{ fontSize: '0.64rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+              [4] PILOT BRIDGE (manual_bridge.py)
+            </div>
+            <div style={{ fontSize: '0.56rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>
+              /cmd_vel &amp; /gripper/command -&gt; MAVROS
+            </div>
           </button>
 
           {/* Alat Cek 1: Echo /cmd_vel */}
@@ -502,27 +462,20 @@ export default function JetsonTerminalBox() {
               const cmd = 'ros2 topic echo /cmd_vel';
               setCommand(cmd);
               navigator.clipboard.writeText(cmd).catch(() => {});
-              appendLog('📋 Dimuat alat cek: ros2 topic echo /cmd_vel', 'info');
+              appendLog('Loaded: ros2 topic echo /cmd_vel', 'info');
             }}
+            className="control-btn"
             style={{
-              background: 'linear-gradient(135deg, rgba(0,240,255,0.1) 0%, rgba(0,80,180,0.15) 100%)',
-              border: '1px solid rgba(0,240,255,0.25)',
-              borderRadius: '5px',
-              padding: '5px 4px',
-              color: '#00f0ff',
-              fontSize: '0.62rem',
-              fontWeight: '600',
-              cursor: 'pointer',
+              padding: '5px 6px',
               textAlign: 'left',
               lineHeight: '1.3',
-              transition: 'all 0.15s',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,240,255,0.2)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0,240,255,0.1) 0%, rgba(0,80,180,0.15) 100%)'}
             title="Cek apakah perintah joystick /cmd_vel terkirim ke Jetson"
           >
-            📡 Echo cmd_vel
-            <div style={{ fontSize: '0.55rem', color: 'rgba(0,240,255,0.6)', fontWeight: '400' }}>Monitor gerak</div>
+            <div style={{ fontSize: '0.62rem', fontWeight: '700', color: 'var(--text-primary)' }}>ECHO /cmd_vel</div>
+            <div style={{ fontSize: '0.54rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>Monitor gerak</div>
           </button>
 
           {/* Alat Cek 2: Check MAVROS nodes */}
@@ -532,27 +485,20 @@ export default function JetsonTerminalBox() {
               const cmd = 'ros2 node list | grep mavros';
               setCommand(cmd);
               navigator.clipboard.writeText(cmd).catch(() => {});
-              appendLog('📋 Dimuat alat cek: ros2 node list | grep mavros', 'info');
+              appendLog('Loaded: ros2 node list | grep mavros', 'info');
             }}
+            className="control-btn"
             style={{
-              background: 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(80,0,150,0.15) 100%)',
-              border: '1px solid rgba(168,85,247,0.3)',
-              borderRadius: '5px',
-              padding: '5px 4px',
-              color: '#a855f7',
-              fontSize: '0.62rem',
-              fontWeight: '600',
-              cursor: 'pointer',
+              padding: '5px 6px',
               textAlign: 'left',
               lineHeight: '1.3',
-              transition: 'all 0.15s',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.2)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(80,0,150,0.15) 100%)'}
             title="Cek apakah MAVROS aktif di Jetson"
           >
-            🔍 Cek MAVROS
-            <div style={{ fontSize: '0.55rem', color: 'rgba(168,85,247,0.6)', fontWeight: '400' }}>Status MAVROS</div>
+            <div style={{ fontSize: '0.62rem', fontWeight: '700', color: 'var(--text-primary)' }}>CHECK MAVROS</div>
+            <div style={{ fontSize: '0.54rem', color: 'var(--text-tertiary)', fontWeight: '400' }}>Node status</div>
           </button>
 
         </div>
